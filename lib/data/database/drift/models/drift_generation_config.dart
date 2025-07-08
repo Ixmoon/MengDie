@@ -68,4 +68,30 @@ class DriftGenerationConfig {
       'useCustomTopK': useCustomTopK,
     };
   }
+
+  DriftGenerationConfig copyWith({
+    String? modelName,
+    double? temperature,
+    double? topP,
+    int? topK,
+    int? maxOutputTokens,
+    List<String>? stopSequences,
+    List<DriftSafetySettingRule>? safetySettings,
+    bool? useCustomTemperature,
+    bool? useCustomTopP,
+    bool? useCustomTopK,
+  }) {
+    return DriftGenerationConfig(
+      modelName: modelName ?? this.modelName,
+      temperature: useCustomTemperature ?? this.useCustomTemperature ? (temperature ?? this.temperature) : null,
+      topP: useCustomTopP ?? this.useCustomTopP ? (topP ?? this.topP) : null,
+      topK: useCustomTopK ?? this.useCustomTopK ? (topK ?? this.topK) : null,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      stopSequences: stopSequences ?? this.stopSequences,
+      safetySettings: safetySettings ?? this.safetySettings,
+      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
+      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+    );
+  }
 }

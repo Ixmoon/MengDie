@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/enums.dart'; // 导入主题设置枚举
-import 'core_providers.dart'; // 导入 sharedPreferencesProvider
 
 // SharedPreferences 中用于存储主题设置的键
 const String _themeModeKey = 'app_theme_mode';
@@ -16,37 +15,53 @@ class ThemeSettingState {
 // --- ThemeModeNotifier ---
 // StateNotifier 用于管理和持久化主题设置
 class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
-  final SharedPreferences _prefs;
+  // SharedPreferences 现在是可空的，并且是 late final
+  late final SharedPreferences? _prefs;
 
-  ThemeModeNotifier(this._prefs) : super(_loadThemeMode(_prefs));
+  ThemeModeNotifier() : super(ThemeModeSetting.system);
+
+  // 提供一个异步的初始化方法
+  Future<void> init() async {
+    // 等待 SharedPreferences 加载完成
+    _prefs = await SharedPreferences.getInstance();
+    // 从 SharedPreferences 加载主题设置并更新状态
+    _loadThemeMode();
+  }
 
   // 从 SharedPreferences 加载主题设置
-  static ThemeModeSetting _loadThemeMode(SharedPreferences prefs) {
+  void _loadThemeMode() {
+    final prefs = _prefs;
+    if (prefs == null) return; // 如果 prefs 未初始化，则不执行任何操作
+
     final themeModeString = prefs.getString(_themeModeKey);
     if (themeModeString != null) {
       try {
-        return ThemeModeSetting.values.firstWhere((e) => e.toString() == themeModeString);
+        state = ThemeModeSetting.values.firstWhere((e) => e.toString() == themeModeString);
       } catch (e) {
-        // 如果解析失败，返回默认值
-        return ThemeModeSetting.system;
+        state = ThemeModeSetting.system; // 如果解析失败，返回默认值
       }
+    } else {
+      state = ThemeModeSetting.system; // 默认值为跟随系统
     }
-    return ThemeModeSetting.system; // 默认值为跟随系统
   }
 
   // 更新主题设置并持久化到 SharedPreferences
   Future<void> setThemeMode(ThemeModeSetting newMode) async {
     if (state != newMode) {
       state = newMode;
-      await _prefs.setString(_themeModeKey, newMode.toString());
+      final prefs = _prefs;
+      if (prefs != null) {
+        await prefs.setString(_themeModeKey, newMode.toString());
+      }
     }
   }
 }
 
 // --- themeModeProvider ---
 // 提供 ThemeModeNotifier 实例的 StateNotifierProvider
-// 它依赖于 sharedPreferencesProvider 来获取 SharedPreferences 实例
+// 不再直接依赖 sharedPreferencesProvider，而是在 Notifier 内部处理
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return ThemeModeNotifier(prefs);
+  final notifier = ThemeModeNotifier();
+  notifier.init(); // 调用异步初始化
+  return notifier;
 });

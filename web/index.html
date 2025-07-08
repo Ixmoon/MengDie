@@ -33,6 +33,19 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    window.addEventListener('load', function(ev) {
+      _flutter.loader.load({
+        onEntrypointLoaded: async function(engineInitializer) {
+          const appRunner = await engineInitializer.initializeEngine({
+            // Pass a custom CanvasKit base URL.
+            canvasKitBaseUrl: "https://www.gstatic.cn/flutter-canvaskit/"
+          });
+          appRunner.runApp();
+        }
+      });
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

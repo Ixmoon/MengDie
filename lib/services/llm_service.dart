@@ -23,6 +23,26 @@ class LlmContent {
   const LlmContent(this.role, this.parts);
 
   // REMOVED: toGenaiContent method
+
+  /// Creates an LlmContent instance from a local Message object.
+  factory LlmContent.fromMessage(Message message) {
+    final parts = message.parts.map((part) {
+      switch (part.type) {
+        case MessagePartType.text:
+          return LlmTextPart(part.text!);
+        case MessagePartType.image:
+          return LlmDataPart(part.mimeType!, part.base64Data!);
+        case MessagePartType.file:
+          // Files are not sent to the LLM, so we return null and filter it out later.
+          return null;
+      }
+    }).whereType<LlmPart>().toList(); // Use whereType to filter out nulls
+    
+    // Convert local MessageRole to the string role expected by APIs ("user" or "model")
+    final roleString = message.role == MessageRole.user ? 'user' : 'model';
+    
+    return LlmContent(roleString, parts);
+  }
 }
 
 /// Base class for different types of content parts (text, image, etc.).
@@ -40,12 +60,14 @@ class LlmTextPart extends LlmPart {
   const LlmTextPart(this.text);
 }
 
-// TODO: Define other LlmPart types as needed (e.g., LlmImagePart)
-// @immutable
-// class LlmImagePart extends LlmPart {
-//   final Uint8List bytes;
-//   const LlmImagePart(this.bytes);
-// }
+/// Represents a data part of the content (e.g., an image).
+/// Equivalent to genai.DataPart
+@immutable
+class LlmDataPart extends LlmPart {
+  final String mimeType;
+  final String base64Data; // Keep as base64 string for consistency
+  const LlmDataPart(this.mimeType, this.base64Data);
+}
 
 
 /// Represents a generic safety setting for the LLM.
@@ -127,20 +149,29 @@ class LlmStreamChunk {
 /// Equivalent to GeminiResponse but more generic.
 @immutable
 class LlmResponse {
-  final String rawText;
+  final List<MessagePart> parts;
   final bool isSuccess;
   final String? error;
 
+  // Getter for easy access to text content, for compatibility
+  String get rawText => parts.where((p) => p.type == MessagePartType.text).map((p) => p.text).join();
+
   const LlmResponse({
-    required this.rawText,
+    required this.parts,
     this.isSuccess = true,
     this.error,
   });
 
   /// Creates an LlmResponse from a GeminiResponse.
   factory LlmResponse.fromGeminiResponse(GeminiResponse geminiResponse) {
+    // This now needs to handle the possibility of GeminiResponse also returning parts
+    // For now, assuming it returns a single text part.
+    final responseParts = (geminiResponse.rawText.isNotEmpty)
+        ? [MessagePart.text(geminiResponse.rawText)]
+        : <MessagePart>[];
+
     return LlmResponse(
-      rawText: geminiResponse.rawText,
+      parts: responseParts,
       isSuccess: geminiResponse.isSuccess,
       error: geminiResponse.error,
     );
@@ -148,7 +179,7 @@ class LlmResponse {
 
   /// Creates an error response.
   const LlmResponse.error(String message) :
-    rawText = '',
+    parts = const [],
     isSuccess = false,
     error = message;
 }
@@ -168,10 +199,14 @@ final llmServiceProvider = Provider<LlmService>((ref) {
 // This service acts as a facade, providing a generic interface
 // for interacting with different LLMs.
 class LlmService {
+  // ignore: unused_field
   final Ref _ref;
   final GeminiService _geminiService;
   final OpenAIService _openAIService; // 新增 OpenAIService 实例
   final ApiKeyNotifier _apiKeyNotifier;
+
+  // --- Cancellation State ---
+  LlmType? _activeServiceType;
 
   LlmService(this._ref, this._geminiService, this._openAIService, this._apiKeyNotifier);
 
@@ -209,7 +244,11 @@ class LlmService {
     required List<LlmContent> llmContext, // Use generic LlmContent
     required Chat chat, // Still need Chat for some general info, but config is handled
   }) {
-    // 1. Select the LLM based on chat.apiType
+    // 1. Set active service type for cancellation tracking
+    _activeServiceType = chat.apiType;
+    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
+
+    // 2. Select the LLM based on chat.apiType
     final llmType = chat.apiType;
     // Prepare the generation parameters map
     final generationParams = _prepareGenerationParametersMap(chat.generationConfig);
@@ -249,9 +288,6 @@ class LlmService {
           debugPrint("Error setting up OpenAI stream: $e");
           return Stream.value(LlmStreamChunk.error("Failed to start OpenAI stream: $e", ''));
         }
-      default:
-        debugPrint("Error: LLM type $llmType not implemented yet for sendMessageStream.");
-        return Stream.value(LlmStreamChunk.error("Unsupported LLM type: $llmType", ''));
     }
   }
 
@@ -261,6 +297,9 @@ class LlmService {
     required List<LlmContent> llmContext, // Use generic LlmContent
     required Chat chat, // Still need Chat for some general info
   }) async {
+    // Set active service type for cancellation tracking
+    _activeServiceType = chat.apiType;
+    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
     final llmType = chat.apiType;
     // Prepare the generation parameters map
     final generationParams = _prepareGenerationParametersMap(chat.generationConfig);
@@ -295,9 +334,6 @@ class LlmService {
           debugPrint("Error during OpenAI sendMessageOnce: $e");
           return LlmResponse.error("OpenAI API Error: $e");
         }
-      default:
-        debugPrint("Error: LLM type $llmType not implemented yet for sendMessageOnce.");
-        return LlmResponse.error("Unsupported LLM type: $llmType");
     }
   }
 
@@ -352,14 +388,22 @@ class LlmService {
           debugPrint("Error during OpenAI countTokens: $e");
           return -1;
         }
-      default:
-        debugPrint("Error: Token counting for LLM type $llmType not implemented yet.");
-        return -1;
     }
   }
 
   // --- Placeholder for future methods ---
   // Future<List<String>> listAvailableModels(LlmType type, {OpenAIAPIConfig? openAIConfig}) async { ... }
+  /// Cancels the ongoing request on the currently active service.
+  Future<void> cancelActiveRequest() async {
+    debugPrint("LlmService: Received cancellation request for active service: $_activeServiceType");
+    if (_activeServiceType == LlmType.openai) {
+      await _openAIService.cancelRequest();
+    } else if (_activeServiceType == LlmType.gemini) {
+      await _geminiService.cancelRequest();
+    }
+    // Reset the active service type after cancellation to prevent dangling state
+    _activeServiceType = null;
+  }
 }
 
 // REMOVED Enum for LLM Types as it's defined in models/enums.dart

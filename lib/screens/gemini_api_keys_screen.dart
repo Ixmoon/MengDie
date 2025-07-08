@@ -110,7 +110,7 @@ class GeminiApiKeysScreen extends ConsumerWidget {
                         ),
                       );
                       if (confirm == true) {
-                        await apiKeyNotifier.clearAllKeys();
+                        await apiKeyNotifier.clearAllGeminiKeys();
                         // 可以在这里添加一个提示，例如 SnackBar
                         if (context.mounted) {
                            ScaffoldMessenger.of(context).showSnackBar(

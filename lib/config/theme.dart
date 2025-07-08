@@ -15,14 +15,14 @@ class AppTheme {
    ),
    // AppBar 主题配置
    appBarTheme: AppBarTheme(
-backgroundColor: Colors.blueAccent.shade100.withValues(alpha: 0.8), // 半透明背景
+backgroundColor: Colors.blueAccent.shade100.withAlpha(204), // 半透明背景
       foregroundColor: Colors.black87, // 前景色 (标题、图标)
       elevation: 0.5, // 轻微阴影
    ),
     // Scaffold 背景色
     scaffoldBackgroundColor: Colors.grey.shade100,
     // Card 主题配置
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // 圆角
       margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0), // 默认外边距
@@ -32,7 +32,7 @@ backgroundColor: Colors.blueAccent.shade100.withValues(alpha: 0.8), // 半透明
        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), // 圆角边框
        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0), // 内容边距
        filled: true, // 启用填充色
- fillColor: Colors.white.withValues(alpha: 0.8), // 半透明填充色
+ fillColor: Colors.white.withAlpha(128), // 半透明填充色，降低不透明度以获得更好的视觉效果
        floatingLabelBehavior: FloatingLabelBehavior.auto, // 标签行为
      ),
      // ElevatedButton 主题
@@ -60,14 +60,14 @@ backgroundColor: Colors.blueAccent.shade100.withValues(alpha: 0.8), // 半透明
    ),
     // AppBar 主题配置
     appBarTheme: AppBarTheme(
-backgroundColor: Colors.grey.shade900.withValues(alpha: 0.8), // 半透明深色背景
+backgroundColor: Colors.grey.shade900.withAlpha(204), // 半透明深色背景
       foregroundColor: Colors.white, // 前景色
        elevation: 0.5,
    ),
     // Scaffold 背景色
     scaffoldBackgroundColor: Colors.black,
      // Card 主题配置
-     cardTheme: CardTheme(
+     cardTheme: CardThemeData(
       elevation: 1,
       color: Colors.grey.shade800, // 深色卡片背景
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -78,7 +78,7 @@ backgroundColor: Colors.grey.shade900.withValues(alpha: 0.8), // 半透明深色
        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
        filled: true,
-       fillColor: Colors.grey.shade700.withValues(alpha: 0.8), // 深色半透明填充
+       fillColor: Colors.grey.shade700.withAlpha(204), // 深色半透明填充
        floatingLabelBehavior: FloatingLabelBehavior.auto,
      ),
      // ElevatedButton 主题

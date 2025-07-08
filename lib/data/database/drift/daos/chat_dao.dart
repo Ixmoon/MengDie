@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/chats.dart';
+import 'dart:convert';
 import '../tables/messages.dart'; // For deleting related messages
 import '../../../../models/export_import_dtos.dart'; // For DTOs in importChat
 // Import the new Drift model classes if needed for conversion, or the original ones if they are kept
@@ -121,11 +122,9 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       );
 
     final contextConfigDrift = DriftContextConfig(
-        mode: chatDto.contextConfig.mode != null 
-              ? drift_enums.ContextManagementMode.values.firstWhere(
+        mode: drift_enums.ContextManagementMode.values.firstWhere(
                   (e) => e.name == chatDto.contextConfig.mode.name, // DTO uses ContextManagementMode from 'models/enums.dart'
-                  orElse:()=> drift_enums.ContextManagementMode.turns) // Default to 'turns'
-              : drift_enums.ContextManagementMode.turns, // Default to 'turns'
+                  orElse:()=> drift_enums.ContextManagementMode.turns), // Default to 'turns'
         maxTurns: chatDto.contextConfig.maxTurns,
         maxContextTokens: chatDto.contextConfig.maxContextTokens,
       );
@@ -133,11 +132,9 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     final xmlRulesDrift = chatDto.xmlRules.map((dto) =>
         DriftXmlRule(
           tagName: dto.tagName, 
-          action: dto.action != null
-                  ? drift_enums.XmlAction.values.firstWhere(
+          action: drift_enums.XmlAction.values.firstWhere(
                       (e) => e.name == dto.action.name, // DTO uses XmlAction from 'models/enums.dart'
                       orElse: ()=> drift_enums.XmlAction.ignore)
-                  : drift_enums.XmlAction.ignore 
         )
       ).toList();
     
@@ -154,11 +151,9 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       createdAt: now,
       updatedAt: now,
       // apiType is not in ChatExportDto, default to gemini or make it nullable in table if it can be absent
-      apiType: chatDto.apiType != null // 使用 DTO 中的 apiType
-                ? drift_enums.LlmType.values.firstWhere(
+      apiType: drift_enums.LlmType.values.firstWhere(
                     (e) => e.name == chatDto.apiType.name, // DTO 使用 LlmType from 'models/enums.dart'
-                    orElse: () => drift_enums.LlmType.gemini) // 默认值
-                : drift_enums.LlmType.gemini, // 如果 DTO 中为 null，则使用默认值
+                    orElse: () => drift_enums.LlmType.gemini), // 默认值
       selectedOpenAIConfigId: Value(chatDto.selectedOpenAIConfigId), // 使用 DTO 中的 selectedOpenAIConfigId
       parentFolderId: const Value(null),      // Not in DTO
       orderIndex: const Value(0),              // Not in DTO, default to 0
@@ -172,15 +167,21 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
 
       final List<MessagesCompanion> messageCompanions = [];
       for (final messageDto in chatDto.messages) {
+        String partsJson;
+        // Prioritize the new 'parts' field if it exists and is not empty
+        if (messageDto.parts != null && messageDto.parts!.isNotEmpty) {
+          partsJson = jsonEncode(messageDto.parts);
+        } else {
+          // Fallback to legacy 'rawText'
+          final parts = [{'type': 'text', 'text': messageDto.rawText}];
+          partsJson = jsonEncode(parts);
+        }
+
         messageCompanions.add(
           MessagesCompanion.insert(
             chatId: newChatId,
-            rawText: messageDto.rawText,
-            role: messageDto.role != null 
-                  ? drift_enums.MessageRole.values.firstWhere(
-                      (e) => e.name == messageDto.role.name, // DTO uses MessageRole from 'models/enums.dart'
-                      orElse: () => drift_enums.MessageRole.user) 
-                  : drift_enums.MessageRole.user, 
+            partsJson: partsJson,
+            role: messageDto.role, // DTO now uses the same enum
             timestamp: DateTime.now(), // MessageExportDto does not have timestamp, generate new
           )
         );

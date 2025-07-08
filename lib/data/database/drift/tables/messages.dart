@@ -10,9 +10,12 @@ class Messages extends Table {
   // Foreign key to the Chats table
   IntColumn get chatId => integer().references(Chats, #id)(); 
   
-  TextColumn get rawText => text()();
+  TextColumn get partsJson => text().named('raw_text')(); // Store parts as JSON, keep DB column name for migration
   TextColumn get role => text().map(const MessageRoleConverter())();
   DateTimeColumn get timestamp => dateTime()();
+
+  // Stores the original XML content if it was overwritten by post-processing
+  TextColumn get originalXmlContent => text().nullable()();
 
   // autoIncrement() on id column automatically makes it the primary key.
 }

@@ -4,6 +4,7 @@ import 'dart:convert'; // For jsonEncode/Decode if needed for request body
 import 'package:dio/dio.dart'; // HTTP client
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart'; // For debugPrint
+import 'package:tiktoken/tiktoken.dart' as tiktoken; // For token counting
 
 import '../models/models.dart'; // Chat, LlmType, Message, MessageRole etc.
 // OpenAIAPIConfig will be imported directly from its Drift model file
@@ -28,11 +29,10 @@ class OpenAIService {
   final Dio _dio;
   final MessageRepository _messageRepository; // Add MessageRepository field
 
-  OpenAIService(this._ref, this._dio, this._messageRepository); // Update constructor
+  // --- Cancellation ---
+  CancelToken? _cancelToken;
 
-  String _formatOpenAIMessageForDebug(Map<String, dynamic> message, String prefix) {
-    return '$prefix (Role: ${message['role']}): Content: "${message['content']}"';
-  }
+  OpenAIService(this._ref, this._dio, this._messageRepository); // Update constructor
 
   /// Sends messages and gets a streaming response from an OpenAI-compatible API.
   Stream<LlmStreamChunk> sendMessageStream({
@@ -41,17 +41,7 @@ class OpenAIService {
     required DriftOpenAIAPIConfig apiConfig,
     required Map<String, dynamic> generationParams, // New parameter
   }) async* {
-    // TODO: Implement OpenAI stream logic
-    // 1. Construct request body (model, messages, stream: true, etc.)
-    //    - Convert LlmContent to OpenAI message format: List<Map<String, String>>
-    //    - Include parameters from generationParams if applicable
-    // 2. Make POST request to apiConfig.baseUrl + '/v1/chat/completions'
-    //    - Headers: {'Authorization': 'Bearer ${apiConfig.apiKey}'}
-    // 3. Handle stream response (Server-Sent Events)
-    //    - Parse each event, extract text chunk
-    //    - Yield LlmStreamChunk
-    //    - Handle errors and finish states
-
+    _cancelToken = CancelToken(); // Create a new token for this request
     String accumulatedText = "";
     DateTime lastTimestamp = DateTime.now();
 
@@ -79,33 +69,47 @@ class OpenAIService {
 
     // Add other messages
     for (var content in llmContext) {
-      if (content.role == "system") continue; // Skip system prompt as it's already added
+      if (content.role == "system") continue;
 
-      String role;
-      switch (content.role) {
-        case "user":
-          role = "user";
-          break;
-        case "model":
-          role = "assistant"; // OpenAI uses "assistant" for model role
-          break;
-        default:
-          role = content.role; // Should not happen if LlmContent.role is validated
-          debugPrint("Warning: Unexpected LlmContent role '${content.role}' for OpenAI message conversion.");
+      final role = content.role == 'model' ? 'assistant' : content.role;
+      
+      // Vision API format: content can be a string OR an array of parts
+      final contentParts = [];
+      String textPartBuffer = "";
+
+      for (var part in content.parts) {
+        if (part is LlmTextPart) {
+          textPartBuffer += "${part.text}\n";
+        } else if (part is LlmDataPart) {
+          contentParts.add({
+            "type": "image_url",
+            "image_url": {
+              "url": "data:${part.mimeType};base64,${part.base64Data}"
+            }
+          });
+        }
       }
-      String textContent = content.parts
-          .whereType<LlmTextPart>()
-          .map((part) => part.text)
-          .join("\n");
-      // Only add if textContent is not empty, to avoid sending empty messages for other roles
-      if (textContent.isNotEmpty) {
-        openAIMessages.add({"role": role, "content": textContent});
+      
+      if (textPartBuffer.isNotEmpty) {
+        contentParts.insert(0, {
+          "type": "text",
+          "text": textPartBuffer.trim()
+        });
+      }
+
+      if (contentParts.isNotEmpty) {
+        // If there's only one text part, send as a simple string for wider compatibility.
+        // Otherwise, send as an array.
+        final messageContent = (contentParts.length == 1 && contentParts.first['type'] == 'text')
+                             ? contentParts.first['text']
+                             : contentParts;
+        openAIMessages.add({"role": role, "content": messageContent});
       }
     }
 
     // 2. Construct request body
     Map<String, dynamic> requestBody = {
-      "model": apiConfig.modelName,
+      "model": apiConfig.model,
       "messages": openAIMessages,
       "stream": true,
     };
@@ -157,6 +161,7 @@ class OpenAIService {
           },
           responseType: ResponseType.stream, // Crucial for SSE
         ),
+        cancelToken: _cancelToken, // Pass the cancel token
       );
 
       String carryOverBuffer = ''; // Buffer for incomplete lines from the stream
@@ -257,6 +262,12 @@ class OpenAIService {
       );
 
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        debugPrint("OpenAI stream request was cancelled by user.");
+        // Yield a final chunk indicating cancellation if needed, or just return.
+        // For true cancellation, we don't want to yield any more chunks.
+        return;
+      }
       String errorMessage = "OpenAI API DioException: ${e.message}";
       if (e.response != null) {
         errorMessage += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
@@ -280,6 +291,8 @@ class OpenAIService {
     } catch (e) {
       debugPrint("Unexpected error in OpenAI sendMessageStream: $e");
       yield LlmStreamChunk.error("Unexpected OpenAI Error: $e", accumulatedText);
+    } finally {
+      _cancelToken = null; // Clean up the token
     }
   }
 
@@ -290,13 +303,6 @@ class OpenAIService {
     required DriftOpenAIAPIConfig apiConfig,
     required Map<String, dynamic> generationParams, // New parameter
   }) async {
-    // TODO: Implement OpenAI single response logic
-    // 1. Construct request body (model, messages, stream: false, etc.)
-    // 2. Make POST request
-    // 3. Parse JSON response
-    //    - Extract text, handle errors
-    //    - Convert to LlmResponse
-
     // 1. Convert LlmContent to OpenAI message format
     List<Map<String, dynamic>> openAIMessages = [];
     LlmContent? systemPrompt;
@@ -321,32 +327,47 @@ class OpenAIService {
 
     // Add other messages
     for (var content in llmContext) {
-      if (content.role == "system") continue; // Skip system prompt as it's already added
+      if (content.role == "system") continue;
 
-      String role;
-      switch (content.role) {
-        case "user":
-          role = "user";
-          break;
-        case "model":
-          role = "assistant"; // OpenAI uses "assistant" for model role
-          break;
-        default:
-          role = content.role; // Should not happen
-          debugPrint("Warning: Unexpected LlmContent role '${content.role}' for OpenAI message conversion (sendMessageOnce).");
+      final role = content.role == 'model' ? 'assistant' : content.role;
+
+      // Vision API format: content can be a string OR an array of parts
+      final contentParts = [];
+      String textPartBuffer = "";
+
+      for (var part in content.parts) {
+        if (part is LlmTextPart) {
+          textPartBuffer += "${part.text}\n";
+        } else if (part is LlmDataPart) {
+          contentParts.add({
+            "type": "image_url",
+            "image_url": {
+              "url": "data:${part.mimeType};base64,${part.base64Data}"
+            }
+          });
+        }
       }
-      String textContent = content.parts
-          .whereType<LlmTextPart>()
-          .map((part) => part.text)
-          .join("\n");
-      if (textContent.isNotEmpty) {
-        openAIMessages.add({"role": role, "content": textContent});
+
+      if (textPartBuffer.isNotEmpty) {
+        contentParts.insert(0, {
+          "type": "text",
+          "text": textPartBuffer.trim()
+        });
+      }
+
+      if (contentParts.isNotEmpty) {
+        // If there's only one text part, send as a simple string for wider compatibility.
+        // Otherwise, send as an array.
+        final messageContent = (contentParts.length == 1 && contentParts.first['type'] == 'text')
+                             ? contentParts.first['text']
+                             : contentParts;
+        openAIMessages.add({"role": role, "content": messageContent});
       }
     }
 
     // 2. Construct request body
     Map<String, dynamic> requestBody = {
-      "model": apiConfig.modelName,
+      "model": apiConfig.model,
       "messages": openAIMessages,
       "stream": false, // Explicitly false for non-streaming
     };
@@ -383,6 +404,7 @@ class OpenAIService {
       return LlmResponse.error("Invalid API Base URL: ${apiConfig.baseUrl}");
     }
 
+    _cancelToken = CancelToken(); // Create a new token for this request
     try {
       final response = await _dio.post(
         apiUrl,
@@ -393,6 +415,7 @@ class OpenAIService {
             'Content-Type': 'application/json',
           },
         ),
+        cancelToken: _cancelToken, // Pass the cancel token
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -416,8 +439,8 @@ class OpenAIService {
               debugPrint("OpenAIService.sendMessageOnce: Error saving message/chat: $dbError");
             }
             return LlmResponse(
-              rawText: rawText, // Return the full raw text
-              isSuccess: true, 
+              parts: [MessagePart.text(rawText)],
+              isSuccess: true,
             );
           }
         }
@@ -430,6 +453,10 @@ class OpenAIService {
         return LlmResponse.error(errorMsg);
       }
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        debugPrint("OpenAI single request was cancelled by user.");
+        return const LlmResponse.error("Request cancelled by user.");
+      }
       String errorMessage = "OpenAI API DioException: ${e.message}";
       if (e.response != null) {
         errorMessage += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
@@ -447,19 +474,48 @@ class OpenAIService {
     } catch (e) {
       debugPrint("Unexpected error in OpenAI sendMessageOnce: $e");
       return LlmResponse.error("Unexpected OpenAI Error: $e");
+    } finally {
+      _cancelToken = null; // Clean up the token
     }
   }
 
-  /// Counts tokens for a given context (OpenAI specific, might be client-side or not directly supported).
+  /// Counts tokens for a given context using a client-side library (tiktoken).
   Future<int> countTokens({
     required List<LlmContent> llmContext,
-    required DriftOpenAIAPIConfig apiConfig, // Use DriftOpenAIAPIConfig
-    // required String modelName, // Or pass modelName directly
+    required DriftOpenAIAPIConfig apiConfig,
   }) async {
-    // TODO: Implement OpenAI token counting if possible/needed.
-    // OpenAI token counting is often done client-side with a library like tiktoken,
-    // or might not be available as a direct API endpoint for all custom OpenAI-compatible servers.
-    debugPrint("OpenAIService.countTokens called for ${apiConfig.name}");
-    return -1; // Placeholder
+    debugPrint("OpenAIService.countTokens called for model ${apiConfig.model}");
+    try {
+      // Use encodingForModel to automatically select the correct encoding.
+      final encoding = tiktoken.encodingForModel(apiConfig.model);
+
+      int totalTokens = 0;
+      for (final message in llmContext) {
+        // A simple token counting logic: concatenate text parts and encode.
+        // Note: For perfect accuracy, the message structure (roles, etc.)
+        // should be formatted exactly as the API expects, as this can add
+        // a few extra tokens per message. This implementation is a close estimate.
+        final textContent = message.parts
+            .whereType<LlmTextPart>()
+            .map((part) => part.text)
+            .join("\n");
+
+        if (textContent.isNotEmpty) {
+          totalTokens += encoding.encode(textContent).length.toInt();
+        }
+      }
+      debugPrint("Calculated total tokens: $totalTokens for model ${apiConfig.model}");
+      return totalTokens;
+    } catch (e) {
+      debugPrint("Error getting tiktoken encoding for model '${apiConfig.model}': $e. Token count may be inaccurate, returning -1.");
+      // Fallback to -1 to indicate an error or unsupported model.
+      return -1;
+    }
+  }
+  Future<void> cancelRequest() async {
+    if (_cancelToken != null && !_cancelToken!.isCancelled) {
+      debugPrint("OpenAIService: Cancelling active Dio request...");
+      _cancelToken!.cancel("Request cancelled by user.");
+    }
   }
 }

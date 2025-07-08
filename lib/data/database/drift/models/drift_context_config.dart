@@ -29,4 +29,16 @@ class DriftContextConfig {
       'maxContextTokens': maxContextTokens,
     };
   }
+
+  DriftContextConfig copyWith({
+    ContextManagementMode? mode,
+    int? maxTurns,
+    int? maxContextTokens,
+  }) {
+    return DriftContextConfig(
+      mode: mode ?? this.mode,
+      maxTurns: maxTurns ?? this.maxTurns,
+      maxContextTokens: maxContextTokens ?? this.maxContextTokens,
+    );
+  }
 }

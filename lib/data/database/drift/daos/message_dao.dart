@@ -27,6 +27,19 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
         .then((list) => list.reversed.toList());
   }
 
+  Future<MessageData?> getMessageById(int messageId) {
+    return (select(messages)..where((t) => t.id.equals(messageId))).getSingleOrNull();
+  }
+
+  Future<MessageData?> getLastModelMessage(int chatId) {
+    return (select(messages)
+          ..where((t) => t.chatId.equals(chatId))
+          ..where((t) => t.role.equals("model")) // Assuming "model" is the string representation
+          ..orderBy([(t) => OrderingTerm(expression: t.timestamp, mode: OrderingMode.desc)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   Future<int> saveMessage(MessagesCompanion message) {
     // Use insertOrReplace to handle both new messages (ID is absent) 
     // and existing messages (ID is present, so it will update/replace)

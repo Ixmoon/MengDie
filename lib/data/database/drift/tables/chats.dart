@@ -26,6 +26,15 @@ class Chats extends Table {
   TextColumn get apiType => text().map(const LlmTypeConverter())();
   TextColumn get selectedOpenAIConfigId => text().nullable()();
 
+  // --- Pre-processing and Post-processing ---
+  BoolColumn get enablePreprocessing => boolean().withDefault(const Constant(false))();
+  TextColumn get preprocessingPrompt => text().nullable()();
+  TextColumn get contextSummary => text().nullable()(); // Stores the last summary from pre-processing
+  
+  BoolColumn get enablePostprocessing => boolean().withDefault(const Constant(false))();
+  TextColumn get postprocessingPrompt => text().nullable()();
+  // --- End ---
+
   // autoIncrement() on id column automatically makes it the primary key.
   // So, no need to override primaryKey explicitly.
 }

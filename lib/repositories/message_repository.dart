@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value; // For Value() and absent
@@ -29,24 +30,44 @@ class MessageRepository {
 
   // Helper to convert Drift MessageData to original Message model
   Message _fromMessageData(MessageData data) {
-    // Assumes Message model in collection_models.dart now uses Drift-compatible types for enums
+    List<MessagePart> parts = [];
+    if (data.partsJson.isNotEmpty) {
+      try {
+        // First, try to decode as a JSON array (new format)
+        final List<dynamic> decoded = jsonDecode(data.partsJson);
+        parts = decoded.map((json) => MessagePart.fromJson(json)).toList();
+      } catch (e) {
+        // If decoding fails, assume it's a legacy raw string (old format)
+        parts = [MessagePart.text(data.partsJson)];
+      }
+    }
+
+    // If, after all attempts, parts is still empty, add a default empty text part.
+    if (parts.isEmpty) {
+      parts.add(MessagePart.text(''));
+    }
+
     return Message(
       id: data.id,
       chatId: data.chatId,
-      rawText: data.rawText,
-      role: data.role, // This is drift_enums.MessageRole
+      parts: parts,
+      role: data.role,
       timestamp: data.timestamp,
+      originalXmlContent: data.originalXmlContent,
     );
   }
 
   // Helper to convert original Message model to Drift MessagesCompanion
   MessagesCompanion _toMessagesCompanion(Message message) {
+    final String partsJson = jsonEncode(message.parts.map((p) => p.toJson()).toList());
+    
     return MessagesCompanion(
       id: message.id == 0 ? const Value.absent() : Value(message.id),
       chatId: Value(message.chatId),
-      rawText: Value(message.rawText),
-      role: Value(message.role), // Assumes message.role is drift_enums.MessageRole
+      partsJson: Value(partsJson), // Use the new field
+      role: Value(message.role),
       timestamp: Value(message.timestamp),
+      originalXmlContent: Value(message.originalXmlContent),
     );
   }
 
@@ -56,6 +77,22 @@ class MessageRepository {
      final messageDataList = await _messageDao.getMessagesForChat(chatId);
      return messageDataList.map(_fromMessageData).toList();
   }
+
+ Future<Message?> getMessageById(int messageId) async {
+   final messageData = await _messageDao.getMessageById(messageId);
+   if (messageData != null) {
+     return _fromMessageData(messageData);
+   }
+   return null;
+ }
+
+ Future<Message?> getLastModelMessage(int chatId) async {
+   final messageData = await _messageDao.getLastModelMessage(chatId);
+   if (messageData != null) {
+     return _fromMessageData(messageData);
+   }
+   return null;
+ }
 
   Future<List<Message>> getLastNMessagesForChat(int chatId, int n) async {
      if (n <= 0) return [];

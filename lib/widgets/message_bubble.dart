@@ -1,6 +1,7 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // 用于渲染 Markdown 文本
-import '../services/xml_processor.dart'; // 导入 XmlProcessor 服务
+import './cached_image.dart';
 
 // 导入模型
 import '../models/models.dart'; // 需要 Message, MessageRole
@@ -17,6 +18,7 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onTap; // 点击气泡时的回调函数
   final bool isTransparent; // 新增：气泡是否半透明
   final bool isHalfWidth; // 新增：气泡是否只占一半宽度
+  final int? totalTokens; // Add totalTokens to display the token count
 
   const MessageBubble({
     super.key,
@@ -25,6 +27,7 @@ class MessageBubble extends StatelessWidget {
     this.onTap, // 可选的回调
     this.isTransparent = false, // 默认不透明
     this.isHalfWidth = false, // 默认全宽
+    this.totalTokens, // Initialize totalTokens
   });
 
   @override
@@ -48,12 +51,6 @@ class MessageBubble extends StatelessWidget {
     var textColor = isUser
         ? Theme.of(context).colorScheme.onPrimaryContainer
         : Theme.of(context).colorScheme.onSecondaryContainer;
-
-    // 确定要显示的文本：
-    // 使用 XmlProcessor.stripXmlContent 过滤掉 XML 标签
-    final String strippedText = XmlProcessor.stripXmlContent(message.rawText);
-    final displayText = strippedText;
-
 
     // 获取屏幕宽度，用于计算半宽
     final screenWidth = MediaQuery.of(context).size.width;
@@ -85,48 +82,95 @@ class MessageBubble extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(10.0), // const: 设置气泡内部边距
               // 使用 Column 垂直排列消息内容和（未来可能的）时间戳等信息
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, // 内容左对齐
-                children: [
-                  // 根据消息类型选择渲染方式
-                  isUser
-                      // 用户消息：使用 SelectableText 显示纯文本，允许用户复制
-                      ? SelectableText(displayText, style: TextStyle(color: textColor))
-                      // AI 消息或流式消息：使用 MarkdownBody 渲染 Markdown 格式
-                      : MarkdownBody(
-                          // 如果是流式传输且初始为空，显示省略号作为占位符
-                          data: displayText.isEmpty && isStreaming ? "..." : displayText,
-                          selectable: true, // 允许选择和复制 Markdown 内容 - 恢复选择功能
-                          // 应用主题样式，并根据需要进行定制
-                         styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-                            // 设置段落文本样式
-                            p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
-                            // 示例：自定义代码块样式
-                            code: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontFamily: 'monospace', // 使用等宽字体
-                                  // 设置代码块背景色
-                                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(128), // 使用 withAlpha
-                                ),
-                            // 可以根据需要添加更多元素的样式，如 h1, h2, blockquote 等
-                          ),
-                         ), // 修正：补上缺失的右括号
-                  // 注意：当前设计中，时间戳等元信息不在气泡内显示，
-                  // 如果需要显示，可以在这里添加 Text 小部件。
-                  // 例如：
-                  // if (!isStreaming) // 不在流式气泡中显示时间戳
-                  //   Padding(
-                  //     padding: const EdgeInsets.only(top: 4.0),
-                  //     child: Text(
-                  //       DateFormat.Hm().format(message.timestamp), // 格式化时间
-                  //       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: textColor.withOpacity(0.7)),
-                  //     ),
-                  //   ),
-                ],
-              ),
+              child: _buildMessageContent(context, textColor, isUser, isStreaming),
             ),
           ), // 结束 Card
         ), // 结束 InkWell
       ), // 结束 Container
     ); // 结束 Align
   }
+
+Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+  final hasText = message.displayText.isNotEmpty;
+  final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
+
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (hasText)
+        _buildTextPart(context, textColor, isUser, isStreaming),
+      ...nonTextParts.map((part) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: _buildNonTextPart(context, part, textColor),
+        );
+      }),
+      // Display token count if available
+      if (totalTokens != null && totalTokens! > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: Text(
+            "上下文 Tokens: $totalTokens",
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: textColor.withAlpha(179),
+                ),
+          ),
+        ),
+    ],
+  );
+}
+
+Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+  if (isUser) {
+    return SelectableText(message.displayText, style: TextStyle(color: textColor));
+  } else {
+    return MarkdownBody(
+      data: message.displayText.isEmpty && isStreaming ? "..." : message.displayText,
+      selectable: true,
+      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+        p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
+        code: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontFamily: 'monospace',
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(128),
+            ),
+      ),
+    );
+  }
+}
+
+Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
+  switch (part.type) {
+    case MessagePartType.image:
+      if (part.base64Data != null) {
+        return ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxHeight: 300, // Limit image height
+          ),
+          child: CachedImageFromBase64(
+            base64String: part.base64Data!,
+            fit: BoxFit.contain,
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    case MessagePartType.file:
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.insert_drive_file_outlined, color: textColor, size: 24),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              part.fileName ?? '未知文件',
+              style: TextStyle(color: textColor),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    case MessagePartType.text:
+      return const SizedBox.shrink(); // Text parts are handled separately
+  }
+}
 }

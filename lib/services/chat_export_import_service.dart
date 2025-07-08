@@ -3,11 +3,9 @@ import 'dart:io'; // 用于文件操作
 import 'dart:typed_data'; // For Uint8List
 import 'package:permission_handler/permission_handler.dart'; // 请求权限
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint; // Added kIsWeb
-import 'package:flutter/material.dart'; // for debugPrint, maybe Color
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img; // 使用 'img' 前缀避免冲突
 // import 'package:isar/isar.dart'; // Removed Isar import
-import 'package:path_provider/path_provider.dart'; // 获取文件路径
 import 'package:file_picker/file_picker.dart'; // 选择文件
 // import 'package:permission_handler/permission_handler.dart'; // 请求权限 - 已移除，重复导入
 import 'package:exif/exif.dart'; // 读写 EXIF
@@ -114,10 +112,14 @@ class ChatExportImportService {
       debugPrint("ChatExportImportService: 获取到 ${messages.length} 条消息。");
 
       // 4. 将数据转换为 DTOs
-      final messageDtos = messages.map((m) => MessageExportDto(
-        rawText: m.rawText,
-        role: m.role,
-      )).toList();
+      final messageDtos = messages.map((m) {
+        return MessageExportDto(
+          rawText: m.rawText, // Still keep for backward compatibility
+          role: m.role,
+          parts: m.parts.map((p) => p.toJson()).toList(), // Serialize each part
+          originalXmlContent: m.originalXmlContent,
+        );
+      }).toList();
 
       // --- 修改：直接从 Chat 对象获取 Base64 字符串 ---
       // Chat 对象现在应该直接持有 Base64 编码的封面图字符串
@@ -131,6 +133,11 @@ class ChatExportImportService {
         apiType: chat.apiType, // 新增
         selectedOpenAIConfigId: chat.selectedOpenAIConfigId, // 新增
         coverImageBase64: chat.coverImageBase64, // 直接使用 Chat模型中的 Base64 字符串
+        enablePreprocessing: chat.enablePreprocessing,
+        preprocessingPrompt: chat.preprocessingPrompt,
+        enablePostprocessing: chat.enablePostprocessing,
+        postprocessingPrompt: chat.postprocessingPrompt,
+        contextSummary: chat.contextSummary,
         generationConfig: GenerationConfigDto(
           modelName: chat.generationConfig.modelName,
           temperature: chat.generationConfig.temperature,
@@ -336,26 +343,28 @@ class ChatExportImportService {
              // debugPrint("ChatExportImportService: Unknown tag.values type, falling back to tag.printable for Base64.");
           }
 
-          base64String = base64String.trim();
+          // --- Data Sanitization ---
+          // Trim whitespace and remove potential null characters (\x00) and other non-printable chars
+          base64String = base64String.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
+
           if (base64String.startsWith('b"') && base64String.endsWith('"')) {
             base64String = base64String.substring(2, base64String.length - 1);
           } else if (base64String.startsWith("b'") && base64String.endsWith("'")) {
             base64String = base64String.substring(2, base64String.length - 1);
           }
-          // debugPrint("ChatExportImportService: Extracted Base64 String (Preview): ${base64String.substring(0, (base64String.length) > 100 ? 100 : (base64String.length))}...");
-
-           if (base64String.isEmpty) {
-              throw Exception("未能从 EXIF 中提取有效的 Base64 数据。");
-           }
+          
+          if (base64String.isEmpty) {
+            throw Exception("未能从 EXIF 中提取有效的 Base64 数据。");
+          }
 
           try {
+            // After cleaning, attempt to decode
             final decodedBytes = base64Decode(base64String);
-            jsonString = utf8.decode(decodedBytes); 
-            // debugPrint("ChatExportImportService: Base64 decoded and UTF-8 decoded successfully.");
-            // debugPrint("ChatExportImportService: Recovered JSON String (Preview): ${jsonString.substring(0, jsonString.length > 100 ? 100 : jsonString.length)}...");
+            jsonString = utf8.decode(decodedBytes);
           } catch (e) {
-             // debugPrint("ChatExportImportService: Base64 decoding or UTF-8 decoding failed: $e");
-             throw Exception("无法解码存储在图片中的聊天数据。数据可能已损坏。");
+            debugPrint("ChatExportImportService: Base64/UTF-8 decoding failed for sanitized string. Error: $e");
+            debugPrint("Sanitized Base64 String (First 100 chars): ${base64String.substring(0, (base64String.length) > 100 ? 100 : (base64String.length))}");
+            throw Exception("无法解码存储在图片中的聊天数据。数据可能已损坏。");
           }
 
         } else {
@@ -367,7 +376,7 @@ class ChatExportImportService {
          throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
       }
 
-       if (jsonString == null || jsonString.isEmpty) { // Added null check for jsonString
+       if (jsonString.isEmpty) { // Null check removed as jsonString cannot be null here
           // debugPrint("ChatExportImportService: JSON string is null or empty after decoding.");
          throw Exception("未能从图片中恢复有效的聊天数据。");
       }
@@ -379,7 +388,7 @@ class ChatExportImportService {
       try {
         chatDtoFromJson = ChatExportDto.fromJson(jsonDecode(jsonString));
         // debugPrint("ChatExportImportService: JSON 解析为 ChatExportDto 成功。");
-      } on FormatException catch (e, s) {
+      } on FormatException {
         // debugPrint("ChatExportImportService: JSON 解析失败 - $e\n$s");
         // debugPrint("ChatExportImportService: 无效的 JSON 字符串: $jsonString");
         throw Exception("导入失败：文件中的数据格式无效或已损坏。");
@@ -408,6 +417,11 @@ class ChatExportImportService {
         apiType: chatDtoFromJson.apiType,
         selectedOpenAIConfigId: chatDtoFromJson.selectedOpenAIConfigId,
         coverImageBase64: importedCoverImageBase64String, // 使用封面图片的 Base64 字符串
+        enablePreprocessing: chatDtoFromJson.enablePreprocessing,
+        preprocessingPrompt: chatDtoFromJson.preprocessingPrompt,
+        enablePostprocessing: chatDtoFromJson.enablePostprocessing,
+        postprocessingPrompt: chatDtoFromJson.postprocessingPrompt,
+        contextSummary: chatDtoFromJson.contextSummary,
       );
 
        // 7. 调用仓库保存数据

@@ -9,14 +9,25 @@ import '../repositories/message_repository.dart'; // For MessageRepository
 import 'xml_processor.dart';
 import 'llm_service.dart'; // For LlmContent, LlmTextPart
 import 'package:collection/collection.dart'; // For lastWhereOrNull
-import 'dart:math'; // for min
 
 // Define a return type for buildApiRequestContext
 class ApiRequestContext {
   final List<LlmContent> contextParts;
-  final String? carriedOverXml; 
+  final String? carriedOverXml;
+  final List<Message> droppedMessages;
 
-  ApiRequestContext({required this.contextParts, this.carriedOverXml});
+  ApiRequestContext({
+    required this.contextParts,
+    this.carriedOverXml,
+    required this.droppedMessages,
+  });
+}
+
+// Helper class for partitioning history
+class _HistoryLimitResult {
+  final List<Message> kept;
+  final List<Message> dropped;
+  _HistoryLimitResult(this.kept, this.dropped);
 }
 
 // Provider for the new service
@@ -117,56 +128,62 @@ class ContextXmlService {
   }
 
   /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
-  List<Message> _limitHistoryForPrompt(Chat chat, List<Message> fullHistory, String currentUserInput) {
-    // currentUserInput is passed for context (e.g., token estimation) but should already be in fullHistory if saved prior.
-    // The filtering logic here should mainly focus on turns or tokens of the 'fullHistory'.
-    
-    if (fullHistory.isEmpty) return [];
+  _HistoryLimitResult _limitHistoryForPrompt(Chat chat, List<Message> fullHistory) {
+    if (fullHistory.isEmpty) return _HistoryLimitResult([], []);
 
     try {
       if (chat.contextConfig.mode == ContextManagementMode.turns) {
         final limit = chat.contextConfig.maxTurns * 2;
-        if (limit <= 0) return [];
-        return fullHistory.length > limit ? fullHistory.sublist(fullHistory.length - limit) : fullHistory;
+        if (limit <= 0) return _HistoryLimitResult([], fullHistory);
+        if (fullHistory.length > limit) {
+          return _HistoryLimitResult(
+            fullHistory.sublist(fullHistory.length - limit),
+            fullHistory.sublist(0, fullHistory.length - limit),
+          );
+        }
+        return _HistoryLimitResult(fullHistory, []);
       } else if (chat.contextConfig.mode == ContextManagementMode.tokens && chat.contextConfig.maxContextTokens != null) {
         final maxTokens = chat.contextConfig.maxContextTokens!;
         int currentTokens = 0;
-        final List<Message> tokenLimitedHistory = [];
-        // Estimate tokens for the current user input if it's not already the last message in fullHistory
-        // However, ChatStateNotifier saves it first, so it should be the last one.
-        // For safety, let's assume a small budget for the prompt elements themselves (system, xml).
-        const int promptOverheadTokens = 50; // Rough estimate for system prompt, XML, and other formatting
-        
+        final List<Message> kept = [];
+        final List<Message> dropped = [];
+        const int promptOverheadTokens = 50;
         int budget = maxTokens - promptOverheadTokens;
-        if (currentUserInput.isNotEmpty && (fullHistory.isEmpty || fullHistory.last.rawText != currentUserInput)) {
-           // This case should ideally not happen if ChatStateNotifier saves user input first.
-           // If it does, we need to account for currentUserInput's tokens separately.
-           int currentUserInputTokens = (currentUserInput.length / 3.5).ceil();
-           budget -= currentUserInputTokens;
-        }
-
+        bool budgetExceeded = false;
 
         for (int i = fullHistory.length - 1; i >= 0; i--) {
+          if (budgetExceeded) {
+            dropped.add(fullHistory[i]);
+            continue;
+          }
           final message = fullHistory[i];
           final textToCount = XmlProcessor.stripXmlContent(message.rawText);
           int messageTokens = (textToCount.length / 3.5).ceil();
 
           if (currentTokens + messageTokens <= budget) {
             currentTokens += messageTokens;
-            tokenLimitedHistory.add(message);
+            kept.add(message);
           } else {
-            break;
+            budgetExceeded = true;
+            dropped.add(message);
           }
         }
-        return tokenLimitedHistory.reversed.toList();
-      } else { // Default or fallback to turns-based if config is unclear
+        return _HistoryLimitResult(kept.reversed.toList(), dropped.reversed.toList());
+      } else {
+        // Fallback to default turn-based limiting
         final limit = chat.contextConfig.maxTurns * 2;
-        if (limit <= 0) return [];
-        return fullHistory.length > limit ? fullHistory.sublist(fullHistory.length - limit) : fullHistory;
+        if (limit <= 0) return _HistoryLimitResult([], fullHistory);
+        if (fullHistory.length > limit) {
+          return _HistoryLimitResult(
+            fullHistory.sublist(fullHistory.length - limit),
+            fullHistory.sublist(0, fullHistory.length - limit),
+          );
+        }
+        return _HistoryLimitResult(fullHistory, []);
       }
     } catch (e) {
       debugPrint("ContextXmlService:_limitHistoryForPrompt - Error limiting history: $e");
-      return []; // Return empty on error to prevent issues
+      return _HistoryLimitResult([], fullHistory); // On error, drop everything to be safe
     }
   }
 
@@ -174,68 +191,68 @@ class ContextXmlService {
   /// Builds the list of LlmContent to be sent to the LLM API and the determined carriedOverXml.
   Future<ApiRequestContext> buildApiRequestContext({
     required Chat chat,
-    required String currentUserInput, // This is the actual text from user input field
+    required Message currentUserMessage,
   }) async {
     final messageRepo = _ref.read(messageRepositoryProvider);
-    // Assuming currentUserInput has ALREADY been saved as the latest message by ChatStateNotifier
-    // So, fullHistory will include it.
     final List<Message> fullHistory = await messageRepo.getMessagesForChat(chat.id);
 
     final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
     
-    // Limit the history for the prompt AFTER calculating XML from full history
-    final List<Message> limitedHistoryForPrompt = _limitHistoryForPrompt(chat, fullHistory, currentUserInput);
+    final historyResult = _limitHistoryForPrompt(chat, fullHistory);
+    final List<Message> limitedHistoryForPrompt = historyResult.kept;
+    final List<Message> droppedMessages = historyResult.dropped;
 
     final List<LlmContent> contextParts = [];
     final bool systemPromptExists = chat.systemPrompt != null && chat.systemPrompt!.trim().isNotEmpty;
+    final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
     final bool xmlExists = calculatedCarriedOverXml != null && calculatedCarriedOverXml.isNotEmpty;
 
-    // 1. Add System Prompt (if exists)
     if (systemPromptExists) {
       contextParts.add(LlmContent("system", [LlmTextPart(chat.systemPrompt!)]));
     }
 
-    // 2. Add XML as a new, independent user message (if it exists)
+    // Add summary and carried-over XML as the first user messages
+    if (summaryExists) {
+      contextParts.add(LlmContent("user", [LlmTextPart(XmlProcessor.wrapWithTag("context_summary", chat.contextSummary!))]));
+    }
     if (xmlExists) {
-      contextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml!)]));
+      contextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
     }
 
-    // 3. Add all history messages from the limited set
-    // currentUserInput is assumed to be the last message in limitedHistoryForPrompt if it was saved.
     for (final message in limitedHistoryForPrompt) {
-      final role = message.role == MessageRole.user ? "user" : "model";
-      final filteredText = XmlProcessor.stripXmlContent(message.rawText);
-      // Ensure not to add empty user/model messages.
-      if (filteredText.isNotEmpty) {
-        contextParts.add(LlmContent(role, [LlmTextPart(filteredText)]));
+      // For model messages, strip XML. For user messages, include all parts.
+      if (message.role == MessageRole.model) {
+        final filteredText = XmlProcessor.stripXmlContent(message.rawText);
+        if (filteredText.isNotEmpty) {
+          contextParts.add(LlmContent("model", [LlmTextPart(filteredText)]));
+        }
+      } else {
+        // For user messages, convert the whole message with all its parts
+        contextParts.add(LlmContent.fromMessage(message));
       }
     }
-    
-    // Note: currentUserInput is NOT added separately here because it's assumed to be part of 'fullHistory'
-    // and consequently part of 'limitedHistoryForPrompt' if it fits the criteria.
-    // ChatStateNotifier is responsible for saving the user message to the repository *before* calling this.
 
     if (kDebugMode) {
       int userMessages = 0;
       int modelMessages = 0;
       int systemPrompts = 0;
       for(var part in contextParts) {
-        if (part.role == "user") userMessages++;
-        else if (part.role == "model") modelMessages++;
-        else if (part.role == "system") systemPrompts++;
+        if (part.role == "user") {
+          userMessages++;
+        } else if (part.role == "model") {
+          modelMessages++;
+        } else if (part.role == "system") {
+          systemPrompts++;
+        }
       }
       debugPrint("ContextXmlService:buildApiRequestContext - Returning context with: $systemPrompts system, $userMessages user, $modelMessages model parts. Total: ${contextParts.length}.");
-      if (contextParts.isNotEmpty) {
-        final lastPart = contextParts.last;
-        String lastPartPreview = "N/A";
-        if (lastPart.parts.isNotEmpty && lastPart.parts.first is LlmTextPart) {
-          final text = (lastPart.parts.first as LlmTextPart).text;
-          lastPartPreview = text.substring(0, min(text.length, 70));
-        }
-      } 
     }
 
-    return ApiRequestContext(contextParts: contextParts, carriedOverXml: calculatedCarriedOverXml);
+    return ApiRequestContext(
+      contextParts: contextParts,
+      carriedOverXml: calculatedCarriedOverXml,
+      droppedMessages: droppedMessages,
+    );
   }
 
 }

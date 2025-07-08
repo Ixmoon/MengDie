@@ -236,31 +236,35 @@ class ContextConfigDto {
 // --- DTO for Message ---
 @immutable
 class MessageExportDto {
-  final String rawText;
+  final String rawText; // Kept for backward compatibility
   final MessageRole role;
+  final List<Map<String, dynamic>>? parts; // New field for multi-part content
+  final String? originalXmlContent; // New field
 
   const MessageExportDto({
     required this.rawText,
     required this.role,
+    this.parts,
+    this.originalXmlContent,
   });
 
   factory MessageExportDto.fromJson(Map<String, dynamic> json) {
-    final rawTextValue = json['rawText'] as String?;
-    // ignore: avoid_print
-    print('MessageExportDto.fromJson: Parsing message with rawText: "$rawTextValue"'); // Debug print
     return MessageExportDto(
-      rawText: rawTextValue ?? '', // Provide default if null
-      role: MessageRole.values.firstWhere(
-        (e) => e.toString() == json['role'],
-        orElse: () => MessageRole.user, // Default role
-      ),
+      rawText: json['rawText'] as String? ?? '',
+      role: MessageRole.values.byName(json['role'] ?? 'user'),
+      parts: (json['parts'] as List<dynamic>?)
+          ?.map((e) => e as Map<String, dynamic>)
+          .toList(),
+      originalXmlContent: json['originalXmlContent'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'rawText': rawText,
-      'role': role.toString(),
+      'role': role.name, // Use .name for clean enum string
+      'parts': parts,
+      'originalXmlContent': originalXmlContent,
     };
   }
 
@@ -270,12 +274,16 @@ class MessageExportDto {
       other is MessageExportDto &&
           runtimeType == other.runtimeType &&
           rawText == other.rawText &&
-          role == other.role;
+          role == other.role &&
+          listEquals(parts, other.parts) &&
+          originalXmlContent == other.originalXmlContent;
 
   @override
   int get hashCode =>
       rawText.hashCode ^
-      role.hashCode;
+      role.hashCode ^
+      parts.hashCode ^
+      originalXmlContent.hashCode;
 }
 
 // --- DTO for Chat ---
@@ -293,6 +301,11 @@ class ChatExportDto {
   final LlmType apiType; // 新增
   final String? selectedOpenAIConfigId; // 新增
   final String? coverImageBase64; // 新增: 存储封面图片的 Base64 字符串
+  final bool enablePreprocessing;
+  final String? preprocessingPrompt;
+  final bool enablePostprocessing;
+  final String? postprocessingPrompt;
+  final String? contextSummary; // Export current summary
 
   const ChatExportDto({
     this.title,
@@ -305,6 +318,11 @@ class ChatExportDto {
     this.apiType = LlmType.gemini, // 新增，提供默认值
     this.selectedOpenAIConfigId, // 新增
     this.coverImageBase64, // 新增
+    this.enablePreprocessing = false,
+    this.preprocessingPrompt,
+    this.enablePostprocessing = false,
+    this.postprocessingPrompt,
+    this.contextSummary,
   });
 
   factory ChatExportDto.fromJson(Map<String, dynamic> json) {
@@ -326,6 +344,11 @@ class ChatExportDto {
       ),
       selectedOpenAIConfigId: json['selectedOpenAIConfigId'] as String?,
       coverImageBase64: json['coverImageBase64'] as String?, // 新增
+      enablePreprocessing: json['enablePreprocessing'] as bool? ?? false,
+      preprocessingPrompt: json['preprocessingPrompt'] as String?,
+      enablePostprocessing: json['enablePostprocessing'] as bool? ?? false,
+      postprocessingPrompt: json['postprocessingPrompt'] as String?,
+      contextSummary: json['contextSummary'] as String?,
     );
   }
 
@@ -341,6 +364,11 @@ class ChatExportDto {
       'apiType': apiType.toString(),
       'selectedOpenAIConfigId': selectedOpenAIConfigId,
       'coverImageBase64': coverImageBase64, // 新增
+      'enablePreprocessing': enablePreprocessing,
+      'preprocessingPrompt': preprocessingPrompt,
+      'enablePostprocessing': enablePostprocessing,
+      'postprocessingPrompt': postprocessingPrompt,
+      'contextSummary': contextSummary,
     };
   }
 
@@ -358,7 +386,12 @@ class ChatExportDto {
           listEquals(messages, other.messages) &&
           apiType == other.apiType &&
           selectedOpenAIConfigId == other.selectedOpenAIConfigId &&
-          coverImageBase64 == other.coverImageBase64; // 新增
+          coverImageBase64 == other.coverImageBase64 && // 新增
+          enablePreprocessing == other.enablePreprocessing &&
+          preprocessingPrompt == other.preprocessingPrompt &&
+          enablePostprocessing == other.enablePostprocessing &&
+          postprocessingPrompt == other.postprocessingPrompt &&
+          contextSummary == other.contextSummary;
 
   @override
   int get hashCode =>
@@ -371,5 +404,10 @@ class ChatExportDto {
       messages.hashCode ^
       apiType.hashCode ^
       selectedOpenAIConfigId.hashCode ^
-      coverImageBase64.hashCode; // 新增
+      coverImageBase64.hashCode ^ // 新增
+      enablePreprocessing.hashCode ^
+      preprocessingPrompt.hashCode ^
+      enablePostprocessing.hashCode ^
+      postprocessingPrompt.hashCode ^
+      contextSummary.hashCode;
 }

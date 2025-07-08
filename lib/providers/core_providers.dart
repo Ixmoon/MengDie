@@ -17,10 +17,8 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 });
 
 // --- SharedPreferences Provider ---
-// 提供 SharedPreferences 实例的 Provider。
-// 注意：这个 Provider 必须在 main() 函数中被 override，
-// 因为 SharedPreferences 需要异步初始化。
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  // 如果在 main() 中没有被 override，则抛出未实现错误，提示开发者进行初始化。
-  throw UnimplementedError('SharedPreferences 应该在 main() 中初始化并覆盖此 Provider');
+// 提供 SharedPreferences 实例的 FutureProvider。
+// 这个 Provider 会异步初始化 SharedPreferences，无需在 main() 中手动处理。
+final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) async {
+	return await SharedPreferences.getInstance();
 });

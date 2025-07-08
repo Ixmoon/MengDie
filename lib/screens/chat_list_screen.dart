@@ -1,6 +1,3 @@
-import 'dart:convert'; // 用于 base64Decode
-import 'dart:typed_data'; // 用于 Uint8List
-import 'dart:io'; // 仍然可能用于其他文件操作，或者可以根据实际情况移除
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart'; // 用于导航
@@ -13,6 +10,7 @@ import '../providers/api_key_provider.dart';
 import '../providers/chat_state_providers.dart';
 import '../repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
 import '../services/chat_export_import_service.dart'; // 导入导出/导入服务
+import '../widgets/cached_image.dart'; // 导入缓存图片组件
 // import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
 
 // 本文件包含显示聊天列表的主屏幕。
@@ -112,381 +110,195 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         }
   }
 
-  // --- 构建列表视图 (支持拖放排序和多选) ---
-  Widget _buildListView(List<Chat> chats, WidgetRef ref) {
-    // 使用 ReorderableListView.builder
-    return ReorderableListView.builder(
-      padding: const EdgeInsets.only(top: 8), // const
-      itemCount: chats.length,
-      // 禁用默认的长按拖动手柄，我们将使用 ReorderableDelayedDragStartListener
-      buildDefaultDragHandles: false, // 总是禁用默认手柄
-      itemBuilder: (context, index) {
-        final chat = chats[index];
-        final isSelected = _selectedItemIds.contains(chat.id);
+  // --- 统一的拖放处理逻辑 ---
+  Future<void> _handleReorder(int oldIndex, int newIndex) async {
+    final currentFolderId = ref.read(currentFolderIdProvider);
+    final inFolder = currentFolderId != null;
+    final repo = ref.read(chatRepositoryProvider);
+    final currentChats = ref.read(chatListProvider(currentFolderId)).value ?? [];
 
-        // 使用 ReorderableDelayedDragStartListener 包裹整个可点击区域
-        // key 需要放在 Listener 上，或者其直接子 Widget 上，这里放在 Listener 上
-        return ReorderableDelayedDragStartListener(
-          key: ValueKey(chat.id), // key 必须在这里供 ReorderableListView 使用
-          index: index,
-          // 仅在非多选模式下启用拖动
-          enabled: !_isMultiSelectMode,
-          child: Container(
-            // key: ValueKey(chat.id), // key 移到 Listener 上
-            color: isSelected ? Theme.of(context).highlightColor : null,
-            child: InkWell( // 使用 InkWell 响应点击
-              // 长按现在由 ReorderableDelayedDragStartListener 处理
-              onTap: () {
-                if (_isMultiSelectMode) {
-                  _toggleItemSelection(chat.id); // 多选模式下切换选中
-                } else {
-                  // 普通模式下导航
-                  if (chat.isFolder) {
-                    ref.read(currentFolderIdProvider.notifier).state = chat.id;
-                    debugPrint("进入文件夹: ${chat.title} (ID: ${chat.id})");
-                  } else {
-                    context.push('/chat/${chat.id}');
-                  }
-                }
-              },
-              // 长按进入多选模式（如果需要的话，可以添加 onLongPress）
-              // onLongPress: () {
-              //   if (!_isMultiSelectMode) {
-              //     _toggleMultiSelectMode(enable: true, initialSelectionId: chat.id);
-              //   }
-              // },
-              child: chat.isFolder
-                  ? ListTile(
-                      leading: const Icon(Icons.folder_outlined), // const
-                      title: Text(chat.title ?? '未命名文件夹'),
-                      subtitle: Text('文件夹 - ${DateFormat.yMd().add_Hm().format(chat.updatedAt)}'),
-                      // 多选模式下显示复选框
-                      trailing: _isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null, // Icon can be const if not dynamic
-                    )
-                  // 为聊天项构建 ListTile，并添加 Checkbox
-                  : ListTile(
-                      leading: _buildLeading(context, chat), // 使用辅助方法构建 leading
-                      title: Text(chat.title ?? '无标题聊天', maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                        '更新于: ${DateFormat.yMd().add_jm().format(chat.updatedAt)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      // 在多选模式下显示 Checkbox
-                      trailing: _isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
-                    ),
-            ),
-          ),
-        );
-      },
-      // 添加 onReorder 回调 (与 _buildGridView 逻辑一致, 确保从最新的 Provider 读取数据)
-      onReorder: (oldIndex, newIndex) async {
-         // 拖放排序逻辑
-         debugPrint("ListView Reorder: $oldIndex -> $newIndex");
-         final repo = ref.read(chatRepositoryProvider);
-         // 从 Provider 获取最新的列表状态，以防万一
-         final chatListAsync = ref.read(chatListProvider(ref.read(currentFolderIdProvider)));
-         final currentChats = chatListAsync.value ?? []; // 使用当前加载的数据
-         if (currentChats.isEmpty || oldIndex < 0 || oldIndex >= currentChats.length) {
-            debugPrint("ListView Reorder 错误: 列表为空或 oldIndex $oldIndex 超出范围");
-            return;
-         }
-         final Chat movedItem = currentChats[oldIndex];
+    // 检查 mounted 状态
+    if (!mounted) return;
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-         // 拖入文件夹逻辑
-         int targetIndex = newIndex;
-         if (newIndex > oldIndex) {
-             targetIndex = newIndex - 1; // 向下拖动时，目标是新位置的前一个
-         }
-         // 检查目标索引是否有效且是文件夹
-         if (targetIndex >= 0 && targetIndex < currentChats.length && currentChats[targetIndex].isFolder && !movedItem.isFolder) {
-             final targetFolder = currentChats[targetIndex];
-             debugPrint("ListView: 移动 '${movedItem.title}' 到文件夹 '${targetFolder.title}' (ID: ${targetFolder.id})");
-             movedItem.parentFolderId = targetFolder.id;
-             movedItem.orderIndex = null; // 进入文件夹后由数据库排序
-             movedItem.updatedAt = DateTime.now();
-             try {
-                 await repo.saveChat(movedItem);
-                 debugPrint("ListView: 成功将项目移动到文件夹。");
-                 // StreamProvider 会自动刷新列表
-                 // 添加成功提示
-                 if (mounted) {
-                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                     scaffoldMessenger.showSnackBar(
-                         SnackBar(
-                             content: Text("'${movedItem.title}' 已移动到文件夹 '${targetFolder.title}'"),
-                             backgroundColor: Colors.green, // 绿色表示成功
-                             duration: const Duration(seconds: 2),
-                         ),
-                     );
-                 }
-              } catch (e) {
-                   debugPrint("ListView: 移动项目到文件夹时出错: $e");
-                   // 异步操作后检查 State 是否挂载
-                   if (mounted) { // 使用 State 的 mounted 属性
-                       final scaffoldMessenger = ScaffoldMessenger.of(context); // 移到 mounted 检查内部
-                       scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                           SnackBar(content: Text('移动到文件夹失败: $e'), backgroundColor: Colors.red),
-                      );
-                  }
-              }
-         } else {
-             // 普通排序逻辑
-             debugPrint("ListView: 执行普通排序操作...");
-             List<Chat> reorderedList = List.from(currentChats);
-             final Chat itemToMove = reorderedList.removeAt(oldIndex);
-             // 确保插入索引有效
-             final insertIndex = (newIndex > oldIndex ? newIndex - 1 : newIndex).clamp(0, reorderedList.length);
-             reorderedList.insert(insertIndex, itemToMove);
+    // --- Case 1: 移动到上一级文件夹 ---
+    if (inFolder && newIndex == 0) {
+      final dataOldIndex = oldIndex - 1;
+      final parentFolder = ref.read(currentChatProvider(currentFolderId)).value;
+      if (dataOldIndex < 0 || dataOldIndex >= currentChats.length || parentFolder == null) return;
 
-             // 更新 orderIndex
-             List<Chat> chatsToUpdate = [];
-             for (int i = 0; i < reorderedList.length; i++) {
-               if (reorderedList[i].orderIndex != i) {
-                 reorderedList[i].orderIndex = i;
-                 reorderedList[i].updatedAt = DateTime.now(); // 更新时间戳
-                 chatsToUpdate.add(reorderedList[i]);
-               }
-             }
-             if (chatsToUpdate.isNotEmpty) {
-               try {
-                 await repo.updateChatOrder(chatsToUpdate);
-                 debugPrint("ListView: 成功更新了 ${chatsToUpdate.length} 个项目的顺序。");
-                 } catch (e) {
-                   debugPrint("ListView: 更新聊天顺序时出错: $e");
-                   // 异步操作后检查 State 是否挂载
-                   if (mounted) { // 使用 State 的 mounted 属性
-                     final scaffoldMessenger = ScaffoldMessenger.of(context); // 移到 mounted 检查内部
-                     scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                       SnackBar(content: Text('更新顺序失败: $e'), backgroundColor: Colors.red),
-                    );
-                  }
-                }
-             } else {
-                debugPrint("ListView: 顺序未改变，无需更新。");
-             }
-           }
-      },
-    );
-  }
-
-  // --- 辅助方法：构建 ListTile 的 leading (从 ChatListItem 提取) ---
-  Widget _buildLeading(BuildContext context, Chat chat) {
-    Widget leadingWidget;
-    if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
+      final movedItem = currentChats[dataOldIndex];
+      movedItem.parentFolderId = parentFolder.parentFolderId;
+      movedItem.orderIndex = null; // 重置顺序
+      movedItem.updatedAt = DateTime.now();
+      
       try {
-        final Uint8List imageBytes = base64Decode(chat.coverImageBase64!);
-        leadingWidget = Image.memory(
-          imageBytes,
-          width: 50,
-          height: 50,
-          cacheWidth: 100,
-          cacheHeight: 100,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return const Icon(Icons.broken_image, size: 50, color: Colors.grey);
-          },
-        );
+        await repo.saveChat(movedItem);
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(SnackBar(
+            content: Text("'${movedItem.title}' 已移至上一级"),
+            backgroundColor: Colors.green,
+          ));
+        }
       } catch (e) {
-        leadingWidget = const Icon(Icons.broken_image, size: 50, color: Colors.grey);
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(SnackBar(content: Text('移动失败: $e'), backgroundColor: Colors.red));
+        }
+      }
+      return;
+    }
+
+    // --- Case 2 & 3: 拖入文件夹或普通排序 ---
+    final dataOldIndex = inFolder ? oldIndex - 1 : oldIndex;
+    
+    // 列表视图和网格视图的目标索引计算方式不同
+    final dataTargetIndex = _isGridView
+      ? (inFolder ? newIndex - 1 : newIndex)
+      : (inFolder ? ((newIndex > oldIndex) ? newIndex - 2 : newIndex - 1) : ((newIndex > oldIndex) ? newIndex - 1 : newIndex));
+
+    // --- Case 2: 拖入文件夹 ---
+    if (dataTargetIndex >= 0 && dataTargetIndex < currentChats.length &&
+        currentChats[dataTargetIndex].isFolder && !currentChats[dataOldIndex].isFolder) {
+      
+      final movedItem = currentChats[dataOldIndex];
+      final targetFolder = currentChats[dataTargetIndex];
+      movedItem.parentFolderId = targetFolder.id;
+      movedItem.orderIndex = null; // 重置顺序
+      movedItem.updatedAt = DateTime.now();
+
+      try {
+        await repo.saveChat(movedItem);
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(SnackBar(
+            content: Text("'${movedItem.title}' 已移至 '${targetFolder.title}'"),
+            backgroundColor: Colors.green,
+          ));
+        }
+      } catch (e) {
+        if (mounted) {
+          scaffoldMessenger.showSnackBar(SnackBar(content: Text('移动失败: $e'), backgroundColor: Colors.red));
+        }
       }
     } else {
-      leadingWidget = const Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey);
-    }
-    return CircleAvatar(
-      radius: 25,
-      backgroundColor: (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty && !(leadingWidget is Icon && (leadingWidget as Icon).icon == Icons.broken_image))
-          ? Colors.transparent
-          : Theme.of(context).colorScheme.primaryContainer,
-      child: leadingWidget,
-    );
-  }
+      // --- Case 3: 普通排序 ---
+      List<Chat> reorderedList = List.from(currentChats);
+      final itemToMove = reorderedList.removeAt(dataOldIndex);
+      // 插入位置的计算也需要考虑视图类型
+      final dataInsertIndex = _isGridView
+        ? (inFolder ? ((newIndex > oldIndex ? newIndex - 1 : newIndex) - 1) : (newIndex > oldIndex ? newIndex - 1 : newIndex))
+        : (inFolder ? ((newIndex > oldIndex ? newIndex - 1 : newIndex) - 1) : (newIndex > oldIndex ? newIndex - 1 : newIndex));
+        
+      reorderedList.insert(dataInsertIndex.clamp(0, reorderedList.length), itemToMove);
+      
+      List<Chat> chatsToUpdate = [];
+      for (int i = 0; i < reorderedList.length; i++) {
+        if (reorderedList[i].orderIndex != i) {
+          reorderedList[i].orderIndex = i;
+          reorderedList[i].updatedAt = DateTime.now();
+          chatsToUpdate.add(reorderedList[i]);
+        }
+      }
 
-  // --- 构建网格视图 (支持拖放排序和多选) ---
-  Widget _buildGridView(List<Chat> chats, WidgetRef ref) {
-    return ReorderableGridView.builder(
-      padding: const EdgeInsets.all(8.0), // const
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount( // const
-        crossAxisCount: 3,
-        crossAxisSpacing: 8.0,
-        mainAxisSpacing: 8.0,
-        childAspectRatio: 1 / 1.5, // 修改宽高比为 1:1.5 (竖直长方形)
-      ),
-      itemCount: chats.length,
-      itemBuilder: (context, index) {
-        final chat = chats[index];
-        final isSelected = _selectedItemIds.contains(chat.id);
-        Widget displayWidget;
-
-        if (chat.isFolder) {
-          displayWidget = Container(
-            color: Colors.amber.shade100,
-            child: Icon(Icons.folder_outlined, color: Colors.amber.shade800, size: 50),
-          );
-        } else {
-          if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
-            try {
-              final Uint8List imageBytes = base64Decode(chat.coverImageBase64!);
-              displayWidget = Image.memory(
-                imageBytes,
-                fit: BoxFit.cover,
-                cacheWidth: 240, 
-                cacheHeight: 360,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey.shade300,
-                  child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
-                ),
-              );
-            } catch (e) {
-              displayWidget = Container(
-                color: Colors.grey.shade300,
-                child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
-              );
-            }
-          } else {
-            displayWidget = Container(
-              color: Colors.grey.shade300,
-              child: const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 40),
-            );
+      if (chatsToUpdate.isNotEmpty) {
+        try {
+          await repo.updateChatOrder(chatsToUpdate);
+        } catch (e) {
+          if (mounted) {
+            scaffoldMessenger.showSnackBar(SnackBar(content: Text('更新顺序失败: $e'), backgroundColor: Colors.red));
           }
         }
+      }
+    }
+  }
 
-        return ReorderableDragStartListener(
+
+  // --- 构建列表视图 ---
+  Widget _buildListView(List<Chat> chats, WidgetRef ref) {
+    final inFolder = ref.watch(currentFolderIdProvider) != null;
+    final itemCount = inFolder ? chats.length + 1 : chats.length;
+
+    return ReorderableListView.builder(
+      itemExtent: 76.0,
+      padding: const EdgeInsets.only(top: 8),
+      itemCount: itemCount,
+      buildDefaultDragHandles: false,
+      itemBuilder: (context, index) {
+        if (inFolder && index == 0) {
+          return const _MoveUpTarget(isListView: true);
+        }
+        final chatIndex = inFolder ? index - 1 : index;
+        final chat = chats[chatIndex];
+        
+        return ReorderableDelayedDragStartListener(
           key: ValueKey(chat.id),
           index: index,
-          // 禁用拖动当处于多选模式时
           enabled: !_isMultiSelectMode,
-          // 移除 GestureDetector 的 onLongPress
-          child: GestureDetector(
+          child: _ChatListItem(
+            chat: chat,
+            isSelected: _selectedItemIds.contains(chat.id),
+            isMultiSelectMode: _isMultiSelectMode,
             onTap: () {
               if (_isMultiSelectMode) {
-                _toggleItemSelection(chat.id); // 多选模式下切换选中
+                _toggleItemSelection(chat.id);
               } else {
-                // 普通模式下导航
                 if (chat.isFolder) {
                   ref.read(currentFolderIdProvider.notifier).state = chat.id;
-                  debugPrint("进入文件夹: ${chat.title} (ID: ${chat.id})");
                 } else {
                   context.push('/chat/${chat.id}');
                 }
               }
             },
-            child: GridTile(
-              footer: GridTileBar(
-                backgroundColor: Colors.black54,
-                title: Text(
-                  chat.title ?? (chat.isFolder ? '未命名文件夹' : '无标题'),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: Colors.white),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              child: Stack( // 使用 Stack 添加选中覆盖层
-                fit: StackFit.expand,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8.0),
-                    child: displayWidget,
-                  ),
-                  // 选中时的覆盖层
-                   if (isSelected)
-                     Container(
-                       decoration: BoxDecoration(
-                         color: Colors.black.withAlpha((255 * 0.3).round()), // 使用 withAlpha
-                         borderRadius: BorderRadius.circular(8.0),
-                         border: Border.all(color: Theme.of(context).primaryColor, width: 2), // 边框高亮
-                       ),
-                       child: Icon(Icons.check_circle, color: Colors.white.withAlpha((255 * 0.8).round()), size: 30), // 使用 withAlpha
-                     ),
-                 ],
-              ),
-            ),
           ),
         );
       },
-      onReorder: (oldIndex, newIndex) async {
-         // 拖放排序逻辑 (保持不变)
-         debugPrint("GridView Reorder: $oldIndex -> $newIndex");
-         // 从 Provider 获取最新的列表状态
-         final chatListAsync = ref.read(chatListProvider(ref.read(currentFolderIdProvider)));
-         final currentChats = chatListAsync.value ?? [];
-         if (currentChats.isEmpty || oldIndex < 0 || oldIndex >= currentChats.length) {
-            debugPrint("GridView Reorder 错误: 列表为空或 oldIndex $oldIndex 超出范围");
-            return;
-         }
-         final repo = ref.read(chatRepositoryProvider);
-         final Chat movedItem = currentChats[oldIndex];
+      onReorder: _handleReorder,
+    );
+  }
 
-         // 拖入文件夹逻辑
-         // GridView 的 newIndex 直接对应目标项
-         if (newIndex >= 0 && newIndex < currentChats.length && currentChats[newIndex].isFolder && !movedItem.isFolder) {
-             final targetFolder = currentChats[newIndex];
-             debugPrint("GridView: 移动 '${movedItem.title}' 到文件夹 '${targetFolder.title}' (ID: ${targetFolder.id})");
-             movedItem.parentFolderId = targetFolder.id;
-             movedItem.orderIndex = null;
-             movedItem.updatedAt = DateTime.now();
-             try {
-                 await repo.saveChat(movedItem);
-                 debugPrint("GridView: 成功将项目移动到文件夹。");
-                 // 添加成功提示
-                 if (mounted) {
-                     final scaffoldMessenger = ScaffoldMessenger.of(context);
-                     scaffoldMessenger.showSnackBar(
-                         SnackBar(
-                             content: Text("'${movedItem.title}' 已移动到文件夹 '${targetFolder.title}'"),
-                             backgroundColor: Colors.green, // 绿色表示成功
-                             duration: const Duration(seconds: 2),
-                         ),
-                     );
-                 }
-               } catch (e) {
-                   debugPrint("GridView: 移动项目到文件夹时出错: $e");
-                   // 异步操作后检查 State 是否挂载
-                   if (mounted) { // 使用 State 的 mounted 属性
-                       final scaffoldMessenger = ScaffoldMessenger.of(context); // 移到 mounted 检查内部
-                       scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                           SnackBar(content: Text('移动到文件夹失败: $e'), backgroundColor: Colors.red),
-                      );
-                  }
-              }
-         } else {
-             // 普通排序逻辑
-             debugPrint("GridView: 执行普通排序操作...");
-             List<Chat> reorderedList = List.from(currentChats);
-             final Chat itemToMove = reorderedList.removeAt(oldIndex);
-             // GridView 的 newIndex 可能需要调整
-             final insertIndex = (newIndex > oldIndex ? newIndex - 1 : newIndex).clamp(0, reorderedList.length);
-             reorderedList.insert(insertIndex, itemToMove);
 
-             List<Chat> chatsToUpdate = [];
-             for (int i = 0; i < reorderedList.length; i++) {
-               if (reorderedList[i].orderIndex != i) {
-                 reorderedList[i].orderIndex = i;
-                 reorderedList[i].updatedAt = DateTime.now(); // 更新时间戳
-                 chatsToUpdate.add(reorderedList[i]);
-               }
-             }
-             if (chatsToUpdate.isNotEmpty) {
-               try {
-                 await repo.updateChatOrder(chatsToUpdate);
-                 debugPrint("GridView: 成功更新了 ${chatsToUpdate.length} 个项目的顺序。");
-                 } catch (e) {
-                   debugPrint("GridView: 更新聊天顺序时出错: $e");
-                   // 异步操作后检查 State 是否挂载
-                   if (mounted) { // 使用 State 的 mounted 属性
-                     final scaffoldMessenger = ScaffoldMessenger.of(context); // 移到 mounted 检查内部
-                     scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                       SnackBar(content: Text('更新顺序失败: $e'), backgroundColor: Colors.red),
-                    );
-                  }
+  // --- 构建网格视图 ---
+  Widget _buildGridView(List<Chat> chats, WidgetRef ref) {
+    final inFolder = ref.watch(currentFolderIdProvider) != null;
+    final itemCount = inFolder ? chats.length + 1 : chats.length;
+
+    return ReorderableGridView.builder(
+      padding: const EdgeInsets.all(8.0),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8.0,
+        mainAxisSpacing: 8.0,
+        childAspectRatio: 1 / 1.5,
+      ),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (inFolder && index == 0) {
+          return const _MoveUpTarget(isListView: false);
+        }
+        final chatIndex = inFolder ? index - 1 : index;
+        final chat = chats[chatIndex];
+        
+        return ReorderableDragStartListener(
+          key: ValueKey(chat.id),
+          index: index,
+          enabled: !_isMultiSelectMode,
+          child: _ChatGridItem(
+            chat: chat,
+            isSelected: _selectedItemIds.contains(chat.id),
+            onTap: () {
+              if (_isMultiSelectMode) {
+                _toggleItemSelection(chat.id);
+              } else {
+                if (chat.isFolder) {
+                  ref.read(currentFolderIdProvider.notifier).state = chat.id;
+                } else {
+                  context.push('/chat/${chat.id}');
                 }
-             } else {
-                debugPrint("GridView: 顺序未改变，无需更新。");
-             }
-           }
+              }
+            },
+          ),
+        );
       },
+      onReorder: _handleReorder,
     );
   }
 
@@ -504,15 +316,15 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           children: [
               if (apiKeyState.error != null)
                  Padding(
-                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 0), // const
+                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                    child: Card(
                      color: Colors.orange.shade100,
                      child: ListTile(
-                       leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange), // const
+                       leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
                        title: Text("API Key 问题", style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
                        subtitle: Text(apiKeyState.error!, style: TextStyle(color: Colors.orange.shade800)),
                        trailing: IconButton(
-                         icon: const Icon(Icons.settings, color: Colors.orange), // const
+                         icon: const Icon(Icons.settings, color: Colors.orange),
                          tooltip: '前往设置',
                          onPressed: () => context.push('/settings'),
                        ),
@@ -524,16 +336,16 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                  child: chatListAsync.when(
                    data: (chats) {
                      if (chats.isEmpty && currentFolderId == null) { // 根目录为空
-                       return const Center(child: Text('点击右下角 + 开始新聊天')); // const
+                       return const Center(child: Text('点击右下角 + 开始新聊天'));
                      } else if (chats.isEmpty && currentFolderId != null) { // 文件夹为空
-                        return const Center(child: Text('此文件夹为空')); // const
+                        return const Center(child: Text('此文件夹为空'));
                      }
                      // 根据 _isGridView 切换视图
                      return _isGridView
                          ? _buildGridView(chats, ref)
                          : _buildListView(chats, ref);
                    },
-                   loading: () => const Center(child: CircularProgressIndicator()), // const
+                   loading: () => const Center(child: CircularProgressIndicator()),
                    error: (error, stack) => Center(child: Text('无法加载列表: $error')),
                  ),
                ),
@@ -542,7 +354,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateMenu(context, ref, currentFolderId), // 传递 currentFolderId
         tooltip: '新建',
-        child: const Icon(Icons.add), // const
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -553,14 +365,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       // --- 多选模式 AppBar ---
       return AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.close), // const
+          icon: const Icon(Icons.close),
           tooltip: '取消选择',
           onPressed: () => _toggleMultiSelectMode(enable: false),
         ),
         title: Text('已选择 ${_selectedItemIds.length} 项'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_outline), // const
+            icon: const Icon(Icons.delete_outline),
             tooltip: '删除所选',
             // 仅在有选中项时启用
             onPressed: _selectedItemIds.isEmpty ? null : _showMultiDeleteConfirmationDialog,
@@ -572,7 +384,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       return AppBar(
          leading: currentFolderId != null
              ? IconButton(
-                 icon: const Icon(Icons.arrow_upward), // const
+                 icon: const Icon(Icons.arrow_upward),
                  tooltip: '返回上一级',
                  onPressed: () {
                    // 读取当前文件夹信息以获取父 ID
@@ -590,7 +402,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         actions: [
           // 进入多选模式按钮
           IconButton(
-            icon: const Icon(Icons.select_all), // const
+            icon: const Icon(Icons.select_all),
             tooltip: '选择项目',
             onPressed: () => _toggleMultiSelectMode(enable: true),
           ),
@@ -605,12 +417,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           ),
           // --- 新增：导入按钮 ---
           IconButton(
-            icon: const Icon(Icons.file_download_outlined), // const: 使用下载/导入图标
+            icon: const Icon(Icons.file_download_outlined),
             tooltip: '导入聊天',
             onPressed: () async {
               // 显示加载指示器
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('正在导入聊天...'), duration: Duration(seconds: 10)), // const SnackBar, const Text
+                const SnackBar(content: Text('正在导入聊天...'), duration: Duration(seconds: 10)),
               );
               try {
                 // 调用导入服务
@@ -620,14 +432,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
                 if (newChatId != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('聊天导入成功！')), // const SnackBar, const Text
+                    const SnackBar(content: Text('聊天导入成功！')),
                   );
                   // 可选：直接导航到新导入的聊天
                   // context.push('/chat/$newChatId');
                 } else {
                   // 用户可能取消了文件选择
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('导入已取消'), duration: Duration(seconds: 2)), // const SnackBar, const Text
+                    const SnackBar(content: Text('导入已取消'), duration: Duration(seconds: 2)),
                   );
                 }
               } catch (e) {
@@ -642,7 +454,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           ),
           // --- 结束新增 ---
           IconButton(
-            icon: const Icon(Icons.settings), // const
+            icon: const Icon(Icons.settings),
             tooltip: '全局设置',
             onPressed: () => context.push('/settings'),
           ),
@@ -660,8 +472,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         child: Wrap(
           children: <Widget>[
             ListTile(
-              leading: const Icon(Icons.chat_bubble_outline), // const
-              title: const Text('新建聊天'), // const
+              leading: const Icon(Icons.chat_bubble_outline),
+              title: const Text('新建聊天'),
               onTap: () async {
                 Navigator.pop(ctx);
                 // 创建时设置 parentFolderId
@@ -684,8 +496,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ),
             // 始终显示创建文件夹选项
             ListTile(
-              leading: const Icon(Icons.create_new_folder_outlined), // const
-              title: const Text('新建文件夹'), // const
+              leading: const Icon(Icons.create_new_folder_outlined),
+              title: const Text('新建文件夹'),
               onTap: () async {
                 Navigator.pop(ctx);
                 // 调用时传递 currentFolderId
@@ -706,13 +518,13 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final folderName = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('新建文件夹'), // const
+        title: const Text('新建文件夹'),
         content: Form(
           key: formKey,
           child: TextFormField(
             controller: folderNameController,
             autofocus: true,
-            decoration: const InputDecoration(hintText: '输入文件夹名称'), // const
+            decoration: const InputDecoration(hintText: '输入文件夹名称'),
             validator: (value) {
               if (value == null || value.trim().isEmpty) {
                 return '文件夹名称不能为空';
@@ -722,14 +534,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')), // const
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
           TextButton(
             onPressed: () {
               if (formKey.currentState!.validate()) {
                 Navigator.of(ctx).pop(folderNameController.text.trim());
               }
             },
-            child: const Text('创建'), // const
+            child: const Text('创建'),
           ),
         ],
       ),
@@ -753,5 +565,192 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         }
       }
     }
+  }
+}
+
+// --- 封装的私有小部件 ---
+
+/// “返回上一级”的拖放目标小部件
+class _MoveUpTarget extends StatelessWidget {
+  final bool isListView;
+  const _MoveUpTarget({required this.isListView});
+
+  @override
+  Widget build(BuildContext context) {
+    if (isListView) {
+      return Container(
+        key: const ValueKey('move-up-target-list'),
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+        color: Theme.of(context).hoverColor,
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.arrow_upward, size: 18),
+            SizedBox(width: 8),
+            Text('拖动到此处以上移'),
+          ],
+        ),
+      );
+    } else {
+      return GridTile(
+        key: const ValueKey('move-up-target-grid'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).hoverColor,
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          child: const Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.arrow_upward, size: 24),
+              SizedBox(height: 8),
+              Text('移至上一级', style: TextStyle(fontSize: 12)),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+}
+
+/// 列表视图中的聊天项小部件
+class _ChatListItem extends StatelessWidget {
+  final Chat chat;
+  final bool isSelected;
+  final bool isMultiSelectMode;
+  final VoidCallback onTap;
+
+  const _ChatListItem({
+    required this.chat,
+    required this.isSelected,
+    required this.isMultiSelectMode,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: isSelected ? Theme.of(context).highlightColor : null,
+      child: InkWell(
+        onTap: onTap,
+        child: chat.isFolder
+            ? ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(chat.title ?? '未命名文件夹'),
+                subtitle: Text('文件夹 - ${DateFormat.yMd().add_Hm().format(chat.updatedAt)}'),
+                trailing: isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
+              )
+            : ListTile(
+                leading: _buildLeading(context, chat),
+                title: Text(chat.title ?? '无标题聊天', maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(
+                  '更新于: ${DateFormat.yMd().add_jm().format(chat.updatedAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildLeading(BuildContext context, Chat chat) {
+    final bool hasImage = chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty;
+    Widget leadingWidget;
+    if (hasImage) {
+      leadingWidget = CachedImageFromBase64(
+        base64String: chat.coverImageBase64!,
+        width: 50,
+        height: 50,
+        cacheWidth: 100,
+        cacheHeight: 100,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+      );
+    } else {
+      leadingWidget = const Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey);
+    }
+    return CircleAvatar(
+      radius: 25,
+      backgroundColor: hasImage ? Colors.transparent : Theme.of(context).colorScheme.primaryContainer,
+      child: leadingWidget,
+    );
+  }
+}
+
+/// 网格视图中的聊天项小部件
+class _ChatGridItem extends StatelessWidget {
+  final Chat chat;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ChatGridItem({
+    required this.chat,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget displayWidget;
+    if (chat.isFolder) {
+      displayWidget = Container(
+        color: Colors.amber.shade100,
+        child: Icon(Icons.folder_outlined, color: Colors.amber.shade800, size: 50),
+      );
+    } else {
+      if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
+        displayWidget = CachedImageFromBase64(
+          base64String: chat.coverImageBase64!,
+          fit: BoxFit.cover,
+          cacheWidth: 240,
+          cacheHeight: 360,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: Colors.grey.shade300,
+            child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
+          ),
+        );
+      } else {
+        displayWidget = Container(
+          color: Colors.grey.shade300,
+          child: const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 40),
+        );
+      }
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: GridTile(
+        footer: GridTileBar(
+          backgroundColor: Colors.black54,
+          title: Text(
+            chat.title ?? (chat.isFolder ? '未命名文件夹' : '无标题'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, color: Colors.white),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: displayWidget,
+            ),
+            if (isSelected)
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha((255 * 0.3).round()),
+                  borderRadius: BorderRadius.circular(8.0),
+                  border: Border.all(color: Theme.of(context).primaryColor, width: 2),
+                ),
+                child: Icon(Icons.check_circle, color: Colors.white.withAlpha((255 * 0.8).round()), size: 30),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }

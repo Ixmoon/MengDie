@@ -11,10 +11,12 @@ import 'connections/native.dart' if (dart.library.html) 'connections/web.dart';
 // Import tables
 import 'tables/chats.dart';
 import 'tables/messages.dart';
+import 'tables/api_configs.dart'; // Import new tables
 
 // Import DAOs
 import 'daos/chat_dao.dart';
 import 'daos/message_dao.dart';
+import 'daos/api_config_dao.dart'; // Import new DAO
 
 // Import type converters and models for them
 import 'type_converters.dart';
@@ -27,14 +29,14 @@ import 'common_enums.dart';
 
 part 'app_database.g.dart'; // Drift will generate this file
 
-@DriftDatabase(tables: [Chats, Messages], daos: [ChatDao, MessageDao])
+@DriftDatabase(tables: [Chats, Messages, GeminiApiKeys, OpenAIConfigs], daos: [ChatDao, MessageDao, ApiConfigDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(connect()); // Use the conditionally imported connect()
 
-  AppDatabase.forTesting(DatabaseConnection connection) : super(connection);
+  AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 2; // Bump version to 2
+  int get schemaVersion => 4; // Bump version to 4
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,9 +44,22 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
     },
     onUpgrade: (m, from, to) async {
-      if (from == 1) {
-        // We added the coverImageBase64 column to the chats table
-        await m.addColumn(chats, chats.coverImageBase64);
+      // Each migration builds on the last.
+      if (from < 2) {
+         await m.addColumn(chats, chats.coverImageBase64);
+      }
+      if (from < 3) {
+        await m.createTable(geminiApiKeys);
+        await m.createTable(openAIConfigs);
+      }
+      if (from < 4) {
+        // Add all new columns for version 4
+        await m.addColumn(chats, chats.enablePreprocessing);
+        await m.addColumn(chats, chats.preprocessingPrompt);
+        await m.addColumn(chats, chats.contextSummary);
+        await m.addColumn(chats, chats.enablePostprocessing);
+        await m.addColumn(chats, chats.postprocessingPrompt);
+        await m.addColumn(messages, messages.originalXmlContent);
       }
     },
   );

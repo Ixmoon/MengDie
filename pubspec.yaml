@@ -2,7 +2,7 @@ name: gemini_chat_app
 description: A Flutter Gemini Chat Application.
 publish_to: 'none' # Prevent accidental publishing
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0' # Use appropriate SDK constraint
@@ -37,6 +37,9 @@ dependencies:
   exif: ^3.2.0              # 用于读写图片 EXIF 元数据
   share_plus: ^11.0.0       # (可选) 用于分享导出的文件 (已升级以解决依赖冲突)
   dio: ^5.4.0               # 添加 dio 用于 HTTP 请求
+  mime: ^2.0.0              # 用于查找 Mime 类型
+  tiktoken: ^1.0.3          # For OpenAI token counting
+
   # For real persistence (replace in-memory history):
   # hive: ^latest
   # hive_flutter: ^latest

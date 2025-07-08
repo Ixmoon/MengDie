@@ -1,5 +1,5 @@
 import 'dart:async'; // For Stream
-import 'dart:math'; // Import for min function
+import 'dart:convert'; // For base64Decode
 import 'package:flutter/foundation.dart'; // for immutable, debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart' as genai;
@@ -81,22 +81,15 @@ class GeminiService {
    final MessageRepository _messageRepository; // 用于访问消息数据
    final Ref _ref; // Riverpod Ref，用于读取其他 Provider
 
+  // --- Cancellation ---
+  bool _isCancelled = false;
+
    GeminiService(this._apiKeyNotifier, this._messageRepository, this._ref);
 
 
    // --- Private Helper for Context Conversion ---
    /// Converts LlmContent list to a Gemini-specific Content object for system instructions
    /// and a list of Content objects for chat history.
-  String _formatContentForDebug(genai.Content? content, String prefix) {
-    if (content == null) return '$prefix: null';
-    final partsStr = content.parts.map((p) {
-      if (p is genai.TextPart) return '(TextPart: "${p.text}")';
-      // TODO: Add other part types if they become relevant for debugging
-      return '(Unknown Part: ${p.runtimeType})';
-    }).join(', ');
-    return '$prefix (Role: ${content.role ?? "null"}): Parts: [$partsStr]';
-  }
-
    ({genai.Content? systemInstructionAsContent, List<genai.Content> chatHistory}) _buildApiContextFromLlm(List<LlmContent> llmContext) {
      genai.Content? systemInstructionAsContent;
      List<genai.Content> chatHistory = [];
@@ -124,8 +117,10 @@ class GeminiService {
            final genaiParts = c.parts.map((part) {
              if (part is LlmTextPart) {
                return genai.TextPart(part.text);
+             } else if (part is LlmDataPart) {
+               // Decode the base64 string to bytes
+               return genai.DataPart(part.mimeType, base64Decode(part.base64Data));
              }
-             // TODO: Add conversion for other LlmPart types if needed
              else {
                throw UnimplementedError('Conversion for LlmPart type ${part.runtimeType} to genai.Part not implemented.');
              }
@@ -186,6 +181,7 @@ class GeminiService {
      required Chat chat, // Still needed for chat ID, safety settings, model name from original config
      required Map<String, dynamic> generationParams, // New parameter
    }) async* {
+    _isCancelled = false; // Reset cancellation flag for new request
      const int maxRetries = 3;
      int retryCount = 0;
      String? lastError;
@@ -233,18 +229,16 @@ class GeminiService {
        String accumulatedResponse = '';
        try {
          // Ensure model is not null before proceeding (it's initialized in the try-catch above)
-         if (model == null) {
-            // This case should ideally not be reached if the above try-catch handles model initialization errors.
-            // However, as a safeguard:
-            yield GeminiStreamChunk.error("Model initialization failed unexpectedly before generating content.", accumulatedResponse);
-            return;
-         }
 
 
 
          final stream = model.generateContentStream(chatHistory); // Use chatHistory here
          debugPrint("sendMessageStream: 开始接收 API 响应流...");
          await for (final response in stream) {
+          if (_isCancelled) {
+            debugPrint("Gemini stream processing halted due to cancellation flag.");
+            return; // Exit the loop and the method
+          }
            final textChunk = response.text ?? '';
            accumulatedResponse += textChunk;
            // 发出一个包含当前块文本和累积文本的 chunk
@@ -256,6 +250,10 @@ class GeminiService {
            );
          }
          debugPrint("sendMessageStream: API 响应流接收完毕。总长度: ${accumulatedResponse.length}");
+         if (_isCancelled) {
+           debugPrint("Gemini stream finished, but request was cancelled. Discarding results.");
+           return;
+         }
 
          // 保存 AI 消息到数据库
          final aiMessage = Message.create(
@@ -366,6 +364,7 @@ class GeminiService {
      required Chat chat, // Still needed for chat ID, safety settings, model name from original config
      required Map<String, dynamic> generationParams, // New parameter
    }) async {
+    _isCancelled = false; // Reset cancellation flag for new request
      const int maxRetries = 3;
      int retryCount = 0;
      String? lastError;
@@ -413,6 +412,10 @@ class GeminiService {
          final response = await model.generateContent(chatHistory); // Use chatHistory here
          final rawResponseText = response.text ?? '';
          debugPrint("sendMessageOnce: API 调用成功。响应长度: ${rawResponseText.length}");
+         if (_isCancelled) {
+           debugPrint("Gemini single request finished, but was cancelled. Discarding results.");
+           return const GeminiResponse.error("Request cancelled by user.");
+         }
 
          // 保存 AI 消息
          final aiMessage = Message.create(
@@ -516,4 +519,8 @@ class GeminiService {
           return genai.HarmBlockThreshold.unspecified;
      }
    }
+  Future<void> cancelRequest() async {
+    debugPrint("GeminiService: Setting cancellation flag.");
+    _isCancelled = true;
+  }
 }

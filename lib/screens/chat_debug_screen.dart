@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:collection/collection.dart'; // No longer needed for lastWhereOrNull here
 
 
+import '../models/models.dart';
 import '../providers/chat_state_providers.dart';
 import '../services/llm_service.dart'; // For LlmContent, LlmTextPart
 import '../services/context_xml_service.dart';
+import '../widgets/app_card.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
 
 
@@ -60,9 +62,15 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
     try {
       final contextXmlService = ref.read(contextXmlServiceProvider);
       // Call the unified buildApiRequestContext
+      // Create a placeholder message for debugging purposes
+      final placeholderMessage = Message.create(
+        chatId: chat.id,
+        role: MessageRole.user,
+        rawText: "[调试占位符]",
+      );
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chat: chat,
-        currentUserInput: "[调试占位符]", // Placeholder for debug view
+        currentUserMessage: placeholderMessage,
       );
 
       if (mounted) {
@@ -110,7 +118,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         if (_errorLoadingContext.isNotEmpty) {
           return Center(child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Text(_errorLoadingContext, style: const TextStyle(color: Colors.red)) // const
+            child: Text(_errorLoadingContext, style: const TextStyle(color: Colors.red))
           ));
         }
 
@@ -118,7 +126,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         if (chat == null) {
           // This case should be covered by the error or loading states above if chat data is truly unavailable for context building.
           // If we reach here, it implies chat might be null but no error was set by _loadDebugContext, which is unlikely.
-          return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('聊天数据不可用。'))); // const
+          return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('聊天数据不可用。')));
         }
         
         if (_isLoading) { // General loading state after chat data is available but context isn't yet
@@ -127,62 +135,76 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
 
         return ListView(
-          padding: const EdgeInsets.all(16.0), // const
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
           children: [
-            Card(
-              margin: const EdgeInsets.symmetric(vertical: 8.0), // const
-              child: Padding(
-                padding: const EdgeInsets.all(12.0), // const
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('计算出的携带 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8), // const
-                    Container(
-                      padding: const EdgeInsets.all(8), // const
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: SelectableText(
-                        _displayedCarriedOverXml ?? '(无携带 XML)', // Use renamed variable
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12), // const
-                      ),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('计算出的携带 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                  ],
-                ),
+                    child: SelectableText(
+                      _displayedCarriedOverXml ?? '(无携带 XML)', // Use renamed variable
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('上下文总结 (只读)', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: SelectableText(
+                      chat.contextSummary ?? '(无上下文总结)',
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            Card(
-              margin: const EdgeInsets.symmetric(vertical: 8.0), // const
-              child: Padding(
-                padding: const EdgeInsets.all(12.0), // const
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('API 上下文预览', style: Theme.of(context).textTheme.titleMedium),
-                        // Loading indicator for this specific section is implicitly handled by overall _isLoading
-                      ],
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('API 上下文预览', style: Theme.of(context).textTheme.titleMedium),
+                      // Loading indicator for this specific section is implicitly handled by overall _isLoading
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    const SizedBox(height: 8), // const
-                    Container(
-                      padding: const EdgeInsets.all(8), // const
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: _buildContextDisplayWidget(), // Uses renamed _displayedApiContextParts
-                    ),
-                  ],
-                ),
+                    child: _buildContextDisplayWidget(), // Uses renamed _displayedApiContextParts
+                  ),
+                ],
               ),
-            ),
+            )
           ],
         );
       }),
@@ -197,19 +219,19 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
        // However, keeping it provides specific feedback if context parts are null due to an error during their fetch/build.
       return SelectableText( 
         "加载API上下文预览时出错: $_errorLoadingContext", // More specific error for this section
-        style: const TextStyle(color: Colors.red, fontFamily: 'monospace', fontSize: 12), // const
+        style: const TextStyle(color: Colors.red, fontFamily: 'monospace', fontSize: 12),
       );
     } else if (_displayedApiContextParts == null || _displayedApiContextParts!.isEmpty) {
       return const SelectableText(
         "(无 API 上下文内容)",
-        style: TextStyle(fontFamily: 'monospace', fontSize: 12), // const
+        style: TextStyle(fontFamily: 'monospace', fontSize: 12),
       );
     } else {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: _displayedApiContextParts!.map((content) { // Use renamed variable
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0), // const
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -217,25 +239,48 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                   "--- ${content.role} ---",
                   style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
                 ),
-                const SizedBox(height: 4), // const
+                const SizedBox(height: 4),
                 if (content.parts.isNotEmpty)
                   ...content.parts.map((part) {
                     if (part is LlmTextPart) {
-                      return SelectableText(
-                        part.text.trim().isEmpty ? "(空文本部分)" : part.text,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12), // const
+                      final message = (_displayedApiContextParts!.indexOf(content) < ref.read(chatMessagesProvider(widget.chatId)).value!.length)
+                          ? ref.read(chatMessagesProvider(widget.chatId)).value![_displayedApiContextParts!.indexOf(content)]
+                          : null;
+                      final originalXml = message?.originalXmlContent;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SelectableText(
+                            part.text.trim().isEmpty ? "(空文本部分)" : part.text,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                          ),
+                          if (originalXml != null && originalXml.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                '--- 原始XML (被后处理覆盖) ---',
+                                style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.orange.shade800, fontStyle: FontStyle.italic),
+                              ),
+                            ),
+                          if (originalXml != null && originalXml.isNotEmpty)
+                            SelectableText(
+                              originalXml,
+                              style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.orange.shade900),
+                            ),
+                        ],
                       );
                     } else {
                       return SelectableText(
                         "[未知的 LlmPart 类型: ${part.runtimeType}]",
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic), // const
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic),
                       );
                     }
-                  }).toList()
+                  })
                 else
                   const SelectableText(
                     "(空内容部分)",
-                    style: TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic), // const
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic),
                   ),
               ],
             ),

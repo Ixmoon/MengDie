@@ -5,13 +5,13 @@ import 'package:flutter/foundation.dart'; // for immutable, kDebugMode, debugPri
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // Added for Color type
 
+import 'package:drift/drift.dart' show Value;
 import '../models/models.dart';
 import '../repositories/chat_repository.dart';
 import '../repositories/message_repository.dart';
 import '../services/llm_service.dart'; // Import the generic LLM service and types
 import '../services/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
-import 'api_key_provider.dart'; // 需要检查 API Key
 import '../data/database/drift/common_enums.dart' as drift_enums; // Added import
 import '../services/xml_processor.dart'; // Added import
 
@@ -91,6 +91,7 @@ class ChatScreenState {
   final bool isBubbleTransparent;
   final bool isBubbleHalfWidth;
   final bool isMessageListHalfHeight;
+  final int? totalTokens;
 
   const ChatScreenState({
     this.isLoading = false,
@@ -106,6 +107,7 @@ class ChatScreenState {
     this.isBubbleTransparent = false,
     this.isBubbleHalfWidth = false,
     this.isMessageListHalfHeight = false,
+    this.totalTokens,
   });
 
   ChatScreenState copyWith({
@@ -127,6 +129,8 @@ class ChatScreenState {
     bool? isBubbleTransparent,
     bool? isBubbleHalfWidth,
     bool? isMessageListHalfHeight,
+    int? totalTokens,
+    bool clearTotalTokens = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -142,6 +146,7 @@ class ChatScreenState {
       isBubbleTransparent: isBubbleTransparent ?? this.isBubbleTransparent,
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
       isMessageListHalfHeight: isMessageListHalfHeight ?? this.isMessageListHalfHeight,
+      totalTokens: clearTotalTokens ? null : (totalTokens ?? this.totalTokens),
     );
   }
 }
@@ -213,82 +218,327 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     debugPrint("Chat ($_chatId) 消息列表高度模式切换为: ${state.isMessageListHalfHeight ? "半高" : "全高"}");
   }
 
-  Future<void> sendMessage(String userInput, {bool isRegeneration = false}) async {
-    if (state.isLoading && !isRegeneration) {
-        debugPrint("sendMessage ($_chatId) 取消：已在加载中且非重新生成。");
-        return;
-    }
-    if (state.isLoading && isRegeneration) {
-        debugPrint("sendMessage ($_chatId) 继续：重新生成操作。");
-    }
+  // --- Token Counting ---
+  Future<void> calculateAndStoreTokenCount() async {
+    if (!mounted) return;
 
-     if (_ref.read(apiKeyNotifierProvider).keys.isEmpty) {
-        // Use the new showTopMessage for error feedback
-        showTopMessage('请在全局设置中配置 API Key', backgroundColor: Colors.orange);
-        state = state.copyWith(isLoading: false, clearStreaming: true); // Keep existing state changes if needed
-        return;
-     }
-    final chatAsyncValue = _ref.read(currentChatProvider(_chatId));
-    final chat = chatAsyncValue.value;
-    if (chat == null) {
-      showTopMessage('无法发送消息：聊天数据未加载。', backgroundColor: Colors.red);
-      state = state.copyWith(isLoading: false);
+    // Give a brief moment for the message list stream to update after a change
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final chat = _ref.read(currentChatProvider(_chatId)).value;
+    final messages = _ref.read(chatMessagesProvider(_chatId)).value;
+
+    if (chat == null || messages == null || messages.isEmpty) {
+      if (mounted) state = state.copyWith(clearTotalTokens: true);
       return;
     }
 
+    try {
+      final llmService = _ref.read(llmServiceProvider);
+      final contextXmlService = _ref.read(contextXmlServiceProvider);
+      
+      // Build context as if we're about to send a new message for an accurate count
+      final apiRequestContext = await contextXmlService.buildApiRequestContext(
+        chat: chat,
+        currentUserMessage: messages.last, // Base context on the latest message
+      );
+      
+      final count = await llmService.countTokens(
+        llmContext: apiRequestContext.contextParts,
+        chat: chat,
+      );
+
+      if (mounted) {
+        state = state.copyWith(totalTokens: count > 0 ? count : null);
+        debugPrint("ChatStateNotifier($_chatId): Token count updated to $count");
+      }
+    } catch (e) {
+      debugPrint("ChatStateNotifier($_chatId): Error calculating token count: $e");
+      if (mounted) {
+        state = state.copyWith(clearTotalTokens: true);
+      }
+    }
+  }
+  // --- End Token Counting ---
+
+  // --- 消息操作方法 ---
+
+  Future<void> deleteMessage(int messageId) async {
+    if (!mounted) return;
+    try {
+      final messageRepo = _ref.read(messageRepositoryProvider);
+      final deleted = await messageRepo.deleteMessage(messageId);
+      if (mounted) {
+        if (deleted) {
+          showTopMessage('消息已删除', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+          calculateAndStoreTokenCount(); // Recalculate tokens
+        } else {
+          showTopMessage('删除消息失败，可能已被删除', backgroundColor: Colors.orange);
+        }
+      }
+    } catch (e) {
+      debugPrint("Notifier 删除消息时出错: $e");
+      if (mounted) {
+        showTopMessage('删除消息出错: $e', backgroundColor: Colors.red);
+      }
+    }
+  }
+
+  Future<void> editMessage(int messageId, {String? newText, List<MessagePart>? newParts}) async {
+    if (!mounted) return;
+    try {
+      final messageRepo = _ref.read(messageRepositoryProvider);
+      final message = await messageRepo.getMessageById(messageId);
+      if (message == null) {
+        showTopMessage('无法编辑：未找到消息', backgroundColor: Colors.red);
+        return;
+      }
+
+      Message updatedMessage;
+      if (newParts != null) {
+        updatedMessage = message.copyWith(parts: newParts);
+      } else if (newText != null) {
+        updatedMessage = message.copyWith(rawText: newText);
+      } else {
+        return; // Nothing to update
+      }
+      
+      await messageRepo.saveMessage(updatedMessage);
+
+      if (mounted) {
+        showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+        calculateAndStoreTokenCount(); // Recalculate tokens
+      }
+    } catch (e) {
+      debugPrint("Notifier 更新消息时出错: $e");
+      if (mounted) {
+        showTopMessage('保存编辑失败: $e', backgroundColor: Colors.red);
+      }
+    }
+  }
+
+  Future<int?> forkChat(Message fromMessage) async {
+    if (!mounted) return null;
+
+    final chatRepo = _ref.read(chatRepositoryProvider);
+    final messageRepo = _ref.read(messageRepositoryProvider);
+    final allMessagesAsync = _ref.read(chatMessagesProvider(_chatId));
+    final originalChat = _ref.read(currentChatProvider(_chatId)).value;
+
+    if (originalChat == null || allMessagesAsync.value == null) {
+      showTopMessage('无法分叉：原始数据丢失', backgroundColor: Colors.red);
+      return null;
+    }
+
+    final allMessages = allMessagesAsync.value!;
+    final forkIndex = allMessages.indexWhere((m) => m.id == fromMessage.id);
+    if (forkIndex == -1) {
+      showTopMessage('无法分叉：未找到消息', backgroundColor: Colors.red);
+      return null;
+    }
+
+    final messagesToKeep = allMessages.sublist(0, forkIndex + 1);
+
+    try {
+      // 1. 创建新的 Chat 实体
+      String newTitle;
+      final baseTitle = originalChat.title ?? "无标题";
+      final RegExp titleRegex = RegExp(r'^(.*)-(\d+)$');
+      final Match? match = titleRegex.firstMatch(baseTitle);
+
+      if (match != null) {
+        final namePart = match.group(1);
+        final numberPart = int.tryParse(match.group(2) ?? '');
+        if (namePart != null && numberPart != null) {
+          newTitle = '$namePart-${numberPart + 1}';
+        } else {
+          newTitle = '$baseTitle-1';
+        }
+      } else {
+        newTitle = '$baseTitle-1';
+      }
+
+      final newChat = Chat()
+        ..title = newTitle
+        ..parentFolderId = originalChat.parentFolderId
+        ..systemPrompt = originalChat.systemPrompt
+        ..coverImageBase64 = originalChat.coverImageBase64
+        ..backgroundImagePath = originalChat.backgroundImagePath
+        ..generationConfig = originalChat.generationConfig
+        ..contextConfig = originalChat.contextConfig
+        ..xmlRules = List.from(originalChat.xmlRules)
+        ..apiType = originalChat.apiType
+        ..selectedOpenAIConfigId = originalChat.selectedOpenAIConfigId
+        ..enablePreprocessing = originalChat.enablePreprocessing
+        ..preprocessingPrompt = originalChat.preprocessingPrompt
+        ..contextSummary = null // Forked chat starts fresh
+        ..enablePostprocessing = originalChat.enablePostprocessing
+        ..postprocessingPrompt = originalChat.postprocessingPrompt
+        ..createdAt = DateTime.now()
+        ..updatedAt = DateTime.now();
+      
+      final newChatId = await chatRepo.saveChat(newChat);
+
+      // 2. 复制消息
+      final List<Message> newMessages = messagesToKeep.map((originalMsg) {
+        return Message.create(
+          chatId: newChatId,
+          parts: originalMsg.parts, // Keep original parts
+          role: originalMsg.role,
+          timestamp: originalMsg.timestamp,
+        );
+      }).toList();
+      await messageRepo.saveMessages(newMessages);
+
+      // 3. 返回新的 chat ID
+      showTopMessage('已创建分叉对话', backgroundColor: Colors.green);
+      return newChatId;
+
+    } catch (e) {
+      debugPrint("Notifier 分叉对话时出错: $e");
+      if (mounted) {
+        showTopMessage('分叉对话失败: $e', backgroundColor: Colors.red);
+      }
+      return null;
+    }
+  }
+
+  Future<void> regenerateResponse(Message userMessage) async {
+    if (!mounted) return;
+
+    final allMessages = _ref.read(chatMessagesProvider(_chatId)).value ?? [];
+    
+    // 1. 检查是否可以重新生成
+    final messageIndex = allMessages.indexWhere((m) => m.id == userMessage.id);
+    final isLastUserMsg = userMessage.role == MessageRole.user &&
+        messageIndex >= 0 &&
+        (messageIndex == allMessages.length - 1 ||
+            (messageIndex == allMessages.length - 2 &&
+                allMessages.last.role == MessageRole.model));
+
+    if (!isLastUserMsg) {
+      showTopMessage('只能为最后的用户消息重新生成回复', backgroundColor: Colors.orange);
+      return;
+    }
+    if (state.isLoading) {
+      debugPrint("重新生成取消：已在加载中。");
+      return;
+    }
+
+    await cancelGeneration(); // 确保之前的任何生成都已停止
+
+    // 2. 删除之前的模型回复
+    try {
+      final messageRepo = _ref.read(messageRepositoryProvider);
+      List<int> messagesToDelete = [];
+      if (messageIndex != -1 && messageIndex < allMessages.length - 1) {
+        for (int i = messageIndex + 1; i < allMessages.length; i++) {
+          if (allMessages[i].role == MessageRole.model) {
+            messagesToDelete.add(allMessages[i].id);
+          }
+        }
+      }
+      if (messagesToDelete.isNotEmpty) {
+        for (final msgId in messagesToDelete) {
+          await messageRepo.deleteMessage(msgId);
+        }
+        // 短暂延迟以确保数据库更新反映到流中
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    } catch (e) {
+        showTopMessage('删除旧回复失败: $e', backgroundColor: Colors.red);
+        return;
+    }
+
+    if (!mounted) return;
+
+    // 3. 调用 sendMessage 进行重新生成
+    // For regeneration, we pass the original user message object
+    await sendMessage(userMessage: userMessage, isRegeneration: true);
+  }
+
+  Future<void> sendMessage({
+    List<MessagePart>? userParts,
+    Message? userMessage, // Used for regeneration
+    bool isRegeneration = false
+  }) async {
+    if (state.isLoading && !isRegeneration) {
+      debugPrint("sendMessage ($_chatId) 取消：已在加载中且非重新生成。");
+      return;
+    }
+    
+    final chat = _ref.read(currentChatProvider(_chatId)).value;
+    if (chat == null) {
+      showTopMessage('无法发送消息：聊天数据未加载。', backgroundColor: Colors.red);
+      return;
+    }
+
+    // Determine the message to send for context, and the list of messages to save
+    Message messageForContext;
+    List<Message> messagesToSave = [];
+
+    if (isRegeneration && userMessage != null) {
+      messageForContext = userMessage;
+      debugPrint("重新生成操作，使用现有消息作为上下文。");
+    } else if (userParts != null && userParts.isNotEmpty) {
+      // Create a separate message for each part
+      for (var part in userParts) {
+        messagesToSave.add(Message.create(
+          chatId: _chatId,
+          role: MessageRole.user,
+          parts: [part], // Each message now has only one part
+        ));
+      }
+      if (messagesToSave.isEmpty) return; // Should not happen if userParts is not empty
+      messageForContext = messagesToSave.last; // Use the last part for context building
+    } else {
+      return; // Nothing to send
+    }
+
+    // --- Start loading state ---
     state = state.copyWith(
         isLoading: true,
-        clearError: true, // Clears old critical error message
-        clearTopMessage: true, // Clears old top message
+        clearError: true,
+        clearTopMessage: true,
         clearStreaming: true,
         generationStartTime: DateTime.now(),
-        clearGenerationStartTime: false,
-        elapsedSeconds: 0
-    );
+        elapsedSeconds: 0);
     _startUpdateTimer();
-
+    
+    // --- Save new user messages (if not regenerating) ---
     if (!isRegeneration) {
-       final userMessage = Message.create(chatId: _chatId, rawText: userInput, role: MessageRole.user);
-       try {
-         final messageRepo = _ref.read(messageRepositoryProvider);
-         final savedMessageId = await messageRepo.saveMessage(userMessage);
-         final chatRepo = _ref.read(chatRepositoryProvider);
-         chat.updatedAt = DateTime.now();
-         await chatRepo.saveChat(chat);
-         debugPrint("用户消息已保存 (ID: $savedMessageId)。聊天时间戳已更新。");
+      try {
+        final messageRepo = _ref.read(messageRepositoryProvider);
+        await messageRepo.saveMessages(messagesToSave); // Batch save
+        final chatRepo = _ref.read(chatRepositoryProvider);
+        chat.updatedAt = DateTime.now();
+        await chatRepo.saveChat(chat);
+        debugPrint("用户发送的 ${messagesToSave.length} 条原子消息已保存。");
       } catch (e) {
         debugPrint("保存用户消息时出错: $e");
         if (mounted) {
-            showTopMessage('无法保存您的消息: $e', backgroundColor: Colors.red);
-            state = state.copyWith(isLoading: false);
+          showTopMessage('无法保存您的消息: $e', backgroundColor: Colors.red);
+          state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
+          _stopUpdateTimer();
         }
         return;
       }
-    } else {
-       debugPrint("跳过用户消息保存，因为是重新生成操作。");
-        try {
-           final chatRepo = _ref.read(chatRepositoryProvider);
-           chat.updatedAt = DateTime.now();
-           await chatRepo.saveChat(chat);
-           debugPrint("重新生成期间更新了聊天时间戳。");
-       } catch (e) {
-          debugPrint("重新生成期间更新聊天时间戳时出错: $e");
-      }
-     }
+    }
 
-     List<LlmContent> llmApiContext;
-     String? carriedOverXmlForThisTurn;
-     try {
-       final contextXmlService = _ref.read(contextXmlServiceProvider);
-       final apiRequestContext = await contextXmlService.buildApiRequestContext(
-         chat: chat,
-         currentUserInput: userInput, // This should be the raw user input string
-       );
-       
-       llmApiContext = apiRequestContext.contextParts;
-       carriedOverXmlForThisTurn = apiRequestContext.carriedOverXml; // Updated field name
+    // --- Build API context ---
+    List<LlmContent> llmApiContext;
+    String? carriedOverXmlForThisTurn;
+    try {
+      final contextXmlService = _ref.read(contextXmlServiceProvider);
+      final apiRequestContext = await contextXmlService.buildApiRequestContext(
+        chat: chat,
+        currentUserMessage: messageForContext, // Pass the representative message for context
+      );
+      
+      llmApiContext = apiRequestContext.contextParts;
+      carriedOverXmlForThisTurn = apiRequestContext.carriedOverXml;
 
-     } catch (e) {
+    } catch (e) {
         debugPrint("ChatStateNotifier:sendMessage($_chatId): 构建 API 上下文时出错: $e");
         if (mounted) {
           showTopMessage('构建请求上下文失败: $e', backgroundColor: Colors.red);
@@ -307,14 +557,142 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
      }
    }
 
-  // --- State variables for streaming XML processing ---
-  final StringBuffer _rawAccumulatedBuffer = StringBuffer();
+ // --- Post-Generation Processing ---
+ Future<void> _runAsyncProcessingTasks(Message modelMessage) async {
+   if (!mounted) return;
+   final chat = _ref.read(currentChatProvider(_chatId)).value;
+   if (chat == null) return;
+
+   List<Future> tasks = [];
+
+   if (chat.enablePostprocessing && (chat.postprocessingPrompt?.isNotEmpty ?? false)) {
+     tasks.add(_executePostprocessing(chat, modelMessage));
+   }
+   
+   // Pre-processing depends on the result of context building, which happened before sending.
+   // We need access to the `droppedMessages` from that step.
+   // This is a structural challenge. For now, we'll re-calculate it.
+   // A better approach would be to pass `apiRequestContext` through the send methods.
+   if (chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false)) {
+      tasks.add(_executePreprocessing(chat));
+   }
+
+   if (tasks.isNotEmpty) {
+     try {
+       await Future.wait(tasks);
+       debugPrint("ChatStateNotifier($_chatId): Async processing tasks completed.");
+     } catch (e) {
+       debugPrint("ChatStateNotifier($_chatId): Error during async processing tasks: $e");
+       if (mounted) {
+         showTopMessage("后台处理任务出错: $e", backgroundColor: Colors.red.withAlpha(204));
+       }
+     }
+   }
+ }
+
+ Future<void> _executePostprocessing(Chat chat, Message modelMessage) async {
+   debugPrint("ChatStateNotifier($_chatId): Executing post-processing...");
+   final messageRepo = _ref.read(messageRepositoryProvider);
+   final llmService = _ref.read(llmServiceProvider);
+
+   // 1. Save original XML content
+   final originalRawText = modelMessage.rawText;
+   final originalXml = XmlProcessor.extractXmlContent(originalRawText);
+   
+   var messageToUpdate = await messageRepo.getMessageById(modelMessage.id);
+   if (messageToUpdate == null) return;
+   
+   messageToUpdate = messageToUpdate.copyWith(originalXmlContent: originalXml);
+   await messageRepo.saveMessage(messageToUpdate);
+
+   // 2. Build new request for post-processing
+   final contextXmlService = _ref.read(contextXmlServiceProvider);
+   final apiRequestContext = await contextXmlService.buildApiRequestContext(
+     chat: chat.copyWith(systemPrompt: chat.postprocessingPrompt), // Replace system prompt
+     currentUserMessage: messageToUpdate,
+   );
+   
+   // 3. Call LLM service (not streaming)
+   final response = await llmService.sendMessageOnce(
+     llmContext: apiRequestContext.contextParts,
+     chat: chat,
+   );
+
+   if (response.isSuccess && response.parts.isNotEmpty) {
+     // 4. Merge results
+     final postprocessedText = response.parts.map((p) => p.text ?? "").join("\n");
+     final originalDisplayText = XmlProcessor.stripXmlContent(originalRawText);
+     
+     final newRawText = (originalDisplayText.isNotEmpty && postprocessedText.isNotEmpty)
+         ? '$originalDisplayText\n$postprocessedText'
+         : originalDisplayText + postprocessedText;
+     
+     messageToUpdate = await messageRepo.getMessageById(modelMessage.id); // Re-fetch latest version
+     if (messageToUpdate == null) return;
+
+     messageToUpdate = messageToUpdate.copyWith(rawText: newRawText);
+     await messageRepo.saveMessage(messageToUpdate);
+     debugPrint("ChatStateNotifier($_chatId): Post-processing successful. Message updated.");
+   } else {
+     throw Exception("Post-processing failed: ${response.error ?? 'No content'}");
+   }
+ }
+
+ Future<void> _executePreprocessing(Chat chat) async {
+     debugPrint("ChatStateNotifier($_chatId): Executing pre-processing (summarization)...");
+     final contextXmlService = _ref.read(contextXmlServiceProvider);
+     final llmService = _ref.read(llmServiceProvider);
+     final chatRepo = _ref.read(chatRepositoryProvider);
+
+     // Re-build context to find dropped messages. This is inefficient but necessary with current structure.
+     final placeholderMessage = Message.create(chatId: _chatId, role: MessageRole.user, rawText: "[Preprocessing Placeholder]");
+     final apiRequestContext = await contextXmlService.buildApiRequestContext(chat: chat, currentUserMessage: placeholderMessage);
+     final droppedMessages = apiRequestContext.droppedMessages;
+
+     if (droppedMessages.isEmpty) {
+       debugPrint("ChatStateNotifier($_chatId): No messages dropped, skipping summarization.");
+       return;
+     }
+     
+     // Build summarization prompt
+     final summaryPrompt = chat.preprocessingPrompt!;
+     final previousSummary = chat.contextSummary;
+     
+     List<LlmContent> summaryContext = [
+       LlmContent("system", [LlmTextPart(summaryPrompt)])
+     ];
+
+     if(previousSummary != null && previousSummary.isNotEmpty) {
+       summaryContext.add(LlmContent("user", [LlmTextPart("This is the previous summary:\n${XmlProcessor.wrapWithTag('previous_summary', previousSummary)}")]));
+     }
+
+     summaryContext.add(LlmContent("user", [
+       LlmTextPart("These are the messages to be summarized:\n${droppedMessages.map((m) => "${m.role.name}: ${m.rawText}").join('\n---\n')}")
+     ]));
+     
+     // Call LLM service
+     final response = await llmService.sendMessageOnce(
+       llmContext: summaryContext,
+       chat: chat, // Pass chat for generation config
+     );
+
+     if (response.isSuccess && response.parts.isNotEmpty) {
+       final newSummary = response.parts.map((p) => p.text ?? "").join("\n");
+       await chatRepo.saveChat(chat.copyWith(contextSummary: Value(newSummary)));
+       debugPrint("ChatStateNotifier($_chatId): Summarization successful. New summary saved.");
+     } else {
+        throw Exception("Summarization failed: ${response.error ?? 'No content'}");
+     }
+ }
+
+ // --- State variables for streaming XML processing ---
+ final StringBuffer _rawAccumulatedBuffer = StringBuffer();
   final StringBuffer _displayableTextBuffer = StringBuffer();
   int _displayLogicOpenTagCount = 0;
   bool _displayLogicLastTagWasClosing = false;
   bool _suppressDisplay = false;
   // StringBuffer _currentXmlSegmentForDisplay = StringBuffer(); // Not strictly needed if we just suppress
-  Set<String> _processedRuleTagNamesThisTurn = {};
+  final Set<String> _processedRuleTagNamesThisTurn = {};
   String? _currentTurnCarriedOverXml;
   // --- End of state variables for streaming XML processing ---
 
@@ -359,6 +737,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
             clearStreaming: true, clearGenerationStartTime: true, clearElapsedSeconds: true,
           );
           _stopUpdateTimer();
+          calculateAndStoreTokenCount(); // Recalculate on finish
           // Ensure the LlmService knows about the final raw and displayable text, and carriedOverXml
           // This is implicitly handled by how LlmService.saveMessageFromStream gets its data.
           // We might need to explicitly pass these if LlmService doesn't have access to these buffers.
@@ -552,8 +931,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
              // clearTopMessage: state.topMessageText == "Streaming..." // Example condition
          );
          _stopUpdateTimer();
-          debugPrint("ChatStateNotifier: Stream subscription onDone. Final raw: ${_rawAccumulatedBuffer.toString().substring(0, min(_rawAccumulatedBuffer.length, 100))}, Displayed: ${_displayableTextBuffer.toString().substring(0, min(_displayableTextBuffer.length, 100))}");
-       }
+         debugPrint("ChatStateNotifier: Stream subscription onDone. Final raw: ${_rawAccumulatedBuffer.toString().substring(0, min(_rawAccumulatedBuffer.length, 100))}, Displayed: ${_displayableTextBuffer.toString().substring(0, min(_displayableTextBuffer.length, 100))}");
+         calculateAndStoreTokenCount(); // Recalculate on done
+      }
      },
      cancelOnError: true,
    );
@@ -562,19 +942,30 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  Future<void> _handleSingleResponse(LlmService llmService, Chat chat, List<LlmContent> llmContext, String? initialCarriedOverXml) async {
    try {
      final response = await llmService.sendMessageOnce(llmContext: llmContext, chat: chat);
-      if (mounted) {
-        if (response.isSuccess && response.rawText.isNotEmpty) {
-           state = state.copyWith(
-             streamingMessageContent: response.rawText, 
-             isLoading: false, 
-             clearError: true, 
-             clearTopMessage: true, // Clear any previous top message
-             clearGenerationStartTime: true, 
-             clearElapsedSeconds: true
-           );
-           debugPrint("ChatStateNotifier:handleSingleResponse - Single response received: ${response.rawText.substring(0, min(response.rawText.length, 100))}");
-           debugPrint("ChatStateNotifier($_chatId): Single response successful.");
-        } else {
+     if (mounted) {
+       if (response.isSuccess && response.parts.isNotEmpty) {
+         // The response now contains parts, we need to save it as a message
+         final messageRepo = _ref.read(messageRepositoryProvider);
+         final aiMessage = Message.create(
+           chatId: _chatId,
+           role: MessageRole.model,
+           parts: response.parts,
+         );
+         await messageRepo.saveMessage(aiMessage);
+         
+         state = state.copyWith(
+             isLoading: false,
+             clearError: true,
+             clearTopMessage: true,
+             clearGenerationStartTime: true,
+             clearElapsedSeconds: true);
+         debugPrint("ChatStateNotifier($_chatId): Single response successful and saved.");
+         calculateAndStoreTokenCount(); // Recalculate on success
+
+         // Run post-processing tasks
+         _runAsyncProcessingTasks(aiMessage);
+
+       } else {
          showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
          state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
        }
@@ -592,65 +983,67 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    }
  }
 
- Future<void> cancelGeneration() async {
-   if (!state.isLoading && !state.isStreaming) return;
+  Future<void> cancelGeneration() async {
+    if (!state.isLoading && !state.isStreaming) return;
 
-   debugPrint("尝试取消聊天 $_chatId 的生成...");
+    debugPrint("尝试取消聊天 $_chatId 的生成...");
 
-   String? contentToSave = state.streamingMessageContent;
-   bool savedPartial = false;
-   if (contentToSave != null && contentToSave.isNotEmpty) {
-     debugPrint("检测到部分内容，尝试保存...");
-     try {
-       final chatAsyncValue = _ref.read(currentChatProvider(_chatId));
-       final chat = chatAsyncValue.value;
-       if (chat != null) {
-           final partialMessage = Message.create(
-               chatId: _chatId,
-               rawText: contentToSave,
-               role: MessageRole.model,
-           );
-           final messageRepo = _ref.read(messageRepositoryProvider);
-          await messageRepo.saveMessage(partialMessage);
+    // 1. 通知服务层取消上游请求
+    await _ref.read(llmServiceProvider).cancelActiveRequest();
+    
+    // 2. 取消本地的流订阅
+    // 注意：在调用 cancel() 后，流的 onDone 可能会被触发，
+    // onDone 中的状态清理逻辑会处理 isStreaming, isLoading 等。
+    // 所以我们在这里不需要立即重置所有状态。
+    await _llmStreamSubscription?.cancel();
+    _llmStreamSubscription = null;
+    debugPrint("本地 LLM 流订阅已取消。");
+
+    // 3. 保存已接收到的部分内容
+    String? contentToSave = state.streamingMessageContent;
+    bool savedPartial = false;
+    if (contentToSave != null && contentToSave.isNotEmpty) {
+      debugPrint("检测到部分内容，尝试保存...");
+      try {
+        final chat = _ref.read(currentChatProvider(_chatId)).value;
+        if (chat != null) {
+          final partialMessage = Message.create(
+            chatId: _chatId,
+            role: MessageRole.model,
+            rawText: contentToSave, // 保存可见的、已处理过的内容
+          );
+          final savedMessageId = await _ref.read(messageRepositoryProvider).saveMessage(partialMessage);
+          final savedMessage = await _ref.read(messageRepositoryProvider).getMessageById(savedMessageId);
           debugPrint("部分内容已成功保存 (长度: ${contentToSave.length})。");
           savedPartial = true;
-       } else {
+          if (savedMessage != null) {
+            _runAsyncProcessingTasks(savedMessage);
+          }
+        } else {
           debugPrint("无法保存部分内容：聊天数据未加载。");
-       }
-     } catch (e) {
-       debugPrint("保存部分内容时出错: $e");
-     }
-   }
+        }
+      } catch (e) {
+        debugPrint("保存部分内容时出错: $e");
+      }
+    }
 
-   if (mounted) {
-     // Use showTopMessage for feedback
-     showTopMessage(savedPartial ? "已停止生成并保存部分内容" : "已手动停止生成", 
-                    backgroundColor: savedPartial ? Colors.orangeAccent : Colors.blueGrey);
-     state = state.copyWith(
-       isLoading: false,
-       isStreaming: false,
-       clearStreaming: true,
-       // errorMessage: savedPartial ? "已停止生成并保存部分内容" : "已手动停止生成", // Error shown via top message
-       // clearError: false, // Error shown via top message
-       clearGenerationStartTime: true,
-       clearElapsedSeconds: true,
-     );
-     debugPrint("立即重置聊天状态以提供反馈。");
-     _stopUpdateTimer();
-   } else {
-      debugPrint("取消时 Notifier 已销毁，无法立即重置状态。");
-      return;
-   }
-
-   if (_llmStreamSubscription != null) {
-     final subToCancel = _llmStreamSubscription;
-     _llmStreamSubscription = null;
-     subToCancel!.cancel();
-     debugPrint("LLM 流订阅已在后台取消。");
-   } else {
-      debugPrint("没有活动的流订阅需要取消。");
-   }
- }
+    // 4. 更新UI状态以提供即时反馈
+    if (mounted) {
+      showTopMessage(savedPartial ? "已停止并保存部分内容" : "已停止生成",
+                     backgroundColor: savedPartial ? Colors.orangeAccent : Colors.blueGrey);
+      state = state.copyWith(
+        isLoading: false,
+        isStreaming: false,
+        clearStreaming: true,
+        clearGenerationStartTime: true,
+        clearElapsedSeconds: true,
+      );
+      debugPrint("UI 状态已重置以反映取消操作。");
+      _stopUpdateTimer();
+    } else {
+       debugPrint("取消时 Notifier 已销毁，无法更新状态。");
+    }
+  }
 
  void _startUpdateTimer() {
    _stopUpdateTimer();

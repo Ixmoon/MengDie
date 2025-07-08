@@ -194,49 +194,45 @@ class XmlProcessor {
 
   // --- Helper: Recursively merge two lists of nodes (for Update) ---
   // New logic: Map-based merge, adds new elements, ignores order for matching, keeps base attributes.
+  // --- Helper: Recursively merge two lists of nodes (for Update) ---
+  // New logic: Map-based merge, respects 'id' attribute, adds new elements, ignores order for matching.
   static List<XmlNode> _mergeNodeLists(List<XmlNode> baseNodes, List<XmlNode> updateNodes) {
     final List<XmlNode> mergedNodes = [];
-    final Map<String, List<XmlElement>> updateElementsMap = {};
-    final List<XmlNode> updateOtherNodes = []; // To store text, CDATA, comments etc. from updateNodes
-
-    // 1. Populate updateElementsMap and updateOtherNodes
-    for (final node in updateNodes) {
-      if (node is XmlElement) {
-        updateElementsMap.putIfAbsent(node.name.local, () => []).add(node);
-      } else {
-        updateOtherNodes.add(node);
-      }
-    }
+    // Use a map for efficient lookup of update elements by a unique identifier.
+    final Map<String, XmlElement> updateElementsMap = {
+      for (var node in updateNodes.whereType<XmlElement>())
+        _getElementIdentifier(node): node
+    };
+    final List<XmlNode> updateOtherNodes = updateNodes.where((n) => n is! XmlElement).toList();
 
     // Keep track of used update text/cdata nodes to avoid reusing them
     final Set<XmlNode> usedUpdateOtherNodes = {};
 
-    // 2. Iterate through baseNodes and merge with/consume updateNodes
+    // 1. Iterate through baseNodes and merge with/consume updateNodes
     for (final baseNode in baseNodes) {
       if (baseNode is XmlElement) {
-        final tagName = baseNode.name.local;
-        final matchingUpdateElements = updateElementsMap[tagName];
-        if (matchingUpdateElements != null && matchingUpdateElements.isNotEmpty) {
-          // Found matching update element(s) by name
-          final updateElement = matchingUpdateElements.removeAt(0); // Take the first match
-          if (matchingUpdateElements.isEmpty) {
-            updateElementsMap.remove(tagName); // Clean up map if list is empty
-          }
+        final baseIdentifier = _getElementIdentifier(baseNode);
+        final matchingUpdateElement = updateElementsMap[baseIdentifier];
 
-          // Recursively merge children
-          final mergedChildren = _mergeNodeLists(baseNode.children, updateElement.children);
-          // Create merged element: keep base name and attributes, use merged children
+        if (matchingUpdateElement != null) {
+          // Found a matching update element, consume it from the map.
+          updateElementsMap.remove(baseIdentifier);
+
+          // Recursively merge children.
+          final mergedChildren = _mergeNodeLists(baseNode.children, matchingUpdateElement.children);
+          // Create merged element: keep base name and attributes, use merged children.
           mergedNodes.add(XmlElement(
             baseNode.name.copy(),
             baseNode.attributes.map((a) => a.copy()), // Keep base attributes
             mergedChildren,
           ));
         } else {
-          // No matching update element found, keep the base node
+          // No matching update element found, keep the base node.
           mergedNodes.add(baseNode.copy());
         }
       } else if (baseNode is XmlText || baseNode is XmlCDATA) {
-        // Try to find a corresponding non-empty text/CDATA in updateOtherNodes
+        // This logic attempts to replace a text node with a corresponding one from the update list.
+        // It's heuristic and might not be perfect for all cases.
         final updateMatch = updateOtherNodes.firstWhereOrNull(
           (un) => (un.nodeType == baseNode.nodeType) && !usedUpdateOtherNodes.contains(un) && un.value != null && un.value!.trim().isNotEmpty,
         );
@@ -253,20 +249,17 @@ class XmlProcessor {
       }
     }
 
-    // 3. Add any remaining (new) elements from updateElementsMap
-    updateElementsMap.values.forEach((elementList) {
-      for (final newElement in elementList) {
-        mergedNodes.add(newElement.copy()); // Add new elements
-      }
-    });
+    // 2. Add any remaining (new) elements from the updateElementsMap.
+    for (final newElement in updateElementsMap.values) {
+      mergedNodes.add(newElement.copy());
+    }
 
-    // 4. Add any remaining (unused) non-element nodes from updateOtherNodes, BUT filter out whitespace-only text nodes
+    // 3. Add any remaining (unused) non-element nodes from updateOtherNodes, filtering out whitespace-only text nodes.
     for (final remainingOther in updateOtherNodes) {
       if (!usedUpdateOtherNodes.contains(remainingOther)) {
-        // Check if it's a text node consisting only of whitespace
-        bool isWhitespaceOnlyText = remainingOther is XmlText && remainingOther.text.trim().isEmpty;
+        bool isWhitespaceOnlyText = remainingOther is XmlText && remainingOther.value.trim().isEmpty;
         if (!isWhitespaceOnlyText) {
-           mergedNodes.add(remainingOther.copy()); // Add if not whitespace-only text
+            mergedNodes.add(remainingOther.copy());
         }
       }
     }
@@ -275,6 +268,15 @@ class XmlProcessor {
   }
 
   // --- Utility Functions ---
+  // Creates a unique identifier for an element, using its 'id' attribute if present.
+  static String _getElementIdentifier(XmlElement element) {
+    final id = element.getAttribute('id');
+    if (id != null && id.isNotEmpty) {
+      return '${element.name.local}#$id';
+    }
+    return element.name.local;
+  }
+
   static DriftXmlRule? _findRule(List<DriftXmlRule> rules, String tagNameLower) { // Use DriftXmlRule
     // Use firstWhereOrNull for cleaner handling of not found cases
     return rules.firstWhereOrNull((r) => r.tagName?.toLowerCase() == tagNameLower);
@@ -358,7 +360,7 @@ class XmlProcessor {
       for (final node in document.rootElement.children) {
         if (node is XmlText) {
           // Append text nodes directly
-          buffer.write(node.text);
+          buffer.write(node.value);
         }
         // Ignore XmlElement nodes and their children in this context,
         // as we only want text *outside* the primary tags.
@@ -377,6 +379,39 @@ class XmlProcessor {
       String strippedFallback = trimmedText.replaceAll(RegExp(r'<[^>]*>'), ' ');
       return strippedFallback.trim();
     }
+  }
+  /// Extracts only the XML elements from a string, discarding text nodes at the root level.
+  static String extractXmlContent(String rawText) {
+    final trimmedText = rawText.trim();
+    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
+      return ''; // Return empty if no tags are apparent
+    }
+    try {
+      final document = XmlDocument.parse('<root>$trimmedText</root>');
+      final buffer = StringBuffer();
+
+      for (final node in document.rootElement.children) {
+        if (node is XmlElement) {
+          // Append XML elements' outer XML
+          buffer.writeln(node.toXmlString(pretty: false));
+        }
+        // Ignore XmlText, XmlCDATA, etc., at this top level
+      }
+      return buffer.toString().trim();
+    } catch (e) {
+      debugPrint("Error extracting XML content: $e. Returning empty string.");
+      return '';
+    }
+  }
+
+  /// Wraps a given string content with a specified XML tag.
+  static String wrapWithTag(String tagName, String content) {
+    // Basic validation for tag name
+    if (tagName.isEmpty || tagName.contains(RegExp(r'[ <>"/]'))) {
+      // Return content as-is or throw error if tag is invalid
+      return content;
+    }
+    return '<$tagName>$content</$tagName>';
   }
 }
 

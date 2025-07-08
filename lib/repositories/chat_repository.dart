@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value; // For Value() and absent
 // import 'package:isar/isar.dart'; // Removed Isar
 
 // 导入模型和核心 Provider
@@ -29,72 +28,22 @@ class ChatRepository {
     _chatDao = _db.chatDao; // Initialize DAO from AppDatabase instance
   }
 
-  // Helper to convert Drift ChatData to original Chat model
-  Chat _fromChatData(ChatData data) {
-    // Assumes Chat model in collection_models.dart now uses Drift-compatible types for embedded objects and enums
-    return Chat()
-      ..id = data.id
-      ..title = data.title
-      ..systemPrompt = data.systemPrompt
-      ..createdAt = data.createdAt
-      ..updatedAt = data.updatedAt
-      // ..coverImagePath = data.coverImagePath // 旧字段，ChatData 中已不存在
-      ..coverImageBase64 = data.coverImageBase64 // 新字段：从 ChatData 读取 Base64
-      ..backgroundImagePath = data.backgroundImagePath
-      ..orderIndex = data.orderIndex
-      ..isFolder = data.isFolder
-      ..parentFolderId = data.parentFolderId
-      ..generationConfig = data.generationConfig // This is DriftGenerationConfig from drift/models
-      ..contextConfig = data.contextConfig     // This is DriftContextConfig from drift/models
-      ..xmlRules = data.xmlRules               // This is List<DriftXmlRule> from drift/models
-      ..apiType = data.apiType                 // This is drift_enums.LlmType from drift/common_enums
-      ..selectedOpenAIConfigId = data.selectedOpenAIConfigId;
-  }
-
-  // Helper to convert original Chat model to Drift ChatsCompanion
-  ChatsCompanion _toChatsCompanion(Chat chat, {bool updateTime = true}) {
-    DateTime newUpdatedAt = updateTime ? DateTime.now() : chat.updatedAt;
-    
-    return ChatsCompanion( // Assuming ChatsCompanion is available from app_database.g.dart or tables.dart
-      id: chat.id == 0 ? const Value.absent() : Value(chat.id),
-      title: Value(chat.title),
-      systemPrompt: Value(chat.systemPrompt),
-      createdAt: Value(chat.createdAt),
-      updatedAt: Value(newUpdatedAt),
-      // coverImagePath: Value(chat.coverImagePath), // 旧字段
-      coverImageBase64: Value(chat.coverImageBase64), // 新字段：将 Chat 模型中的 Base64 写入 Companion
-      backgroundImagePath: Value(chat.backgroundImagePath),
-      orderIndex: Value(chat.orderIndex),
-      isFolder: Value(chat.isFolder),
-      parentFolderId: Value(chat.parentFolderId),
-      // These fields in Chat model are now DriftGenerationConfig, DriftContextConfig, etc.
-      // The TypeConverter in the table definition handles conversion to String for DB.
-      // Companion expects the Dart type.
-      generationConfig: Value(chat.generationConfig), 
-      contextConfig: Value(chat.contextConfig),       
-      xmlRules: Value(chat.xmlRules),                 
-      apiType: Value(chat.apiType),                   
-      selectedOpenAIConfigId: Value(chat.selectedOpenAIConfigId),
-    );
-  }
-
-
   // --- 数据库操作 ---
   Future<List<Chat>> getAllChats() async {
     debugPrint("ChatRepository: 获取所有聊天 (Drift)...");
     final chatDataList = await _chatDao.getAllChats();
-    return chatDataList.map(_fromChatData).toList();
+    return chatDataList.map(Chat.fromData).toList();
   }
 
   Future<Chat?> getChat(int chatId) async {
     debugPrint("ChatRepository: 获取聊天 ID: $chatId (Drift)...");
     final chatData = await _chatDao.getChat(chatId);
-    return chatData != null ? _fromChatData(chatData) : null;
+    return chatData != null ? Chat.fromData(chatData) : null;
   }
 
   Future<int> saveChat(Chat chat) async {
     debugPrint("ChatRepository: 保存聊天 ID: ${chat.id}, 标题: ${chat.title} (Drift)...");
-    final companion = _toChatsCompanion(chat);
+    final companion = chat.toCompanion(forInsert: chat.id == 0);
     return await _chatDao.saveChat(companion); // saveChat in DAO handles insertOrReplace
   }
   
@@ -112,7 +61,7 @@ class ChatRepository {
   Future<void> updateChatOrder(List<Chat> chatsToUpdate) async {
     if (chatsToUpdate.isEmpty) return;
     debugPrint("ChatRepository: 批量更新 ${chatsToUpdate.length} 个聊天的 orderIndex (Drift)...");
-    final companions = chatsToUpdate.map((c) => _toChatsCompanion(c, updateTime: true)).toList();
+    final companions = chatsToUpdate.map((c) => c.toCompanion(updateTime: true)).toList();
     await _chatDao.updateChatOrder(companions);
     debugPrint("ChatRepository: 批量更新 orderIndex 完成 (Drift)。");
   }
@@ -120,12 +69,12 @@ class ChatRepository {
   // --- 数据库监听流 ---
   Stream<List<Chat>> watchChatsInFolder(int? parentFolderId) {
     debugPrint("ChatRepository: 监听文件夹 ID: $parentFolderId 下的聊天变化 (Drift)...");
-    return _chatDao.watchChatsInFolder(parentFolderId).map((list) => list.map(_fromChatData).toList());
+    return _chatDao.watchChatsInFolder(parentFolderId).map((list) => list.map(Chat.fromData).toList());
   }
 
   Stream<Chat?> watchChat(int chatId) {
     debugPrint("ChatRepository: 监听聊天 ID: $chatId 的变化 (Drift)...");
-    return _chatDao.watchChat(chatId).map((data) => data != null ? _fromChatData(data) : null);
+    return _chatDao.watchChat(chatId).map((data) => data != null ? Chat.fromData(data) : null);
   }
 
   // --- 导入聊天 ---
