@@ -75,13 +75,6 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       'parent_folder_id', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
   @override
-  late final GeneratedColumnWithTypeConverter<DriftGenerationConfig, String>
-      generationConfig = GeneratedColumn<String>(
-              'generation_config', aliasedName, false,
-              type: DriftSqlType.string, requiredDuringInsert: true)
-          .withConverter<DriftGenerationConfig>(
-              $ChatsTable.$convertergenerationConfig);
-  @override
   late final GeneratedColumnWithTypeConverter<DriftContextConfig, String>
       contextConfig = GeneratedColumn<String>(
               'context_config', aliasedName, false,
@@ -93,27 +86,21 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       xmlRules = GeneratedColumn<String>('xml_rules', aliasedName, false,
               type: DriftSqlType.string, requiredDuringInsert: true)
           .withConverter<List<DriftXmlRule>>($ChatsTable.$converterxmlRules);
+  static const VerificationMeta _apiConfigIdMeta =
+      const VerificationMeta('apiConfigId');
   @override
-  late final GeneratedColumnWithTypeConverter<LlmType, String> apiType =
-      GeneratedColumn<String>('api_type', aliasedName, false,
-              type: DriftSqlType.string, requiredDuringInsert: true)
-          .withConverter<LlmType>($ChatsTable.$converterapiType);
-  static const VerificationMeta _selectedOpenAIConfigIdMeta =
-      const VerificationMeta('selectedOpenAIConfigId');
-  @override
-  late final GeneratedColumn<String> selectedOpenAIConfigId =
-      GeneratedColumn<String>('selected_open_a_i_config_id', aliasedName, true,
-          type: DriftSqlType.string, requiredDuringInsert: false);
+  late final GeneratedColumn<String> apiConfigId = GeneratedColumn<String>(
+      'api_config_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _enablePreprocessingMeta =
       const VerificationMeta('enablePreprocessing');
   @override
   late final GeneratedColumn<bool> enablePreprocessing = GeneratedColumn<bool>(
-      'enable_preprocessing', aliasedName, false,
+      'enable_preprocessing', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("enable_preprocessing" IN (0, 1))'),
-      defaultValue: const Constant(false));
+          'CHECK ("enable_preprocessing" IN (0, 1))'));
   static const VerificationMeta _preprocessingPromptMeta =
       const VerificationMeta('preprocessingPrompt');
   @override
@@ -126,22 +113,39 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   late final GeneratedColumn<String> contextSummary = GeneratedColumn<String>(
       'context_summary', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _enablePostprocessingMeta =
-      const VerificationMeta('enablePostprocessing');
+  static const VerificationMeta _preprocessingApiConfigIdMeta =
+      const VerificationMeta('preprocessingApiConfigId');
   @override
-  late final GeneratedColumn<bool> enablePostprocessing = GeneratedColumn<bool>(
-      'enable_postprocessing', aliasedName, false,
+  late final GeneratedColumn<String> preprocessingApiConfigId =
+      GeneratedColumn<String>('preprocessing_api_config_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _enableSecondaryXmlMeta =
+      const VerificationMeta('enableSecondaryXml');
+  @override
+  late final GeneratedColumn<bool> enableSecondaryXml = GeneratedColumn<bool>(
+      'enable_secondary_xml', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("enable_postprocessing" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _postprocessingPromptMeta =
-      const VerificationMeta('postprocessingPrompt');
+          'CHECK ("enable_secondary_xml" IN (0, 1))'));
+  static const VerificationMeta _secondaryXmlPromptMeta =
+      const VerificationMeta('secondaryXmlPrompt');
   @override
-  late final GeneratedColumn<String> postprocessingPrompt =
-      GeneratedColumn<String>('postprocessing_prompt', aliasedName, true,
+  late final GeneratedColumn<String> secondaryXmlPrompt =
+      GeneratedColumn<String>('secondary_xml_prompt', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _secondaryXmlApiConfigIdMeta =
+      const VerificationMeta('secondaryXmlApiConfigId');
+  @override
+  late final GeneratedColumn<String> secondaryXmlApiConfigId =
+      GeneratedColumn<String>('secondary_xml_api_config_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _continuePromptMeta =
+      const VerificationMeta('continuePrompt');
+  @override
+  late final GeneratedColumn<String> continuePrompt = GeneratedColumn<String>(
+      'continue_prompt', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -154,16 +158,17 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         orderIndex,
         isFolder,
         parentFolderId,
-        generationConfig,
         contextConfig,
         xmlRules,
-        apiType,
-        selectedOpenAIConfigId,
+        apiConfigId,
         enablePreprocessing,
         preprocessingPrompt,
         contextSummary,
-        enablePostprocessing,
-        postprocessingPrompt
+        preprocessingApiConfigId,
+        enableSecondaryXml,
+        secondaryXmlPrompt,
+        secondaryXmlApiConfigId,
+        continuePrompt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -228,12 +233,11 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           parentFolderId.isAcceptableOrUnknown(
               data['parent_folder_id']!, _parentFolderIdMeta));
     }
-    if (data.containsKey('selected_open_a_i_config_id')) {
+    if (data.containsKey('api_config_id')) {
       context.handle(
-          _selectedOpenAIConfigIdMeta,
-          selectedOpenAIConfigId.isAcceptableOrUnknown(
-              data['selected_open_a_i_config_id']!,
-              _selectedOpenAIConfigIdMeta));
+          _apiConfigIdMeta,
+          apiConfigId.isAcceptableOrUnknown(
+              data['api_config_id']!, _apiConfigIdMeta));
     }
     if (data.containsKey('enable_preprocessing')) {
       context.handle(
@@ -253,17 +257,37 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           contextSummary.isAcceptableOrUnknown(
               data['context_summary']!, _contextSummaryMeta));
     }
-    if (data.containsKey('enable_postprocessing')) {
+    if (data.containsKey('preprocessing_api_config_id')) {
       context.handle(
-          _enablePostprocessingMeta,
-          enablePostprocessing.isAcceptableOrUnknown(
-              data['enable_postprocessing']!, _enablePostprocessingMeta));
+          _preprocessingApiConfigIdMeta,
+          preprocessingApiConfigId.isAcceptableOrUnknown(
+              data['preprocessing_api_config_id']!,
+              _preprocessingApiConfigIdMeta));
     }
-    if (data.containsKey('postprocessing_prompt')) {
+    if (data.containsKey('enable_secondary_xml')) {
       context.handle(
-          _postprocessingPromptMeta,
-          postprocessingPrompt.isAcceptableOrUnknown(
-              data['postprocessing_prompt']!, _postprocessingPromptMeta));
+          _enableSecondaryXmlMeta,
+          enableSecondaryXml.isAcceptableOrUnknown(
+              data['enable_secondary_xml']!, _enableSecondaryXmlMeta));
+    }
+    if (data.containsKey('secondary_xml_prompt')) {
+      context.handle(
+          _secondaryXmlPromptMeta,
+          secondaryXmlPrompt.isAcceptableOrUnknown(
+              data['secondary_xml_prompt']!, _secondaryXmlPromptMeta));
+    }
+    if (data.containsKey('secondary_xml_api_config_id')) {
+      context.handle(
+          _secondaryXmlApiConfigIdMeta,
+          secondaryXmlApiConfigId.isAcceptableOrUnknown(
+              data['secondary_xml_api_config_id']!,
+              _secondaryXmlApiConfigIdMeta));
+    }
+    if (data.containsKey('continue_prompt')) {
+      context.handle(
+          _continuePromptMeta,
+          continuePrompt.isAcceptableOrUnknown(
+              data['continue_prompt']!, _continuePromptMeta));
     }
     return context;
   }
@@ -294,31 +318,32 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           .read(DriftSqlType.bool, data['${effectivePrefix}is_folder'])!,
       parentFolderId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}parent_folder_id']),
-      generationConfig: $ChatsTable.$convertergenerationConfig.fromSql(
-          attachedDatabase.typeMapping.read(DriftSqlType.string,
-              data['${effectivePrefix}generation_config'])!),
       contextConfig: $ChatsTable.$convertercontextConfig.fromSql(
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}context_config'])!),
       xmlRules: $ChatsTable.$converterxmlRules.fromSql(attachedDatabase
           .typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}xml_rules'])!),
-      apiType: $ChatsTable.$converterapiType.fromSql(attachedDatabase
-          .typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}api_type'])!),
-      selectedOpenAIConfigId: attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}selected_open_a_i_config_id']),
+      apiConfigId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}api_config_id']),
       enablePreprocessing: attachedDatabase.typeMapping.read(
-          DriftSqlType.bool, data['${effectivePrefix}enable_preprocessing'])!,
+          DriftSqlType.bool, data['${effectivePrefix}enable_preprocessing']),
       preprocessingPrompt: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}preprocessing_prompt']),
       contextSummary: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}context_summary']),
-      enablePostprocessing: attachedDatabase.typeMapping.read(
-          DriftSqlType.bool, data['${effectivePrefix}enable_postprocessing'])!,
-      postprocessingPrompt: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}postprocessing_prompt']),
+      preprocessingApiConfigId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}preprocessing_api_config_id']),
+      enableSecondaryXml: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}enable_secondary_xml']),
+      secondaryXmlPrompt: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}secondary_xml_prompt']),
+      secondaryXmlApiConfigId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}secondary_xml_api_config_id']),
+      continuePrompt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}continue_prompt']),
     );
   }
 
@@ -327,14 +352,10 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     return $ChatsTable(attachedDatabase, alias);
   }
 
-  static TypeConverter<DriftGenerationConfig, String>
-      $convertergenerationConfig = const GenerationConfigConverter();
   static TypeConverter<DriftContextConfig, String> $convertercontextConfig =
       const ContextConfigConverter();
   static TypeConverter<List<DriftXmlRule>, String> $converterxmlRules =
       const XmlRuleListConverter();
-  static TypeConverter<LlmType, String> $converterapiType =
-      const LlmTypeConverter();
 }
 
 class ChatData extends DataClass implements Insertable<ChatData> {
@@ -348,16 +369,17 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final int? orderIndex;
   final bool isFolder;
   final int? parentFolderId;
-  final DriftGenerationConfig generationConfig;
   final DriftContextConfig contextConfig;
   final List<DriftXmlRule> xmlRules;
-  final LlmType apiType;
-  final String? selectedOpenAIConfigId;
-  final bool enablePreprocessing;
+  final String? apiConfigId;
+  final bool? enablePreprocessing;
   final String? preprocessingPrompt;
   final String? contextSummary;
-  final bool enablePostprocessing;
-  final String? postprocessingPrompt;
+  final String? preprocessingApiConfigId;
+  final bool? enableSecondaryXml;
+  final String? secondaryXmlPrompt;
+  final String? secondaryXmlApiConfigId;
+  final String? continuePrompt;
   const ChatData(
       {required this.id,
       this.title,
@@ -369,16 +391,17 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       this.orderIndex,
       required this.isFolder,
       this.parentFolderId,
-      required this.generationConfig,
       required this.contextConfig,
       required this.xmlRules,
-      required this.apiType,
-      this.selectedOpenAIConfigId,
-      required this.enablePreprocessing,
+      this.apiConfigId,
+      this.enablePreprocessing,
       this.preprocessingPrompt,
       this.contextSummary,
-      required this.enablePostprocessing,
-      this.postprocessingPrompt});
+      this.preprocessingApiConfigId,
+      this.enableSecondaryXml,
+      this.secondaryXmlPrompt,
+      this.secondaryXmlApiConfigId,
+      this.continuePrompt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -405,10 +428,6 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       map['parent_folder_id'] = Variable<int>(parentFolderId);
     }
     {
-      map['generation_config'] = Variable<String>(
-          $ChatsTable.$convertergenerationConfig.toSql(generationConfig));
-    }
-    {
       map['context_config'] = Variable<String>(
           $ChatsTable.$convertercontextConfig.toSql(contextConfig));
     }
@@ -416,24 +435,34 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       map['xml_rules'] =
           Variable<String>($ChatsTable.$converterxmlRules.toSql(xmlRules));
     }
-    {
-      map['api_type'] =
-          Variable<String>($ChatsTable.$converterapiType.toSql(apiType));
+    if (!nullToAbsent || apiConfigId != null) {
+      map['api_config_id'] = Variable<String>(apiConfigId);
     }
-    if (!nullToAbsent || selectedOpenAIConfigId != null) {
-      map['selected_open_a_i_config_id'] =
-          Variable<String>(selectedOpenAIConfigId);
+    if (!nullToAbsent || enablePreprocessing != null) {
+      map['enable_preprocessing'] = Variable<bool>(enablePreprocessing);
     }
-    map['enable_preprocessing'] = Variable<bool>(enablePreprocessing);
     if (!nullToAbsent || preprocessingPrompt != null) {
       map['preprocessing_prompt'] = Variable<String>(preprocessingPrompt);
     }
     if (!nullToAbsent || contextSummary != null) {
       map['context_summary'] = Variable<String>(contextSummary);
     }
-    map['enable_postprocessing'] = Variable<bool>(enablePostprocessing);
-    if (!nullToAbsent || postprocessingPrompt != null) {
-      map['postprocessing_prompt'] = Variable<String>(postprocessingPrompt);
+    if (!nullToAbsent || preprocessingApiConfigId != null) {
+      map['preprocessing_api_config_id'] =
+          Variable<String>(preprocessingApiConfigId);
+    }
+    if (!nullToAbsent || enableSecondaryXml != null) {
+      map['enable_secondary_xml'] = Variable<bool>(enableSecondaryXml);
+    }
+    if (!nullToAbsent || secondaryXmlPrompt != null) {
+      map['secondary_xml_prompt'] = Variable<String>(secondaryXmlPrompt);
+    }
+    if (!nullToAbsent || secondaryXmlApiConfigId != null) {
+      map['secondary_xml_api_config_id'] =
+          Variable<String>(secondaryXmlApiConfigId);
+    }
+    if (!nullToAbsent || continuePrompt != null) {
+      map['continue_prompt'] = Variable<String>(continuePrompt);
     }
     return map;
   }
@@ -461,24 +490,35 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       parentFolderId: parentFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(parentFolderId),
-      generationConfig: Value(generationConfig),
       contextConfig: Value(contextConfig),
       xmlRules: Value(xmlRules),
-      apiType: Value(apiType),
-      selectedOpenAIConfigId: selectedOpenAIConfigId == null && nullToAbsent
+      apiConfigId: apiConfigId == null && nullToAbsent
           ? const Value.absent()
-          : Value(selectedOpenAIConfigId),
-      enablePreprocessing: Value(enablePreprocessing),
+          : Value(apiConfigId),
+      enablePreprocessing: enablePreprocessing == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enablePreprocessing),
       preprocessingPrompt: preprocessingPrompt == null && nullToAbsent
           ? const Value.absent()
           : Value(preprocessingPrompt),
       contextSummary: contextSummary == null && nullToAbsent
           ? const Value.absent()
           : Value(contextSummary),
-      enablePostprocessing: Value(enablePostprocessing),
-      postprocessingPrompt: postprocessingPrompt == null && nullToAbsent
+      preprocessingApiConfigId: preprocessingApiConfigId == null && nullToAbsent
           ? const Value.absent()
-          : Value(postprocessingPrompt),
+          : Value(preprocessingApiConfigId),
+      enableSecondaryXml: enableSecondaryXml == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enableSecondaryXml),
+      secondaryXmlPrompt: secondaryXmlPrompt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(secondaryXmlPrompt),
+      secondaryXmlApiConfigId: secondaryXmlApiConfigId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(secondaryXmlApiConfigId),
+      continuePrompt: continuePrompt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(continuePrompt),
     );
   }
 
@@ -497,23 +537,24 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       orderIndex: serializer.fromJson<int?>(json['orderIndex']),
       isFolder: serializer.fromJson<bool>(json['isFolder']),
       parentFolderId: serializer.fromJson<int?>(json['parentFolderId']),
-      generationConfig:
-          serializer.fromJson<DriftGenerationConfig>(json['generationConfig']),
       contextConfig:
           serializer.fromJson<DriftContextConfig>(json['contextConfig']),
       xmlRules: serializer.fromJson<List<DriftXmlRule>>(json['xmlRules']),
-      apiType: serializer.fromJson<LlmType>(json['apiType']),
-      selectedOpenAIConfigId:
-          serializer.fromJson<String?>(json['selectedOpenAIConfigId']),
+      apiConfigId: serializer.fromJson<String?>(json['apiConfigId']),
       enablePreprocessing:
-          serializer.fromJson<bool>(json['enablePreprocessing']),
+          serializer.fromJson<bool?>(json['enablePreprocessing']),
       preprocessingPrompt:
           serializer.fromJson<String?>(json['preprocessingPrompt']),
       contextSummary: serializer.fromJson<String?>(json['contextSummary']),
-      enablePostprocessing:
-          serializer.fromJson<bool>(json['enablePostprocessing']),
-      postprocessingPrompt:
-          serializer.fromJson<String?>(json['postprocessingPrompt']),
+      preprocessingApiConfigId:
+          serializer.fromJson<String?>(json['preprocessingApiConfigId']),
+      enableSecondaryXml:
+          serializer.fromJson<bool?>(json['enableSecondaryXml']),
+      secondaryXmlPrompt:
+          serializer.fromJson<String?>(json['secondaryXmlPrompt']),
+      secondaryXmlApiConfigId:
+          serializer.fromJson<String?>(json['secondaryXmlApiConfigId']),
+      continuePrompt: serializer.fromJson<String?>(json['continuePrompt']),
     );
   }
   @override
@@ -530,18 +571,19 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'orderIndex': serializer.toJson<int?>(orderIndex),
       'isFolder': serializer.toJson<bool>(isFolder),
       'parentFolderId': serializer.toJson<int?>(parentFolderId),
-      'generationConfig':
-          serializer.toJson<DriftGenerationConfig>(generationConfig),
       'contextConfig': serializer.toJson<DriftContextConfig>(contextConfig),
       'xmlRules': serializer.toJson<List<DriftXmlRule>>(xmlRules),
-      'apiType': serializer.toJson<LlmType>(apiType),
-      'selectedOpenAIConfigId':
-          serializer.toJson<String?>(selectedOpenAIConfigId),
-      'enablePreprocessing': serializer.toJson<bool>(enablePreprocessing),
+      'apiConfigId': serializer.toJson<String?>(apiConfigId),
+      'enablePreprocessing': serializer.toJson<bool?>(enablePreprocessing),
       'preprocessingPrompt': serializer.toJson<String?>(preprocessingPrompt),
       'contextSummary': serializer.toJson<String?>(contextSummary),
-      'enablePostprocessing': serializer.toJson<bool>(enablePostprocessing),
-      'postprocessingPrompt': serializer.toJson<String?>(postprocessingPrompt),
+      'preprocessingApiConfigId':
+          serializer.toJson<String?>(preprocessingApiConfigId),
+      'enableSecondaryXml': serializer.toJson<bool?>(enableSecondaryXml),
+      'secondaryXmlPrompt': serializer.toJson<String?>(secondaryXmlPrompt),
+      'secondaryXmlApiConfigId':
+          serializer.toJson<String?>(secondaryXmlApiConfigId),
+      'continuePrompt': serializer.toJson<String?>(continuePrompt),
     };
   }
 
@@ -556,16 +598,17 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           Value<int?> orderIndex = const Value.absent(),
           bool? isFolder,
           Value<int?> parentFolderId = const Value.absent(),
-          DriftGenerationConfig? generationConfig,
           DriftContextConfig? contextConfig,
           List<DriftXmlRule>? xmlRules,
-          LlmType? apiType,
-          Value<String?> selectedOpenAIConfigId = const Value.absent(),
-          bool? enablePreprocessing,
+          Value<String?> apiConfigId = const Value.absent(),
+          Value<bool?> enablePreprocessing = const Value.absent(),
           Value<String?> preprocessingPrompt = const Value.absent(),
           Value<String?> contextSummary = const Value.absent(),
-          bool? enablePostprocessing,
-          Value<String?> postprocessingPrompt = const Value.absent()}) =>
+          Value<String?> preprocessingApiConfigId = const Value.absent(),
+          Value<bool?> enableSecondaryXml = const Value.absent(),
+          Value<String?> secondaryXmlPrompt = const Value.absent(),
+          Value<String?> secondaryXmlApiConfigId = const Value.absent(),
+          Value<String?> continuePrompt = const Value.absent()}) =>
       ChatData(
         id: id ?? this.id,
         title: title.present ? title.value : this.title,
@@ -583,23 +626,31 @@ class ChatData extends DataClass implements Insertable<ChatData> {
         isFolder: isFolder ?? this.isFolder,
         parentFolderId:
             parentFolderId.present ? parentFolderId.value : this.parentFolderId,
-        generationConfig: generationConfig ?? this.generationConfig,
         contextConfig: contextConfig ?? this.contextConfig,
         xmlRules: xmlRules ?? this.xmlRules,
-        apiType: apiType ?? this.apiType,
-        selectedOpenAIConfigId: selectedOpenAIConfigId.present
-            ? selectedOpenAIConfigId.value
-            : this.selectedOpenAIConfigId,
-        enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
+        apiConfigId: apiConfigId.present ? apiConfigId.value : this.apiConfigId,
+        enablePreprocessing: enablePreprocessing.present
+            ? enablePreprocessing.value
+            : this.enablePreprocessing,
         preprocessingPrompt: preprocessingPrompt.present
             ? preprocessingPrompt.value
             : this.preprocessingPrompt,
         contextSummary:
             contextSummary.present ? contextSummary.value : this.contextSummary,
-        enablePostprocessing: enablePostprocessing ?? this.enablePostprocessing,
-        postprocessingPrompt: postprocessingPrompt.present
-            ? postprocessingPrompt.value
-            : this.postprocessingPrompt,
+        preprocessingApiConfigId: preprocessingApiConfigId.present
+            ? preprocessingApiConfigId.value
+            : this.preprocessingApiConfigId,
+        enableSecondaryXml: enableSecondaryXml.present
+            ? enableSecondaryXml.value
+            : this.enableSecondaryXml,
+        secondaryXmlPrompt: secondaryXmlPrompt.present
+            ? secondaryXmlPrompt.value
+            : this.secondaryXmlPrompt,
+        secondaryXmlApiConfigId: secondaryXmlApiConfigId.present
+            ? secondaryXmlApiConfigId.value
+            : this.secondaryXmlApiConfigId,
+        continuePrompt:
+            continuePrompt.present ? continuePrompt.value : this.continuePrompt,
       );
   ChatData copyWithCompanion(ChatsCompanion data) {
     return ChatData(
@@ -622,17 +673,12 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       parentFolderId: data.parentFolderId.present
           ? data.parentFolderId.value
           : this.parentFolderId,
-      generationConfig: data.generationConfig.present
-          ? data.generationConfig.value
-          : this.generationConfig,
       contextConfig: data.contextConfig.present
           ? data.contextConfig.value
           : this.contextConfig,
       xmlRules: data.xmlRules.present ? data.xmlRules.value : this.xmlRules,
-      apiType: data.apiType.present ? data.apiType.value : this.apiType,
-      selectedOpenAIConfigId: data.selectedOpenAIConfigId.present
-          ? data.selectedOpenAIConfigId.value
-          : this.selectedOpenAIConfigId,
+      apiConfigId:
+          data.apiConfigId.present ? data.apiConfigId.value : this.apiConfigId,
       enablePreprocessing: data.enablePreprocessing.present
           ? data.enablePreprocessing.value
           : this.enablePreprocessing,
@@ -642,12 +688,21 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       contextSummary: data.contextSummary.present
           ? data.contextSummary.value
           : this.contextSummary,
-      enablePostprocessing: data.enablePostprocessing.present
-          ? data.enablePostprocessing.value
-          : this.enablePostprocessing,
-      postprocessingPrompt: data.postprocessingPrompt.present
-          ? data.postprocessingPrompt.value
-          : this.postprocessingPrompt,
+      preprocessingApiConfigId: data.preprocessingApiConfigId.present
+          ? data.preprocessingApiConfigId.value
+          : this.preprocessingApiConfigId,
+      enableSecondaryXml: data.enableSecondaryXml.present
+          ? data.enableSecondaryXml.value
+          : this.enableSecondaryXml,
+      secondaryXmlPrompt: data.secondaryXmlPrompt.present
+          ? data.secondaryXmlPrompt.value
+          : this.secondaryXmlPrompt,
+      secondaryXmlApiConfigId: data.secondaryXmlApiConfigId.present
+          ? data.secondaryXmlApiConfigId.value
+          : this.secondaryXmlApiConfigId,
+      continuePrompt: data.continuePrompt.present
+          ? data.continuePrompt.value
+          : this.continuePrompt,
     );
   }
 
@@ -664,42 +719,45 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           ..write('orderIndex: $orderIndex, ')
           ..write('isFolder: $isFolder, ')
           ..write('parentFolderId: $parentFolderId, ')
-          ..write('generationConfig: $generationConfig, ')
           ..write('contextConfig: $contextConfig, ')
           ..write('xmlRules: $xmlRules, ')
-          ..write('apiType: $apiType, ')
-          ..write('selectedOpenAIConfigId: $selectedOpenAIConfigId, ')
+          ..write('apiConfigId: $apiConfigId, ')
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
-          ..write('enablePostprocessing: $enablePostprocessing, ')
-          ..write('postprocessingPrompt: $postprocessingPrompt')
+          ..write('preprocessingApiConfigId: $preprocessingApiConfigId, ')
+          ..write('enableSecondaryXml: $enableSecondaryXml, ')
+          ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
+          ..write('secondaryXmlApiConfigId: $secondaryXmlApiConfigId, ')
+          ..write('continuePrompt: $continuePrompt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      title,
-      systemPrompt,
-      createdAt,
-      updatedAt,
-      coverImageBase64,
-      backgroundImagePath,
-      orderIndex,
-      isFolder,
-      parentFolderId,
-      generationConfig,
-      contextConfig,
-      xmlRules,
-      apiType,
-      selectedOpenAIConfigId,
-      enablePreprocessing,
-      preprocessingPrompt,
-      contextSummary,
-      enablePostprocessing,
-      postprocessingPrompt);
+  int get hashCode => Object.hashAll([
+        id,
+        title,
+        systemPrompt,
+        createdAt,
+        updatedAt,
+        coverImageBase64,
+        backgroundImagePath,
+        orderIndex,
+        isFolder,
+        parentFolderId,
+        contextConfig,
+        xmlRules,
+        apiConfigId,
+        enablePreprocessing,
+        preprocessingPrompt,
+        contextSummary,
+        preprocessingApiConfigId,
+        enableSecondaryXml,
+        secondaryXmlPrompt,
+        secondaryXmlApiConfigId,
+        continuePrompt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -714,16 +772,17 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           other.orderIndex == this.orderIndex &&
           other.isFolder == this.isFolder &&
           other.parentFolderId == this.parentFolderId &&
-          other.generationConfig == this.generationConfig &&
           other.contextConfig == this.contextConfig &&
           other.xmlRules == this.xmlRules &&
-          other.apiType == this.apiType &&
-          other.selectedOpenAIConfigId == this.selectedOpenAIConfigId &&
+          other.apiConfigId == this.apiConfigId &&
           other.enablePreprocessing == this.enablePreprocessing &&
           other.preprocessingPrompt == this.preprocessingPrompt &&
           other.contextSummary == this.contextSummary &&
-          other.enablePostprocessing == this.enablePostprocessing &&
-          other.postprocessingPrompt == this.postprocessingPrompt);
+          other.preprocessingApiConfigId == this.preprocessingApiConfigId &&
+          other.enableSecondaryXml == this.enableSecondaryXml &&
+          other.secondaryXmlPrompt == this.secondaryXmlPrompt &&
+          other.secondaryXmlApiConfigId == this.secondaryXmlApiConfigId &&
+          other.continuePrompt == this.continuePrompt);
 }
 
 class ChatsCompanion extends UpdateCompanion<ChatData> {
@@ -737,16 +796,17 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<int?> orderIndex;
   final Value<bool> isFolder;
   final Value<int?> parentFolderId;
-  final Value<DriftGenerationConfig> generationConfig;
   final Value<DriftContextConfig> contextConfig;
   final Value<List<DriftXmlRule>> xmlRules;
-  final Value<LlmType> apiType;
-  final Value<String?> selectedOpenAIConfigId;
-  final Value<bool> enablePreprocessing;
+  final Value<String?> apiConfigId;
+  final Value<bool?> enablePreprocessing;
   final Value<String?> preprocessingPrompt;
   final Value<String?> contextSummary;
-  final Value<bool> enablePostprocessing;
-  final Value<String?> postprocessingPrompt;
+  final Value<String?> preprocessingApiConfigId;
+  final Value<bool?> enableSecondaryXml;
+  final Value<String?> secondaryXmlPrompt;
+  final Value<String?> secondaryXmlApiConfigId;
+  final Value<String?> continuePrompt;
   const ChatsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -758,16 +818,17 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.orderIndex = const Value.absent(),
     this.isFolder = const Value.absent(),
     this.parentFolderId = const Value.absent(),
-    this.generationConfig = const Value.absent(),
     this.contextConfig = const Value.absent(),
     this.xmlRules = const Value.absent(),
-    this.apiType = const Value.absent(),
-    this.selectedOpenAIConfigId = const Value.absent(),
+    this.apiConfigId = const Value.absent(),
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
-    this.enablePostprocessing = const Value.absent(),
-    this.postprocessingPrompt = const Value.absent(),
+    this.preprocessingApiConfigId = const Value.absent(),
+    this.enableSecondaryXml = const Value.absent(),
+    this.secondaryXmlPrompt = const Value.absent(),
+    this.secondaryXmlApiConfigId = const Value.absent(),
+    this.continuePrompt = const Value.absent(),
   });
   ChatsCompanion.insert({
     this.id = const Value.absent(),
@@ -780,22 +841,21 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.orderIndex = const Value.absent(),
     this.isFolder = const Value.absent(),
     this.parentFolderId = const Value.absent(),
-    required DriftGenerationConfig generationConfig,
     required DriftContextConfig contextConfig,
     required List<DriftXmlRule> xmlRules,
-    required LlmType apiType,
-    this.selectedOpenAIConfigId = const Value.absent(),
+    this.apiConfigId = const Value.absent(),
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
-    this.enablePostprocessing = const Value.absent(),
-    this.postprocessingPrompt = const Value.absent(),
+    this.preprocessingApiConfigId = const Value.absent(),
+    this.enableSecondaryXml = const Value.absent(),
+    this.secondaryXmlPrompt = const Value.absent(),
+    this.secondaryXmlApiConfigId = const Value.absent(),
+    this.continuePrompt = const Value.absent(),
   })  : createdAt = Value(createdAt),
         updatedAt = Value(updatedAt),
-        generationConfig = Value(generationConfig),
         contextConfig = Value(contextConfig),
-        xmlRules = Value(xmlRules),
-        apiType = Value(apiType);
+        xmlRules = Value(xmlRules);
   static Insertable<ChatData> custom({
     Expression<int>? id,
     Expression<String>? title,
@@ -807,16 +867,17 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     Expression<int>? orderIndex,
     Expression<bool>? isFolder,
     Expression<int>? parentFolderId,
-    Expression<String>? generationConfig,
     Expression<String>? contextConfig,
     Expression<String>? xmlRules,
-    Expression<String>? apiType,
-    Expression<String>? selectedOpenAIConfigId,
+    Expression<String>? apiConfigId,
     Expression<bool>? enablePreprocessing,
     Expression<String>? preprocessingPrompt,
     Expression<String>? contextSummary,
-    Expression<bool>? enablePostprocessing,
-    Expression<String>? postprocessingPrompt,
+    Expression<String>? preprocessingApiConfigId,
+    Expression<bool>? enableSecondaryXml,
+    Expression<String>? secondaryXmlPrompt,
+    Expression<String>? secondaryXmlApiConfigId,
+    Expression<String>? continuePrompt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -830,21 +891,23 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       if (orderIndex != null) 'order_index': orderIndex,
       if (isFolder != null) 'is_folder': isFolder,
       if (parentFolderId != null) 'parent_folder_id': parentFolderId,
-      if (generationConfig != null) 'generation_config': generationConfig,
       if (contextConfig != null) 'context_config': contextConfig,
       if (xmlRules != null) 'xml_rules': xmlRules,
-      if (apiType != null) 'api_type': apiType,
-      if (selectedOpenAIConfigId != null)
-        'selected_open_a_i_config_id': selectedOpenAIConfigId,
+      if (apiConfigId != null) 'api_config_id': apiConfigId,
       if (enablePreprocessing != null)
         'enable_preprocessing': enablePreprocessing,
       if (preprocessingPrompt != null)
         'preprocessing_prompt': preprocessingPrompt,
       if (contextSummary != null) 'context_summary': contextSummary,
-      if (enablePostprocessing != null)
-        'enable_postprocessing': enablePostprocessing,
-      if (postprocessingPrompt != null)
-        'postprocessing_prompt': postprocessingPrompt,
+      if (preprocessingApiConfigId != null)
+        'preprocessing_api_config_id': preprocessingApiConfigId,
+      if (enableSecondaryXml != null)
+        'enable_secondary_xml': enableSecondaryXml,
+      if (secondaryXmlPrompt != null)
+        'secondary_xml_prompt': secondaryXmlPrompt,
+      if (secondaryXmlApiConfigId != null)
+        'secondary_xml_api_config_id': secondaryXmlApiConfigId,
+      if (continuePrompt != null) 'continue_prompt': continuePrompt,
     });
   }
 
@@ -859,16 +922,17 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<int?>? orderIndex,
       Value<bool>? isFolder,
       Value<int?>? parentFolderId,
-      Value<DriftGenerationConfig>? generationConfig,
       Value<DriftContextConfig>? contextConfig,
       Value<List<DriftXmlRule>>? xmlRules,
-      Value<LlmType>? apiType,
-      Value<String?>? selectedOpenAIConfigId,
-      Value<bool>? enablePreprocessing,
+      Value<String?>? apiConfigId,
+      Value<bool?>? enablePreprocessing,
       Value<String?>? preprocessingPrompt,
       Value<String?>? contextSummary,
-      Value<bool>? enablePostprocessing,
-      Value<String?>? postprocessingPrompt}) {
+      Value<String?>? preprocessingApiConfigId,
+      Value<bool?>? enableSecondaryXml,
+      Value<String?>? secondaryXmlPrompt,
+      Value<String?>? secondaryXmlApiConfigId,
+      Value<String?>? continuePrompt}) {
     return ChatsCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -880,17 +944,19 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       orderIndex: orderIndex ?? this.orderIndex,
       isFolder: isFolder ?? this.isFolder,
       parentFolderId: parentFolderId ?? this.parentFolderId,
-      generationConfig: generationConfig ?? this.generationConfig,
       contextConfig: contextConfig ?? this.contextConfig,
       xmlRules: xmlRules ?? this.xmlRules,
-      apiType: apiType ?? this.apiType,
-      selectedOpenAIConfigId:
-          selectedOpenAIConfigId ?? this.selectedOpenAIConfigId,
+      apiConfigId: apiConfigId ?? this.apiConfigId,
       enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
       preprocessingPrompt: preprocessingPrompt ?? this.preprocessingPrompt,
       contextSummary: contextSummary ?? this.contextSummary,
-      enablePostprocessing: enablePostprocessing ?? this.enablePostprocessing,
-      postprocessingPrompt: postprocessingPrompt ?? this.postprocessingPrompt,
+      preprocessingApiConfigId:
+          preprocessingApiConfigId ?? this.preprocessingApiConfigId,
+      enableSecondaryXml: enableSecondaryXml ?? this.enableSecondaryXml,
+      secondaryXmlPrompt: secondaryXmlPrompt ?? this.secondaryXmlPrompt,
+      secondaryXmlApiConfigId:
+          secondaryXmlApiConfigId ?? this.secondaryXmlApiConfigId,
+      continuePrompt: continuePrompt ?? this.continuePrompt,
     );
   }
 
@@ -928,10 +994,6 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     if (parentFolderId.present) {
       map['parent_folder_id'] = Variable<int>(parentFolderId.value);
     }
-    if (generationConfig.present) {
-      map['generation_config'] = Variable<String>(
-          $ChatsTable.$convertergenerationConfig.toSql(generationConfig.value));
-    }
     if (contextConfig.present) {
       map['context_config'] = Variable<String>(
           $ChatsTable.$convertercontextConfig.toSql(contextConfig.value));
@@ -940,13 +1002,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       map['xml_rules'] = Variable<String>(
           $ChatsTable.$converterxmlRules.toSql(xmlRules.value));
     }
-    if (apiType.present) {
-      map['api_type'] =
-          Variable<String>($ChatsTable.$converterapiType.toSql(apiType.value));
-    }
-    if (selectedOpenAIConfigId.present) {
-      map['selected_open_a_i_config_id'] =
-          Variable<String>(selectedOpenAIConfigId.value);
+    if (apiConfigId.present) {
+      map['api_config_id'] = Variable<String>(apiConfigId.value);
     }
     if (enablePreprocessing.present) {
       map['enable_preprocessing'] = Variable<bool>(enablePreprocessing.value);
@@ -957,12 +1014,22 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     if (contextSummary.present) {
       map['context_summary'] = Variable<String>(contextSummary.value);
     }
-    if (enablePostprocessing.present) {
-      map['enable_postprocessing'] = Variable<bool>(enablePostprocessing.value);
+    if (preprocessingApiConfigId.present) {
+      map['preprocessing_api_config_id'] =
+          Variable<String>(preprocessingApiConfigId.value);
     }
-    if (postprocessingPrompt.present) {
-      map['postprocessing_prompt'] =
-          Variable<String>(postprocessingPrompt.value);
+    if (enableSecondaryXml.present) {
+      map['enable_secondary_xml'] = Variable<bool>(enableSecondaryXml.value);
+    }
+    if (secondaryXmlPrompt.present) {
+      map['secondary_xml_prompt'] = Variable<String>(secondaryXmlPrompt.value);
+    }
+    if (secondaryXmlApiConfigId.present) {
+      map['secondary_xml_api_config_id'] =
+          Variable<String>(secondaryXmlApiConfigId.value);
+    }
+    if (continuePrompt.present) {
+      map['continue_prompt'] = Variable<String>(continuePrompt.value);
     }
     return map;
   }
@@ -980,16 +1047,17 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
           ..write('orderIndex: $orderIndex, ')
           ..write('isFolder: $isFolder, ')
           ..write('parentFolderId: $parentFolderId, ')
-          ..write('generationConfig: $generationConfig, ')
           ..write('contextConfig: $contextConfig, ')
           ..write('xmlRules: $xmlRules, ')
-          ..write('apiType: $apiType, ')
-          ..write('selectedOpenAIConfigId: $selectedOpenAIConfigId, ')
+          ..write('apiConfigId: $apiConfigId, ')
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
-          ..write('enablePostprocessing: $enablePostprocessing, ')
-          ..write('postprocessingPrompt: $postprocessingPrompt')
+          ..write('preprocessingApiConfigId: $preprocessingApiConfigId, ')
+          ..write('enableSecondaryXml: $enableSecondaryXml, ')
+          ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
+          ..write('secondaryXmlApiConfigId: $secondaryXmlApiConfigId, ')
+          ..write('continuePrompt: $continuePrompt')
           ..write(')'))
         .toString();
   }
@@ -1041,9 +1109,22 @@ class $MessagesTable extends Messages
   late final GeneratedColumn<String> originalXmlContent =
       GeneratedColumn<String>('original_xml_content', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _secondaryXmlContentMeta =
+      const VerificationMeta('secondaryXmlContent');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, chatId, partsJson, role, timestamp, originalXmlContent];
+  late final GeneratedColumn<String> secondaryXmlContent =
+      GeneratedColumn<String>('secondary_xml_content', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        chatId,
+        partsJson,
+        role,
+        timestamp,
+        originalXmlContent,
+        secondaryXmlContent
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1081,6 +1162,12 @@ class $MessagesTable extends Messages
           originalXmlContent.isAcceptableOrUnknown(
               data['original_xml_content']!, _originalXmlContentMeta));
     }
+    if (data.containsKey('secondary_xml_content')) {
+      context.handle(
+          _secondaryXmlContentMeta,
+          secondaryXmlContent.isAcceptableOrUnknown(
+              data['secondary_xml_content']!, _secondaryXmlContentMeta));
+    }
     return context;
   }
 
@@ -1102,6 +1189,8 @@ class $MessagesTable extends Messages
           .read(DriftSqlType.dateTime, data['${effectivePrefix}timestamp'])!,
       originalXmlContent: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}original_xml_content']),
+      secondaryXmlContent: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}secondary_xml_content']),
     );
   }
 
@@ -1121,13 +1210,15 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final MessageRole role;
   final DateTime timestamp;
   final String? originalXmlContent;
+  final String? secondaryXmlContent;
   const MessageData(
       {required this.id,
       required this.chatId,
       required this.partsJson,
       required this.role,
       required this.timestamp,
-      this.originalXmlContent});
+      this.originalXmlContent,
+      this.secondaryXmlContent});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1140,6 +1231,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     map['timestamp'] = Variable<DateTime>(timestamp);
     if (!nullToAbsent || originalXmlContent != null) {
       map['original_xml_content'] = Variable<String>(originalXmlContent);
+    }
+    if (!nullToAbsent || secondaryXmlContent != null) {
+      map['secondary_xml_content'] = Variable<String>(secondaryXmlContent);
     }
     return map;
   }
@@ -1154,6 +1248,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       originalXmlContent: originalXmlContent == null && nullToAbsent
           ? const Value.absent()
           : Value(originalXmlContent),
+      secondaryXmlContent: secondaryXmlContent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(secondaryXmlContent),
     );
   }
 
@@ -1168,6 +1265,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
       originalXmlContent:
           serializer.fromJson<String?>(json['originalXmlContent']),
+      secondaryXmlContent:
+          serializer.fromJson<String?>(json['secondaryXmlContent']),
     );
   }
   @override
@@ -1180,6 +1279,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'role': serializer.toJson<MessageRole>(role),
       'timestamp': serializer.toJson<DateTime>(timestamp),
       'originalXmlContent': serializer.toJson<String?>(originalXmlContent),
+      'secondaryXmlContent': serializer.toJson<String?>(secondaryXmlContent),
     };
   }
 
@@ -1189,7 +1289,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           String? partsJson,
           MessageRole? role,
           DateTime? timestamp,
-          Value<String?> originalXmlContent = const Value.absent()}) =>
+          Value<String?> originalXmlContent = const Value.absent(),
+          Value<String?> secondaryXmlContent = const Value.absent()}) =>
       MessageData(
         id: id ?? this.id,
         chatId: chatId ?? this.chatId,
@@ -1199,6 +1300,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         originalXmlContent: originalXmlContent.present
             ? originalXmlContent.value
             : this.originalXmlContent,
+        secondaryXmlContent: secondaryXmlContent.present
+            ? secondaryXmlContent.value
+            : this.secondaryXmlContent,
       );
   MessageData copyWithCompanion(MessagesCompanion data) {
     return MessageData(
@@ -1210,6 +1314,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       originalXmlContent: data.originalXmlContent.present
           ? data.originalXmlContent.value
           : this.originalXmlContent,
+      secondaryXmlContent: data.secondaryXmlContent.present
+          ? data.secondaryXmlContent.value
+          : this.secondaryXmlContent,
     );
   }
 
@@ -1221,14 +1328,15 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('partsJson: $partsJson, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
-          ..write('originalXmlContent: $originalXmlContent')
+          ..write('originalXmlContent: $originalXmlContent, ')
+          ..write('secondaryXmlContent: $secondaryXmlContent')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, chatId, partsJson, role, timestamp, originalXmlContent);
+  int get hashCode => Object.hash(id, chatId, partsJson, role, timestamp,
+      originalXmlContent, secondaryXmlContent);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1238,7 +1346,8 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.partsJson == this.partsJson &&
           other.role == this.role &&
           other.timestamp == this.timestamp &&
-          other.originalXmlContent == this.originalXmlContent);
+          other.originalXmlContent == this.originalXmlContent &&
+          other.secondaryXmlContent == this.secondaryXmlContent);
 }
 
 class MessagesCompanion extends UpdateCompanion<MessageData> {
@@ -1248,6 +1357,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   final Value<MessageRole> role;
   final Value<DateTime> timestamp;
   final Value<String?> originalXmlContent;
+  final Value<String?> secondaryXmlContent;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.chatId = const Value.absent(),
@@ -1255,6 +1365,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     this.role = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.originalXmlContent = const Value.absent(),
+    this.secondaryXmlContent = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -1263,6 +1374,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     required MessageRole role,
     required DateTime timestamp,
     this.originalXmlContent = const Value.absent(),
+    this.secondaryXmlContent = const Value.absent(),
   })  : chatId = Value(chatId),
         partsJson = Value(partsJson),
         role = Value(role),
@@ -1274,6 +1386,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     Expression<String>? role,
     Expression<DateTime>? timestamp,
     Expression<String>? originalXmlContent,
+    Expression<String>? secondaryXmlContent,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1283,6 +1396,8 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       if (timestamp != null) 'timestamp': timestamp,
       if (originalXmlContent != null)
         'original_xml_content': originalXmlContent,
+      if (secondaryXmlContent != null)
+        'secondary_xml_content': secondaryXmlContent,
     });
   }
 
@@ -1292,7 +1407,8 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       Value<String>? partsJson,
       Value<MessageRole>? role,
       Value<DateTime>? timestamp,
-      Value<String?>? originalXmlContent}) {
+      Value<String?>? originalXmlContent,
+      Value<String?>? secondaryXmlContent}) {
     return MessagesCompanion(
       id: id ?? this.id,
       chatId: chatId ?? this.chatId,
@@ -1300,6 +1416,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       originalXmlContent: originalXmlContent ?? this.originalXmlContent,
+      secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
     );
   }
 
@@ -1325,6 +1442,10 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     if (originalXmlContent.present) {
       map['original_xml_content'] = Variable<String>(originalXmlContent.value);
     }
+    if (secondaryXmlContent.present) {
+      map['secondary_xml_content'] =
+          Variable<String>(secondaryXmlContent.value);
+    }
     return map;
   }
 
@@ -1336,235 +1457,19 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
           ..write('partsJson: $partsJson, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
-          ..write('originalXmlContent: $originalXmlContent')
+          ..write('originalXmlContent: $originalXmlContent, ')
+          ..write('secondaryXmlContent: $secondaryXmlContent')
           ..write(')'))
         .toString();
   }
 }
 
-class $GeminiApiKeysTable extends GeminiApiKeys
-    with TableInfo<$GeminiApiKeysTable, GeminiApiKey> {
+class $ApiConfigsTable extends ApiConfigs
+    with TableInfo<$ApiConfigsTable, ApiConfig> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $GeminiApiKeysTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _apiKeyMeta = const VerificationMeta('apiKey');
-  @override
-  late final GeneratedColumn<String> apiKey = GeneratedColumn<String>(
-      'api_key', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: true,
-      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
-  static const VerificationMeta _createdAtMeta =
-      const VerificationMeta('createdAt');
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime,
-      requiredDuringInsert: false,
-      defaultValue: currentDateAndTime);
-  @override
-  List<GeneratedColumn> get $columns => [id, apiKey, createdAt];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'gemini_api_keys';
-  @override
-  VerificationContext validateIntegrity(Insertable<GeminiApiKey> instance,
-      {bool isInserting = false}) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('api_key')) {
-      context.handle(_apiKeyMeta,
-          apiKey.isAcceptableOrUnknown(data['api_key']!, _apiKeyMeta));
-    } else if (isInserting) {
-      context.missing(_apiKeyMeta);
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(_createdAtMeta,
-          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  GeminiApiKey map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return GeminiApiKey(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      apiKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}api_key'])!,
-      createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
-    );
-  }
-
-  @override
-  $GeminiApiKeysTable createAlias(String alias) {
-    return $GeminiApiKeysTable(attachedDatabase, alias);
-  }
-}
-
-class GeminiApiKey extends DataClass implements Insertable<GeminiApiKey> {
-  final int id;
-  final String apiKey;
-  final DateTime createdAt;
-  const GeminiApiKey(
-      {required this.id, required this.apiKey, required this.createdAt});
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['api_key'] = Variable<String>(apiKey);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    return map;
-  }
-
-  GeminiApiKeysCompanion toCompanion(bool nullToAbsent) {
-    return GeminiApiKeysCompanion(
-      id: Value(id),
-      apiKey: Value(apiKey),
-      createdAt: Value(createdAt),
-    );
-  }
-
-  factory GeminiApiKey.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return GeminiApiKey(
-      id: serializer.fromJson<int>(json['id']),
-      apiKey: serializer.fromJson<String>(json['apiKey']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'apiKey': serializer.toJson<String>(apiKey),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-    };
-  }
-
-  GeminiApiKey copyWith({int? id, String? apiKey, DateTime? createdAt}) =>
-      GeminiApiKey(
-        id: id ?? this.id,
-        apiKey: apiKey ?? this.apiKey,
-        createdAt: createdAt ?? this.createdAt,
-      );
-  GeminiApiKey copyWithCompanion(GeminiApiKeysCompanion data) {
-    return GeminiApiKey(
-      id: data.id.present ? data.id.value : this.id,
-      apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('GeminiApiKey(')
-          ..write('id: $id, ')
-          ..write('apiKey: $apiKey, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(id, apiKey, createdAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is GeminiApiKey &&
-          other.id == this.id &&
-          other.apiKey == this.apiKey &&
-          other.createdAt == this.createdAt);
-}
-
-class GeminiApiKeysCompanion extends UpdateCompanion<GeminiApiKey> {
-  final Value<int> id;
-  final Value<String> apiKey;
-  final Value<DateTime> createdAt;
-  const GeminiApiKeysCompanion({
-    this.id = const Value.absent(),
-    this.apiKey = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  GeminiApiKeysCompanion.insert({
-    this.id = const Value.absent(),
-    required String apiKey,
-    this.createdAt = const Value.absent(),
-  }) : apiKey = Value(apiKey);
-  static Insertable<GeminiApiKey> custom({
-    Expression<int>? id,
-    Expression<String>? apiKey,
-    Expression<DateTime>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (apiKey != null) 'api_key': apiKey,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  GeminiApiKeysCompanion copyWith(
-      {Value<int>? id, Value<String>? apiKey, Value<DateTime>? createdAt}) {
-    return GeminiApiKeysCompanion(
-      id: id ?? this.id,
-      apiKey: apiKey ?? this.apiKey,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (apiKey.present) {
-      map['api_key'] = Variable<String>(apiKey.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('GeminiApiKeysCompanion(')
-          ..write('id: $id, ')
-          ..write('apiKey: $apiKey, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $OpenAIConfigsTable extends OpenAIConfigs
-    with TableInfo<$OpenAIConfigsTable, OpenAIConfig> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $OpenAIConfigsTable(this.attachedDatabase, [this._alias]);
+  $ApiConfigsTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -1577,34 +1482,86 @@ class $OpenAIConfigsTable extends OpenAIConfigs
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
       'name', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _baseUrlMeta =
-      const VerificationMeta('baseUrl');
   @override
-  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
-      'base_url', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _apiKeyMeta = const VerificationMeta('apiKey');
-  @override
-  late final GeneratedColumn<String> apiKey = GeneratedColumn<String>(
-      'api_key', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+  late final GeneratedColumnWithTypeConverter<LlmType, String> apiType =
+      GeneratedColumn<String>('api_type', aliasedName, false,
+              type: DriftSqlType.string, requiredDuringInsert: true)
+          .withConverter<LlmType>($ApiConfigsTable.$converterapiType);
   static const VerificationMeta _modelMeta = const VerificationMeta('model');
   @override
   late final GeneratedColumn<String> model = GeneratedColumn<String>(
       'model', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _apiKeyMeta = const VerificationMeta('apiKey');
+  @override
+  late final GeneratedColumn<String> apiKey = GeneratedColumn<String>(
+      'api_key', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _baseUrlMeta =
+      const VerificationMeta('baseUrl');
+  @override
+  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
+      'base_url', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _useCustomTemperatureMeta =
+      const VerificationMeta('useCustomTemperature');
+  @override
+  late final GeneratedColumn<bool> useCustomTemperature = GeneratedColumn<bool>(
+      'use_custom_temperature', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("use_custom_temperature" IN (0, 1))'),
+      defaultValue: const Constant(false));
   static const VerificationMeta _temperatureMeta =
       const VerificationMeta('temperature');
   @override
   late final GeneratedColumn<double> temperature = GeneratedColumn<double>(
       'temperature', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
-  static const VerificationMeta _maxTokensMeta =
-      const VerificationMeta('maxTokens');
+  static const VerificationMeta _useCustomTopPMeta =
+      const VerificationMeta('useCustomTopP');
   @override
-  late final GeneratedColumn<int> maxTokens = GeneratedColumn<int>(
-      'max_tokens', aliasedName, true,
+  late final GeneratedColumn<bool> useCustomTopP = GeneratedColumn<bool>(
+      'use_custom_top_p', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("use_custom_top_p" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _topPMeta = const VerificationMeta('topP');
+  @override
+  late final GeneratedColumn<double> topP = GeneratedColumn<double>(
+      'top_p', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _useCustomTopKMeta =
+      const VerificationMeta('useCustomTopK');
+  @override
+  late final GeneratedColumn<bool> useCustomTopK = GeneratedColumn<bool>(
+      'use_custom_top_k', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("use_custom_top_k" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _topKMeta = const VerificationMeta('topK');
+  @override
+  late final GeneratedColumn<int> topK = GeneratedColumn<int>(
+      'top_k', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _maxOutputTokensMeta =
+      const VerificationMeta('maxOutputTokens');
+  @override
+  late final GeneratedColumn<int> maxOutputTokens = GeneratedColumn<int>(
+      'max_output_tokens', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>?, String>
+      stopSequences = GeneratedColumn<String>(
+              'stop_sequences', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<String>?>(
+              $ApiConfigsTable.$converterstopSequences);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -1625,11 +1582,18 @@ class $OpenAIConfigsTable extends OpenAIConfigs
   List<GeneratedColumn> get $columns => [
         id,
         name,
-        baseUrl,
-        apiKey,
+        apiType,
         model,
+        apiKey,
+        baseUrl,
+        useCustomTemperature,
         temperature,
-        maxTokens,
+        useCustomTopP,
+        topP,
+        useCustomTopK,
+        topK,
+        maxOutputTokens,
+        stopSequences,
         createdAt,
         updatedAt
       ];
@@ -1637,9 +1601,9 @@ class $OpenAIConfigsTable extends OpenAIConfigs
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'open_a_i_configs';
+  static const String $name = 'api_configs';
   @override
-  VerificationContext validateIntegrity(Insertable<OpenAIConfig> instance,
+  VerificationContext validateIntegrity(Insertable<ApiConfig> instance,
       {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
@@ -1652,23 +1616,25 @@ class $OpenAIConfigsTable extends OpenAIConfigs
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
-    if (data.containsKey('base_url')) {
-      context.handle(_baseUrlMeta,
-          baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta));
-    } else if (isInserting) {
-      context.missing(_baseUrlMeta);
-    }
-    if (data.containsKey('api_key')) {
-      context.handle(_apiKeyMeta,
-          apiKey.isAcceptableOrUnknown(data['api_key']!, _apiKeyMeta));
-    } else if (isInserting) {
-      context.missing(_apiKeyMeta);
-    }
     if (data.containsKey('model')) {
       context.handle(
           _modelMeta, model.isAcceptableOrUnknown(data['model']!, _modelMeta));
     } else if (isInserting) {
       context.missing(_modelMeta);
+    }
+    if (data.containsKey('api_key')) {
+      context.handle(_apiKeyMeta,
+          apiKey.isAcceptableOrUnknown(data['api_key']!, _apiKeyMeta));
+    }
+    if (data.containsKey('base_url')) {
+      context.handle(_baseUrlMeta,
+          baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta));
+    }
+    if (data.containsKey('use_custom_temperature')) {
+      context.handle(
+          _useCustomTemperatureMeta,
+          useCustomTemperature.isAcceptableOrUnknown(
+              data['use_custom_temperature']!, _useCustomTemperatureMeta));
     }
     if (data.containsKey('temperature')) {
       context.handle(
@@ -1676,9 +1642,31 @@ class $OpenAIConfigsTable extends OpenAIConfigs
           temperature.isAcceptableOrUnknown(
               data['temperature']!, _temperatureMeta));
     }
-    if (data.containsKey('max_tokens')) {
-      context.handle(_maxTokensMeta,
-          maxTokens.isAcceptableOrUnknown(data['max_tokens']!, _maxTokensMeta));
+    if (data.containsKey('use_custom_top_p')) {
+      context.handle(
+          _useCustomTopPMeta,
+          useCustomTopP.isAcceptableOrUnknown(
+              data['use_custom_top_p']!, _useCustomTopPMeta));
+    }
+    if (data.containsKey('top_p')) {
+      context.handle(
+          _topPMeta, topP.isAcceptableOrUnknown(data['top_p']!, _topPMeta));
+    }
+    if (data.containsKey('use_custom_top_k')) {
+      context.handle(
+          _useCustomTopKMeta,
+          useCustomTopK.isAcceptableOrUnknown(
+              data['use_custom_top_k']!, _useCustomTopKMeta));
+    }
+    if (data.containsKey('top_k')) {
+      context.handle(
+          _topKMeta, topK.isAcceptableOrUnknown(data['top_k']!, _topKMeta));
+    }
+    if (data.containsKey('max_output_tokens')) {
+      context.handle(
+          _maxOutputTokensMeta,
+          maxOutputTokens.isAcceptableOrUnknown(
+              data['max_output_tokens']!, _maxOutputTokensMeta));
     }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
@@ -1694,23 +1682,39 @@ class $OpenAIConfigsTable extends OpenAIConfigs
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  OpenAIConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
+  ApiConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return OpenAIConfig(
+    return ApiConfig(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
-      baseUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}base_url'])!,
-      apiKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}api_key'])!,
+      apiType: $ApiConfigsTable.$converterapiType.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}api_type'])!),
       model: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}model'])!,
+      apiKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}api_key']),
+      baseUrl: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}base_url']),
+      useCustomTemperature: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}use_custom_temperature'])!,
       temperature: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}temperature']),
-      maxTokens: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}max_tokens']),
+      useCustomTopP: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_p'])!,
+      topP: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}top_p']),
+      useCustomTopK: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_k'])!,
+      topK: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}top_k']),
+      maxOutputTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}max_output_tokens']),
+      stopSequences: $ApiConfigsTable.$converterstopSequences.fromSql(
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}stop_sequences'])),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -1719,29 +1723,48 @@ class $OpenAIConfigsTable extends OpenAIConfigs
   }
 
   @override
-  $OpenAIConfigsTable createAlias(String alias) {
-    return $OpenAIConfigsTable(attachedDatabase, alias);
+  $ApiConfigsTable createAlias(String alias) {
+    return $ApiConfigsTable(attachedDatabase, alias);
   }
+
+  static TypeConverter<LlmType, String> $converterapiType =
+      const LlmTypeConverter();
+  static TypeConverter<List<String>?, String?> $converterstopSequences =
+      const StringListConverter();
 }
 
-class OpenAIConfig extends DataClass implements Insertable<OpenAIConfig> {
+class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   final String id;
   final String name;
-  final String baseUrl;
-  final String apiKey;
+  final LlmType apiType;
   final String model;
+  final String? apiKey;
+  final String? baseUrl;
+  final bool useCustomTemperature;
   final double? temperature;
-  final int? maxTokens;
+  final bool useCustomTopP;
+  final double? topP;
+  final bool useCustomTopK;
+  final int? topK;
+  final int? maxOutputTokens;
+  final List<String>? stopSequences;
   final DateTime createdAt;
   final DateTime updatedAt;
-  const OpenAIConfig(
+  const ApiConfig(
       {required this.id,
       required this.name,
-      required this.baseUrl,
-      required this.apiKey,
+      required this.apiType,
       required this.model,
+      this.apiKey,
+      this.baseUrl,
+      required this.useCustomTemperature,
       this.temperature,
-      this.maxTokens,
+      required this.useCustomTopP,
+      this.topP,
+      required this.useCustomTopK,
+      this.topK,
+      this.maxOutputTokens,
+      this.stopSequences,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -1749,49 +1772,90 @@ class OpenAIConfig extends DataClass implements Insertable<OpenAIConfig> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
-    map['base_url'] = Variable<String>(baseUrl);
-    map['api_key'] = Variable<String>(apiKey);
+    {
+      map['api_type'] =
+          Variable<String>($ApiConfigsTable.$converterapiType.toSql(apiType));
+    }
     map['model'] = Variable<String>(model);
+    if (!nullToAbsent || apiKey != null) {
+      map['api_key'] = Variable<String>(apiKey);
+    }
+    if (!nullToAbsent || baseUrl != null) {
+      map['base_url'] = Variable<String>(baseUrl);
+    }
+    map['use_custom_temperature'] = Variable<bool>(useCustomTemperature);
     if (!nullToAbsent || temperature != null) {
       map['temperature'] = Variable<double>(temperature);
     }
-    if (!nullToAbsent || maxTokens != null) {
-      map['max_tokens'] = Variable<int>(maxTokens);
+    map['use_custom_top_p'] = Variable<bool>(useCustomTopP);
+    if (!nullToAbsent || topP != null) {
+      map['top_p'] = Variable<double>(topP);
+    }
+    map['use_custom_top_k'] = Variable<bool>(useCustomTopK);
+    if (!nullToAbsent || topK != null) {
+      map['top_k'] = Variable<int>(topK);
+    }
+    if (!nullToAbsent || maxOutputTokens != null) {
+      map['max_output_tokens'] = Variable<int>(maxOutputTokens);
+    }
+    if (!nullToAbsent || stopSequences != null) {
+      map['stop_sequences'] = Variable<String>(
+          $ApiConfigsTable.$converterstopSequences.toSql(stopSequences));
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
-  OpenAIConfigsCompanion toCompanion(bool nullToAbsent) {
-    return OpenAIConfigsCompanion(
+  ApiConfigsCompanion toCompanion(bool nullToAbsent) {
+    return ApiConfigsCompanion(
       id: Value(id),
       name: Value(name),
-      baseUrl: Value(baseUrl),
-      apiKey: Value(apiKey),
+      apiType: Value(apiType),
       model: Value(model),
+      apiKey:
+          apiKey == null && nullToAbsent ? const Value.absent() : Value(apiKey),
+      baseUrl: baseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseUrl),
+      useCustomTemperature: Value(useCustomTemperature),
       temperature: temperature == null && nullToAbsent
           ? const Value.absent()
           : Value(temperature),
-      maxTokens: maxTokens == null && nullToAbsent
+      useCustomTopP: Value(useCustomTopP),
+      topP: topP == null && nullToAbsent ? const Value.absent() : Value(topP),
+      useCustomTopK: Value(useCustomTopK),
+      topK: topK == null && nullToAbsent ? const Value.absent() : Value(topK),
+      maxOutputTokens: maxOutputTokens == null && nullToAbsent
           ? const Value.absent()
-          : Value(maxTokens),
+          : Value(maxOutputTokens),
+      stopSequences: stopSequences == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stopSequences),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
   }
 
-  factory OpenAIConfig.fromJson(Map<String, dynamic> json,
+  factory ApiConfig.fromJson(Map<String, dynamic> json,
       {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return OpenAIConfig(
+    return ApiConfig(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
-      baseUrl: serializer.fromJson<String>(json['baseUrl']),
-      apiKey: serializer.fromJson<String>(json['apiKey']),
+      apiType: serializer.fromJson<LlmType>(json['apiType']),
       model: serializer.fromJson<String>(json['model']),
+      apiKey: serializer.fromJson<String?>(json['apiKey']),
+      baseUrl: serializer.fromJson<String?>(json['baseUrl']),
+      useCustomTemperature:
+          serializer.fromJson<bool>(json['useCustomTemperature']),
       temperature: serializer.fromJson<double?>(json['temperature']),
-      maxTokens: serializer.fromJson<int?>(json['maxTokens']),
+      useCustomTopP: serializer.fromJson<bool>(json['useCustomTopP']),
+      topP: serializer.fromJson<double?>(json['topP']),
+      useCustomTopK: serializer.fromJson<bool>(json['useCustomTopK']),
+      topK: serializer.fromJson<int?>(json['topK']),
+      maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
+      stopSequences: serializer.fromJson<List<String>?>(json['stopSequences']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1802,47 +1866,88 @@ class OpenAIConfig extends DataClass implements Insertable<OpenAIConfig> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
-      'baseUrl': serializer.toJson<String>(baseUrl),
-      'apiKey': serializer.toJson<String>(apiKey),
+      'apiType': serializer.toJson<LlmType>(apiType),
       'model': serializer.toJson<String>(model),
+      'apiKey': serializer.toJson<String?>(apiKey),
+      'baseUrl': serializer.toJson<String?>(baseUrl),
+      'useCustomTemperature': serializer.toJson<bool>(useCustomTemperature),
       'temperature': serializer.toJson<double?>(temperature),
-      'maxTokens': serializer.toJson<int?>(maxTokens),
+      'useCustomTopP': serializer.toJson<bool>(useCustomTopP),
+      'topP': serializer.toJson<double?>(topP),
+      'useCustomTopK': serializer.toJson<bool>(useCustomTopK),
+      'topK': serializer.toJson<int?>(topK),
+      'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
+      'stopSequences': serializer.toJson<List<String>?>(stopSequences),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  OpenAIConfig copyWith(
+  ApiConfig copyWith(
           {String? id,
           String? name,
-          String? baseUrl,
-          String? apiKey,
+          LlmType? apiType,
           String? model,
+          Value<String?> apiKey = const Value.absent(),
+          Value<String?> baseUrl = const Value.absent(),
+          bool? useCustomTemperature,
           Value<double?> temperature = const Value.absent(),
-          Value<int?> maxTokens = const Value.absent(),
+          bool? useCustomTopP,
+          Value<double?> topP = const Value.absent(),
+          bool? useCustomTopK,
+          Value<int?> topK = const Value.absent(),
+          Value<int?> maxOutputTokens = const Value.absent(),
+          Value<List<String>?> stopSequences = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt}) =>
-      OpenAIConfig(
+      ApiConfig(
         id: id ?? this.id,
         name: name ?? this.name,
-        baseUrl: baseUrl ?? this.baseUrl,
-        apiKey: apiKey ?? this.apiKey,
+        apiType: apiType ?? this.apiType,
         model: model ?? this.model,
+        apiKey: apiKey.present ? apiKey.value : this.apiKey,
+        baseUrl: baseUrl.present ? baseUrl.value : this.baseUrl,
+        useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
         temperature: temperature.present ? temperature.value : this.temperature,
-        maxTokens: maxTokens.present ? maxTokens.value : this.maxTokens,
+        useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+        topP: topP.present ? topP.value : this.topP,
+        useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+        topK: topK.present ? topK.value : this.topK,
+        maxOutputTokens: maxOutputTokens.present
+            ? maxOutputTokens.value
+            : this.maxOutputTokens,
+        stopSequences:
+            stopSequences.present ? stopSequences.value : this.stopSequences,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
-  OpenAIConfig copyWithCompanion(OpenAIConfigsCompanion data) {
-    return OpenAIConfig(
+  ApiConfig copyWithCompanion(ApiConfigsCompanion data) {
+    return ApiConfig(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
-      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
-      apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
+      apiType: data.apiType.present ? data.apiType.value : this.apiType,
       model: data.model.present ? data.model.value : this.model,
+      apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
+      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
+      useCustomTemperature: data.useCustomTemperature.present
+          ? data.useCustomTemperature.value
+          : this.useCustomTemperature,
       temperature:
           data.temperature.present ? data.temperature.value : this.temperature,
-      maxTokens: data.maxTokens.present ? data.maxTokens.value : this.maxTokens,
+      useCustomTopP: data.useCustomTopP.present
+          ? data.useCustomTopP.value
+          : this.useCustomTopP,
+      topP: data.topP.present ? data.topP.value : this.topP,
+      useCustomTopK: data.useCustomTopK.present
+          ? data.useCustomTopK.value
+          : this.useCustomTopK,
+      topK: data.topK.present ? data.topK.value : this.topK,
+      maxOutputTokens: data.maxOutputTokens.present
+          ? data.maxOutputTokens.value
+          : this.maxOutputTokens,
+      stopSequences: data.stopSequences.present
+          ? data.stopSequences.value
+          : this.stopSequences,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1850,14 +1955,21 @@ class OpenAIConfig extends DataClass implements Insertable<OpenAIConfig> {
 
   @override
   String toString() {
-    return (StringBuffer('OpenAIConfig(')
+    return (StringBuffer('ApiConfig(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('baseUrl: $baseUrl, ')
-          ..write('apiKey: $apiKey, ')
+          ..write('apiType: $apiType, ')
           ..write('model: $model, ')
+          ..write('apiKey: $apiKey, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('useCustomTemperature: $useCustomTemperature, ')
           ..write('temperature: $temperature, ')
-          ..write('maxTokens: $maxTokens, ')
+          ..write('useCustomTopP: $useCustomTopP, ')
+          ..write('topP: $topP, ')
+          ..write('useCustomTopK: $useCustomTopK, ')
+          ..write('topK: $topK, ')
+          ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('stopSequences: $stopSequences, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1865,69 +1977,118 @@ class OpenAIConfig extends DataClass implements Insertable<OpenAIConfig> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, baseUrl, apiKey, model, temperature,
-      maxTokens, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      name,
+      apiType,
+      model,
+      apiKey,
+      baseUrl,
+      useCustomTemperature,
+      temperature,
+      useCustomTopP,
+      topP,
+      useCustomTopK,
+      topK,
+      maxOutputTokens,
+      stopSequences,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is OpenAIConfig &&
+      (other is ApiConfig &&
           other.id == this.id &&
           other.name == this.name &&
-          other.baseUrl == this.baseUrl &&
-          other.apiKey == this.apiKey &&
+          other.apiType == this.apiType &&
           other.model == this.model &&
+          other.apiKey == this.apiKey &&
+          other.baseUrl == this.baseUrl &&
+          other.useCustomTemperature == this.useCustomTemperature &&
           other.temperature == this.temperature &&
-          other.maxTokens == this.maxTokens &&
+          other.useCustomTopP == this.useCustomTopP &&
+          other.topP == this.topP &&
+          other.useCustomTopK == this.useCustomTopK &&
+          other.topK == this.topK &&
+          other.maxOutputTokens == this.maxOutputTokens &&
+          other.stopSequences == this.stopSequences &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
 
-class OpenAIConfigsCompanion extends UpdateCompanion<OpenAIConfig> {
+class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   final Value<String> id;
   final Value<String> name;
-  final Value<String> baseUrl;
-  final Value<String> apiKey;
+  final Value<LlmType> apiType;
   final Value<String> model;
+  final Value<String?> apiKey;
+  final Value<String?> baseUrl;
+  final Value<bool> useCustomTemperature;
   final Value<double?> temperature;
-  final Value<int?> maxTokens;
+  final Value<bool> useCustomTopP;
+  final Value<double?> topP;
+  final Value<bool> useCustomTopK;
+  final Value<int?> topK;
+  final Value<int?> maxOutputTokens;
+  final Value<List<String>?> stopSequences;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
-  const OpenAIConfigsCompanion({
+  const ApiConfigsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
-    this.baseUrl = const Value.absent(),
-    this.apiKey = const Value.absent(),
+    this.apiType = const Value.absent(),
     this.model = const Value.absent(),
+    this.apiKey = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.useCustomTemperature = const Value.absent(),
     this.temperature = const Value.absent(),
-    this.maxTokens = const Value.absent(),
+    this.useCustomTopP = const Value.absent(),
+    this.topP = const Value.absent(),
+    this.useCustomTopK = const Value.absent(),
+    this.topK = const Value.absent(),
+    this.maxOutputTokens = const Value.absent(),
+    this.stopSequences = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  OpenAIConfigsCompanion.insert({
+  ApiConfigsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
-    required String baseUrl,
-    required String apiKey,
+    required LlmType apiType,
     required String model,
+    this.apiKey = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.useCustomTemperature = const Value.absent(),
     this.temperature = const Value.absent(),
-    this.maxTokens = const Value.absent(),
+    this.useCustomTopP = const Value.absent(),
+    this.topP = const Value.absent(),
+    this.useCustomTopK = const Value.absent(),
+    this.topK = const Value.absent(),
+    this.maxOutputTokens = const Value.absent(),
+    this.stopSequences = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : name = Value(name),
-        baseUrl = Value(baseUrl),
-        apiKey = Value(apiKey),
+        apiType = Value(apiType),
         model = Value(model);
-  static Insertable<OpenAIConfig> custom({
+  static Insertable<ApiConfig> custom({
     Expression<String>? id,
     Expression<String>? name,
-    Expression<String>? baseUrl,
-    Expression<String>? apiKey,
+    Expression<String>? apiType,
     Expression<String>? model,
+    Expression<String>? apiKey,
+    Expression<String>? baseUrl,
+    Expression<bool>? useCustomTemperature,
     Expression<double>? temperature,
-    Expression<int>? maxTokens,
+    Expression<bool>? useCustomTopP,
+    Expression<double>? topP,
+    Expression<bool>? useCustomTopK,
+    Expression<int>? topK,
+    Expression<int>? maxOutputTokens,
+    Expression<String>? stopSequences,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1935,36 +2096,58 @@ class OpenAIConfigsCompanion extends UpdateCompanion<OpenAIConfig> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
-      if (baseUrl != null) 'base_url': baseUrl,
-      if (apiKey != null) 'api_key': apiKey,
+      if (apiType != null) 'api_type': apiType,
       if (model != null) 'model': model,
+      if (apiKey != null) 'api_key': apiKey,
+      if (baseUrl != null) 'base_url': baseUrl,
+      if (useCustomTemperature != null)
+        'use_custom_temperature': useCustomTemperature,
       if (temperature != null) 'temperature': temperature,
-      if (maxTokens != null) 'max_tokens': maxTokens,
+      if (useCustomTopP != null) 'use_custom_top_p': useCustomTopP,
+      if (topP != null) 'top_p': topP,
+      if (useCustomTopK != null) 'use_custom_top_k': useCustomTopK,
+      if (topK != null) 'top_k': topK,
+      if (maxOutputTokens != null) 'max_output_tokens': maxOutputTokens,
+      if (stopSequences != null) 'stop_sequences': stopSequences,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  OpenAIConfigsCompanion copyWith(
+  ApiConfigsCompanion copyWith(
       {Value<String>? id,
       Value<String>? name,
-      Value<String>? baseUrl,
-      Value<String>? apiKey,
+      Value<LlmType>? apiType,
       Value<String>? model,
+      Value<String?>? apiKey,
+      Value<String?>? baseUrl,
+      Value<bool>? useCustomTemperature,
       Value<double?>? temperature,
-      Value<int?>? maxTokens,
+      Value<bool>? useCustomTopP,
+      Value<double?>? topP,
+      Value<bool>? useCustomTopK,
+      Value<int?>? topK,
+      Value<int?>? maxOutputTokens,
+      Value<List<String>?>? stopSequences,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
-    return OpenAIConfigsCompanion(
+    return ApiConfigsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
-      baseUrl: baseUrl ?? this.baseUrl,
-      apiKey: apiKey ?? this.apiKey,
+      apiType: apiType ?? this.apiType,
       model: model ?? this.model,
+      apiKey: apiKey ?? this.apiKey,
+      baseUrl: baseUrl ?? this.baseUrl,
+      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
       temperature: temperature ?? this.temperature,
-      maxTokens: maxTokens ?? this.maxTokens,
+      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+      topP: topP ?? this.topP,
+      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+      topK: topK ?? this.topK,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      stopSequences: stopSequences ?? this.stopSequences,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1980,20 +2163,44 @@ class OpenAIConfigsCompanion extends UpdateCompanion<OpenAIConfig> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
-    if (baseUrl.present) {
-      map['base_url'] = Variable<String>(baseUrl.value);
-    }
-    if (apiKey.present) {
-      map['api_key'] = Variable<String>(apiKey.value);
+    if (apiType.present) {
+      map['api_type'] = Variable<String>(
+          $ApiConfigsTable.$converterapiType.toSql(apiType.value));
     }
     if (model.present) {
       map['model'] = Variable<String>(model.value);
     }
+    if (apiKey.present) {
+      map['api_key'] = Variable<String>(apiKey.value);
+    }
+    if (baseUrl.present) {
+      map['base_url'] = Variable<String>(baseUrl.value);
+    }
+    if (useCustomTemperature.present) {
+      map['use_custom_temperature'] =
+          Variable<bool>(useCustomTemperature.value);
+    }
     if (temperature.present) {
       map['temperature'] = Variable<double>(temperature.value);
     }
-    if (maxTokens.present) {
-      map['max_tokens'] = Variable<int>(maxTokens.value);
+    if (useCustomTopP.present) {
+      map['use_custom_top_p'] = Variable<bool>(useCustomTopP.value);
+    }
+    if (topP.present) {
+      map['top_p'] = Variable<double>(topP.value);
+    }
+    if (useCustomTopK.present) {
+      map['use_custom_top_k'] = Variable<bool>(useCustomTopK.value);
+    }
+    if (topK.present) {
+      map['top_k'] = Variable<int>(topK.value);
+    }
+    if (maxOutputTokens.present) {
+      map['max_output_tokens'] = Variable<int>(maxOutputTokens.value);
+    }
+    if (stopSequences.present) {
+      map['stop_sequences'] = Variable<String>(
+          $ApiConfigsTable.$converterstopSequences.toSql(stopSequences.value));
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2009,14 +2216,21 @@ class OpenAIConfigsCompanion extends UpdateCompanion<OpenAIConfig> {
 
   @override
   String toString() {
-    return (StringBuffer('OpenAIConfigsCompanion(')
+    return (StringBuffer('ApiConfigsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
-          ..write('baseUrl: $baseUrl, ')
-          ..write('apiKey: $apiKey, ')
+          ..write('apiType: $apiType, ')
           ..write('model: $model, ')
+          ..write('apiKey: $apiKey, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('useCustomTemperature: $useCustomTemperature, ')
           ..write('temperature: $temperature, ')
-          ..write('maxTokens: $maxTokens, ')
+          ..write('useCustomTopP: $useCustomTopP, ')
+          ..write('topP: $topP, ')
+          ..write('useCustomTopK: $useCustomTopK, ')
+          ..write('topK: $topK, ')
+          ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('stopSequences: $stopSequences, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -2030,8 +2244,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ChatsTable chats = $ChatsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
-  late final $GeminiApiKeysTable geminiApiKeys = $GeminiApiKeysTable(this);
-  late final $OpenAIConfigsTable openAIConfigs = $OpenAIConfigsTable(this);
+  late final $ApiConfigsTable apiConfigs = $ApiConfigsTable(this);
   late final ChatDao chatDao = ChatDao(this as AppDatabase);
   late final MessageDao messageDao = MessageDao(this as AppDatabase);
   late final ApiConfigDao apiConfigDao = ApiConfigDao(this as AppDatabase);
@@ -2040,7 +2253,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [chats, messages, geminiApiKeys, openAIConfigs];
+      [chats, messages, apiConfigs];
 }
 
 typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
@@ -2054,16 +2267,17 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<int?> orderIndex,
   Value<bool> isFolder,
   Value<int?> parentFolderId,
-  required DriftGenerationConfig generationConfig,
   required DriftContextConfig contextConfig,
   required List<DriftXmlRule> xmlRules,
-  required LlmType apiType,
-  Value<String?> selectedOpenAIConfigId,
-  Value<bool> enablePreprocessing,
+  Value<String?> apiConfigId,
+  Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
-  Value<bool> enablePostprocessing,
-  Value<String?> postprocessingPrompt,
+  Value<String?> preprocessingApiConfigId,
+  Value<bool?> enableSecondaryXml,
+  Value<String?> secondaryXmlPrompt,
+  Value<String?> secondaryXmlApiConfigId,
+  Value<String?> continuePrompt,
 });
 typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<int> id,
@@ -2076,16 +2290,17 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<int?> orderIndex,
   Value<bool> isFolder,
   Value<int?> parentFolderId,
-  Value<DriftGenerationConfig> generationConfig,
   Value<DriftContextConfig> contextConfig,
   Value<List<DriftXmlRule>> xmlRules,
-  Value<LlmType> apiType,
-  Value<String?> selectedOpenAIConfigId,
-  Value<bool> enablePreprocessing,
+  Value<String?> apiConfigId,
+  Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
-  Value<bool> enablePostprocessing,
-  Value<String?> postprocessingPrompt,
+  Value<String?> preprocessingApiConfigId,
+  Value<bool?> enableSecondaryXml,
+  Value<String?> secondaryXmlPrompt,
+  Value<String?> secondaryXmlApiConfigId,
+  Value<String?> continuePrompt,
 });
 
 final class $$ChatsTableReferences
@@ -2148,12 +2363,6 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
       column: $table.parentFolderId,
       builder: (column) => ColumnFilters(column));
 
-  ColumnWithTypeConverterFilters<DriftGenerationConfig, DriftGenerationConfig,
-          String>
-      get generationConfig => $composableBuilder(
-          column: $table.generationConfig,
-          builder: (column) => ColumnWithTypeConverterFilters(column));
-
   ColumnWithTypeConverterFilters<DriftContextConfig, DriftContextConfig, String>
       get contextConfig => $composableBuilder(
           column: $table.contextConfig,
@@ -2164,14 +2373,8 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
           column: $table.xmlRules,
           builder: (column) => ColumnWithTypeConverterFilters(column));
 
-  ColumnWithTypeConverterFilters<LlmType, LlmType, String> get apiType =>
-      $composableBuilder(
-          column: $table.apiType,
-          builder: (column) => ColumnWithTypeConverterFilters(column));
-
-  ColumnFilters<String> get selectedOpenAIConfigId => $composableBuilder(
-      column: $table.selectedOpenAIConfigId,
-      builder: (column) => ColumnFilters(column));
+  ColumnFilters<String> get apiConfigId => $composableBuilder(
+      column: $table.apiConfigId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing,
@@ -2185,12 +2388,24 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
       column: $table.contextSummary,
       builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<bool> get enablePostprocessing => $composableBuilder(
-      column: $table.enablePostprocessing,
+  ColumnFilters<String> get preprocessingApiConfigId => $composableBuilder(
+      column: $table.preprocessingApiConfigId,
       builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get postprocessingPrompt => $composableBuilder(
-      column: $table.postprocessingPrompt,
+  ColumnFilters<bool> get enableSecondaryXml => $composableBuilder(
+      column: $table.enableSecondaryXml,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get secondaryXmlPrompt => $composableBuilder(
+      column: $table.secondaryXmlPrompt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get secondaryXmlApiConfigId => $composableBuilder(
+      column: $table.secondaryXmlApiConfigId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get continuePrompt => $composableBuilder(
+      column: $table.continuePrompt,
       builder: (column) => ColumnFilters(column));
 
   Expression<bool> messagesRefs(
@@ -2258,10 +2473,6 @@ class $$ChatsTableOrderingComposer
       column: $table.parentFolderId,
       builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get generationConfig => $composableBuilder(
-      column: $table.generationConfig,
-      builder: (column) => ColumnOrderings(column));
-
   ColumnOrderings<String> get contextConfig => $composableBuilder(
       column: $table.contextConfig,
       builder: (column) => ColumnOrderings(column));
@@ -2269,12 +2480,8 @@ class $$ChatsTableOrderingComposer
   ColumnOrderings<String> get xmlRules => $composableBuilder(
       column: $table.xmlRules, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get apiType => $composableBuilder(
-      column: $table.apiType, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get selectedOpenAIConfigId => $composableBuilder(
-      column: $table.selectedOpenAIConfigId,
-      builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get apiConfigId => $composableBuilder(
+      column: $table.apiConfigId, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing,
@@ -2288,12 +2495,24 @@ class $$ChatsTableOrderingComposer
       column: $table.contextSummary,
       builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<bool> get enablePostprocessing => $composableBuilder(
-      column: $table.enablePostprocessing,
+  ColumnOrderings<String> get preprocessingApiConfigId => $composableBuilder(
+      column: $table.preprocessingApiConfigId,
       builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get postprocessingPrompt => $composableBuilder(
-      column: $table.postprocessingPrompt,
+  ColumnOrderings<bool> get enableSecondaryXml => $composableBuilder(
+      column: $table.enableSecondaryXml,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get secondaryXmlPrompt => $composableBuilder(
+      column: $table.secondaryXmlPrompt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get secondaryXmlApiConfigId => $composableBuilder(
+      column: $table.secondaryXmlApiConfigId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get continuePrompt => $composableBuilder(
+      column: $table.continuePrompt,
       builder: (column) => ColumnOrderings(column));
 }
 
@@ -2336,10 +2555,6 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumn<int> get parentFolderId => $composableBuilder(
       column: $table.parentFolderId, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<DriftGenerationConfig, String>
-      get generationConfig => $composableBuilder(
-          column: $table.generationConfig, builder: (column) => column);
-
   GeneratedColumnWithTypeConverter<DriftContextConfig, String>
       get contextConfig => $composableBuilder(
           column: $table.contextConfig, builder: (column) => column);
@@ -2347,11 +2562,8 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumnWithTypeConverter<List<DriftXmlRule>, String> get xmlRules =>
       $composableBuilder(column: $table.xmlRules, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<LlmType, String> get apiType =>
-      $composableBuilder(column: $table.apiType, builder: (column) => column);
-
-  GeneratedColumn<String> get selectedOpenAIConfigId => $composableBuilder(
-      column: $table.selectedOpenAIConfigId, builder: (column) => column);
+  GeneratedColumn<String> get apiConfigId => $composableBuilder(
+      column: $table.apiConfigId, builder: (column) => column);
 
   GeneratedColumn<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing, builder: (column) => column);
@@ -2362,11 +2574,20 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumn<String> get contextSummary => $composableBuilder(
       column: $table.contextSummary, builder: (column) => column);
 
-  GeneratedColumn<bool> get enablePostprocessing => $composableBuilder(
-      column: $table.enablePostprocessing, builder: (column) => column);
+  GeneratedColumn<String> get preprocessingApiConfigId => $composableBuilder(
+      column: $table.preprocessingApiConfigId, builder: (column) => column);
 
-  GeneratedColumn<String> get postprocessingPrompt => $composableBuilder(
-      column: $table.postprocessingPrompt, builder: (column) => column);
+  GeneratedColumn<bool> get enableSecondaryXml => $composableBuilder(
+      column: $table.enableSecondaryXml, builder: (column) => column);
+
+  GeneratedColumn<String> get secondaryXmlPrompt => $composableBuilder(
+      column: $table.secondaryXmlPrompt, builder: (column) => column);
+
+  GeneratedColumn<String> get secondaryXmlApiConfigId => $composableBuilder(
+      column: $table.secondaryXmlApiConfigId, builder: (column) => column);
+
+  GeneratedColumn<String> get continuePrompt => $composableBuilder(
+      column: $table.continuePrompt, builder: (column) => column);
 
   Expression<T> messagesRefs<T extends Object>(
       Expression<T> Function($$MessagesTableAnnotationComposer a) f) {
@@ -2423,17 +2644,17 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<int?> orderIndex = const Value.absent(),
             Value<bool> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
-            Value<DriftGenerationConfig> generationConfig =
-                const Value.absent(),
             Value<DriftContextConfig> contextConfig = const Value.absent(),
             Value<List<DriftXmlRule>> xmlRules = const Value.absent(),
-            Value<LlmType> apiType = const Value.absent(),
-            Value<String?> selectedOpenAIConfigId = const Value.absent(),
-            Value<bool> enablePreprocessing = const Value.absent(),
+            Value<String?> apiConfigId = const Value.absent(),
+            Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
-            Value<bool> enablePostprocessing = const Value.absent(),
-            Value<String?> postprocessingPrompt = const Value.absent(),
+            Value<String?> preprocessingApiConfigId = const Value.absent(),
+            Value<bool?> enableSecondaryXml = const Value.absent(),
+            Value<String?> secondaryXmlPrompt = const Value.absent(),
+            Value<String?> secondaryXmlApiConfigId = const Value.absent(),
+            Value<String?> continuePrompt = const Value.absent(),
           }) =>
               ChatsCompanion(
             id: id,
@@ -2446,16 +2667,17 @@ class $$ChatsTableTableManager extends RootTableManager<
             orderIndex: orderIndex,
             isFolder: isFolder,
             parentFolderId: parentFolderId,
-            generationConfig: generationConfig,
             contextConfig: contextConfig,
             xmlRules: xmlRules,
-            apiType: apiType,
-            selectedOpenAIConfigId: selectedOpenAIConfigId,
+            apiConfigId: apiConfigId,
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,
-            enablePostprocessing: enablePostprocessing,
-            postprocessingPrompt: postprocessingPrompt,
+            preprocessingApiConfigId: preprocessingApiConfigId,
+            enableSecondaryXml: enableSecondaryXml,
+            secondaryXmlPrompt: secondaryXmlPrompt,
+            secondaryXmlApiConfigId: secondaryXmlApiConfigId,
+            continuePrompt: continuePrompt,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -2468,16 +2690,17 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<int?> orderIndex = const Value.absent(),
             Value<bool> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
-            required DriftGenerationConfig generationConfig,
             required DriftContextConfig contextConfig,
             required List<DriftXmlRule> xmlRules,
-            required LlmType apiType,
-            Value<String?> selectedOpenAIConfigId = const Value.absent(),
-            Value<bool> enablePreprocessing = const Value.absent(),
+            Value<String?> apiConfigId = const Value.absent(),
+            Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
-            Value<bool> enablePostprocessing = const Value.absent(),
-            Value<String?> postprocessingPrompt = const Value.absent(),
+            Value<String?> preprocessingApiConfigId = const Value.absent(),
+            Value<bool?> enableSecondaryXml = const Value.absent(),
+            Value<String?> secondaryXmlPrompt = const Value.absent(),
+            Value<String?> secondaryXmlApiConfigId = const Value.absent(),
+            Value<String?> continuePrompt = const Value.absent(),
           }) =>
               ChatsCompanion.insert(
             id: id,
@@ -2490,16 +2713,17 @@ class $$ChatsTableTableManager extends RootTableManager<
             orderIndex: orderIndex,
             isFolder: isFolder,
             parentFolderId: parentFolderId,
-            generationConfig: generationConfig,
             contextConfig: contextConfig,
             xmlRules: xmlRules,
-            apiType: apiType,
-            selectedOpenAIConfigId: selectedOpenAIConfigId,
+            apiConfigId: apiConfigId,
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,
-            enablePostprocessing: enablePostprocessing,
-            postprocessingPrompt: postprocessingPrompt,
+            preprocessingApiConfigId: preprocessingApiConfigId,
+            enableSecondaryXml: enableSecondaryXml,
+            secondaryXmlPrompt: secondaryXmlPrompt,
+            secondaryXmlApiConfigId: secondaryXmlApiConfigId,
+            continuePrompt: continuePrompt,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -2550,6 +2774,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required MessageRole role,
   required DateTime timestamp,
   Value<String?> originalXmlContent,
+  Value<String?> secondaryXmlContent,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -2558,6 +2783,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<MessageRole> role,
   Value<DateTime> timestamp,
   Value<String?> originalXmlContent,
+  Value<String?> secondaryXmlContent,
 });
 
 final class $$MessagesTableReferences
@@ -2606,6 +2832,10 @@ class $$MessagesTableFilterComposer
       column: $table.originalXmlContent,
       builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get secondaryXmlContent => $composableBuilder(
+      column: $table.secondaryXmlContent,
+      builder: (column) => ColumnFilters(column));
+
   $$ChatsTableFilterComposer get chatId {
     final $$ChatsTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -2652,6 +2882,10 @@ class $$MessagesTableOrderingComposer
       column: $table.originalXmlContent,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get secondaryXmlContent => $composableBuilder(
+      column: $table.secondaryXmlContent,
+      builder: (column) => ColumnOrderings(column));
+
   $$ChatsTableOrderingComposer get chatId {
     final $$ChatsTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -2696,6 +2930,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get originalXmlContent => $composableBuilder(
       column: $table.originalXmlContent, builder: (column) => column);
+
+  GeneratedColumn<String> get secondaryXmlContent => $composableBuilder(
+      column: $table.secondaryXmlContent, builder: (column) => column);
 
   $$ChatsTableAnnotationComposer get chatId {
     final $$ChatsTableAnnotationComposer composer = $composerBuilder(
@@ -2747,6 +2984,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<MessageRole> role = const Value.absent(),
             Value<DateTime> timestamp = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
+            Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
               MessagesCompanion(
             id: id,
@@ -2755,6 +2993,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             role: role,
             timestamp: timestamp,
             originalXmlContent: originalXmlContent,
+            secondaryXmlContent: secondaryXmlContent,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -2763,6 +3002,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             required MessageRole role,
             required DateTime timestamp,
             Value<String?> originalXmlContent = const Value.absent(),
+            Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
               MessagesCompanion.insert(
             id: id,
@@ -2771,6 +3011,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             role: role,
             timestamp: timestamp,
             originalXmlContent: originalXmlContent,
+            secondaryXmlContent: secondaryXmlContent,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -2825,173 +3066,48 @@ typedef $$MessagesTableProcessedTableManager = ProcessedTableManager<
     (MessageData, $$MessagesTableReferences),
     MessageData,
     PrefetchHooks Function({bool chatId})>;
-typedef $$GeminiApiKeysTableCreateCompanionBuilder = GeminiApiKeysCompanion
-    Function({
-  Value<int> id,
-  required String apiKey,
-  Value<DateTime> createdAt,
-});
-typedef $$GeminiApiKeysTableUpdateCompanionBuilder = GeminiApiKeysCompanion
-    Function({
-  Value<int> id,
-  Value<String> apiKey,
-  Value<DateTime> createdAt,
-});
-
-class $$GeminiApiKeysTableFilterComposer
-    extends Composer<_$AppDatabase, $GeminiApiKeysTable> {
-  $$GeminiApiKeysTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get apiKey => $composableBuilder(
-      column: $table.apiKey, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnFilters(column));
-}
-
-class $$GeminiApiKeysTableOrderingComposer
-    extends Composer<_$AppDatabase, $GeminiApiKeysTable> {
-  $$GeminiApiKeysTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get apiKey => $composableBuilder(
-      column: $table.apiKey, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
-}
-
-class $$GeminiApiKeysTableAnnotationComposer
-    extends Composer<_$AppDatabase, $GeminiApiKeysTable> {
-  $$GeminiApiKeysTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get apiKey =>
-      $composableBuilder(column: $table.apiKey, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-}
-
-class $$GeminiApiKeysTableTableManager extends RootTableManager<
-    _$AppDatabase,
-    $GeminiApiKeysTable,
-    GeminiApiKey,
-    $$GeminiApiKeysTableFilterComposer,
-    $$GeminiApiKeysTableOrderingComposer,
-    $$GeminiApiKeysTableAnnotationComposer,
-    $$GeminiApiKeysTableCreateCompanionBuilder,
-    $$GeminiApiKeysTableUpdateCompanionBuilder,
-    (
-      GeminiApiKey,
-      BaseReferences<_$AppDatabase, $GeminiApiKeysTable, GeminiApiKey>
-    ),
-    GeminiApiKey,
-    PrefetchHooks Function()> {
-  $$GeminiApiKeysTableTableManager(_$AppDatabase db, $GeminiApiKeysTable table)
-      : super(TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$GeminiApiKeysTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$GeminiApiKeysTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$GeminiApiKeysTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> apiKey = const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-          }) =>
-              GeminiApiKeysCompanion(
-            id: id,
-            apiKey: apiKey,
-            createdAt: createdAt,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String apiKey,
-            Value<DateTime> createdAt = const Value.absent(),
-          }) =>
-              GeminiApiKeysCompanion.insert(
-            id: id,
-            apiKey: apiKey,
-            createdAt: createdAt,
-          ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ));
-}
-
-typedef $$GeminiApiKeysTableProcessedTableManager = ProcessedTableManager<
-    _$AppDatabase,
-    $GeminiApiKeysTable,
-    GeminiApiKey,
-    $$GeminiApiKeysTableFilterComposer,
-    $$GeminiApiKeysTableOrderingComposer,
-    $$GeminiApiKeysTableAnnotationComposer,
-    $$GeminiApiKeysTableCreateCompanionBuilder,
-    $$GeminiApiKeysTableUpdateCompanionBuilder,
-    (
-      GeminiApiKey,
-      BaseReferences<_$AppDatabase, $GeminiApiKeysTable, GeminiApiKey>
-    ),
-    GeminiApiKey,
-    PrefetchHooks Function()>;
-typedef $$OpenAIConfigsTableCreateCompanionBuilder = OpenAIConfigsCompanion
-    Function({
+typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
   Value<String> id,
   required String name,
-  required String baseUrl,
-  required String apiKey,
+  required LlmType apiType,
   required String model,
+  Value<String?> apiKey,
+  Value<String?> baseUrl,
+  Value<bool> useCustomTemperature,
   Value<double?> temperature,
-  Value<int?> maxTokens,
+  Value<bool> useCustomTopP,
+  Value<double?> topP,
+  Value<bool> useCustomTopK,
+  Value<int?> topK,
+  Value<int?> maxOutputTokens,
+  Value<List<String>?> stopSequences,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
-typedef $$OpenAIConfigsTableUpdateCompanionBuilder = OpenAIConfigsCompanion
-    Function({
+typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
   Value<String> id,
   Value<String> name,
-  Value<String> baseUrl,
-  Value<String> apiKey,
+  Value<LlmType> apiType,
   Value<String> model,
+  Value<String?> apiKey,
+  Value<String?> baseUrl,
+  Value<bool> useCustomTemperature,
   Value<double?> temperature,
-  Value<int?> maxTokens,
+  Value<bool> useCustomTopP,
+  Value<double?> topP,
+  Value<bool> useCustomTopK,
+  Value<int?> topK,
+  Value<int?> maxOutputTokens,
+  Value<List<String>?> stopSequences,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
 
-class $$OpenAIConfigsTableFilterComposer
-    extends Composer<_$AppDatabase, $OpenAIConfigsTable> {
-  $$OpenAIConfigsTableFilterComposer({
+class $$ApiConfigsTableFilterComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3004,20 +3120,47 @@ class $$OpenAIConfigsTableFilterComposer
   ColumnFilters<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get baseUrl => $composableBuilder(
-      column: $table.baseUrl, builder: (column) => ColumnFilters(column));
-
-  ColumnFilters<String> get apiKey => $composableBuilder(
-      column: $table.apiKey, builder: (column) => ColumnFilters(column));
+  ColumnWithTypeConverterFilters<LlmType, LlmType, String> get apiType =>
+      $composableBuilder(
+          column: $table.apiType,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<String> get model => $composableBuilder(
       column: $table.model, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get apiKey => $composableBuilder(
+      column: $table.apiKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get baseUrl => $composableBuilder(
+      column: $table.baseUrl, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get useCustomTemperature => $composableBuilder(
+      column: $table.useCustomTemperature,
+      builder: (column) => ColumnFilters(column));
+
   ColumnFilters<double> get temperature => $composableBuilder(
       column: $table.temperature, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<int> get maxTokens => $composableBuilder(
-      column: $table.maxTokens, builder: (column) => ColumnFilters(column));
+  ColumnFilters<bool> get useCustomTopP => $composableBuilder(
+      column: $table.useCustomTopP, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get topP => $composableBuilder(
+      column: $table.topP, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get useCustomTopK => $composableBuilder(
+      column: $table.useCustomTopK, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get topK => $composableBuilder(
+      column: $table.topK, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxOutputTokens => $composableBuilder(
+      column: $table.maxOutputTokens,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
+      get stopSequences => $composableBuilder(
+          column: $table.stopSequences,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -3026,9 +3169,9 @@ class $$OpenAIConfigsTableFilterComposer
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 }
 
-class $$OpenAIConfigsTableOrderingComposer
-    extends Composer<_$AppDatabase, $OpenAIConfigsTable> {
-  $$OpenAIConfigsTableOrderingComposer({
+class $$ApiConfigsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3041,20 +3184,46 @@ class $$OpenAIConfigsTableOrderingComposer
   ColumnOrderings<String> get name => $composableBuilder(
       column: $table.name, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get baseUrl => $composableBuilder(
-      column: $table.baseUrl, builder: (column) => ColumnOrderings(column));
-
-  ColumnOrderings<String> get apiKey => $composableBuilder(
-      column: $table.apiKey, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get apiType => $composableBuilder(
+      column: $table.apiType, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get model => $composableBuilder(
       column: $table.model, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get apiKey => $composableBuilder(
+      column: $table.apiKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get baseUrl => $composableBuilder(
+      column: $table.baseUrl, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get useCustomTemperature => $composableBuilder(
+      column: $table.useCustomTemperature,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<double> get temperature => $composableBuilder(
       column: $table.temperature, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<int> get maxTokens => $composableBuilder(
-      column: $table.maxTokens, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<bool> get useCustomTopP => $composableBuilder(
+      column: $table.useCustomTopP,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get topP => $composableBuilder(
+      column: $table.topP, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get useCustomTopK => $composableBuilder(
+      column: $table.useCustomTopK,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get topK => $composableBuilder(
+      column: $table.topK, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get maxOutputTokens => $composableBuilder(
+      column: $table.maxOutputTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stopSequences => $composableBuilder(
+      column: $table.stopSequences,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
@@ -3063,9 +3232,9 @@ class $$OpenAIConfigsTableOrderingComposer
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
 
-class $$OpenAIConfigsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $OpenAIConfigsTable> {
-  $$OpenAIConfigsTableAnnotationComposer({
+class $$ApiConfigsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -3078,20 +3247,42 @@ class $$OpenAIConfigsTableAnnotationComposer
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
-  GeneratedColumn<String> get baseUrl =>
-      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
-
-  GeneratedColumn<String> get apiKey =>
-      $composableBuilder(column: $table.apiKey, builder: (column) => column);
+  GeneratedColumnWithTypeConverter<LlmType, String> get apiType =>
+      $composableBuilder(column: $table.apiType, builder: (column) => column);
 
   GeneratedColumn<String> get model =>
       $composableBuilder(column: $table.model, builder: (column) => column);
 
+  GeneratedColumn<String> get apiKey =>
+      $composableBuilder(column: $table.apiKey, builder: (column) => column);
+
+  GeneratedColumn<String> get baseUrl =>
+      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
+
+  GeneratedColumn<bool> get useCustomTemperature => $composableBuilder(
+      column: $table.useCustomTemperature, builder: (column) => column);
+
   GeneratedColumn<double> get temperature => $composableBuilder(
       column: $table.temperature, builder: (column) => column);
 
-  GeneratedColumn<int> get maxTokens =>
-      $composableBuilder(column: $table.maxTokens, builder: (column) => column);
+  GeneratedColumn<bool> get useCustomTopP => $composableBuilder(
+      column: $table.useCustomTopP, builder: (column) => column);
+
+  GeneratedColumn<double> get topP =>
+      $composableBuilder(column: $table.topP, builder: (column) => column);
+
+  GeneratedColumn<bool> get useCustomTopK => $composableBuilder(
+      column: $table.useCustomTopK, builder: (column) => column);
+
+  GeneratedColumn<int> get topK =>
+      $composableBuilder(column: $table.topK, builder: (column) => column);
+
+  GeneratedColumn<int> get maxOutputTokens => $composableBuilder(
+      column: $table.maxOutputTokens, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<List<String>?, String> get stopSequences =>
+      $composableBuilder(
+          column: $table.stopSequences, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -3100,51 +3291,62 @@ class $$OpenAIConfigsTableAnnotationComposer
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
-class $$OpenAIConfigsTableTableManager extends RootTableManager<
+class $$ApiConfigsTableTableManager extends RootTableManager<
     _$AppDatabase,
-    $OpenAIConfigsTable,
-    OpenAIConfig,
-    $$OpenAIConfigsTableFilterComposer,
-    $$OpenAIConfigsTableOrderingComposer,
-    $$OpenAIConfigsTableAnnotationComposer,
-    $$OpenAIConfigsTableCreateCompanionBuilder,
-    $$OpenAIConfigsTableUpdateCompanionBuilder,
-    (
-      OpenAIConfig,
-      BaseReferences<_$AppDatabase, $OpenAIConfigsTable, OpenAIConfig>
-    ),
-    OpenAIConfig,
+    $ApiConfigsTable,
+    ApiConfig,
+    $$ApiConfigsTableFilterComposer,
+    $$ApiConfigsTableOrderingComposer,
+    $$ApiConfigsTableAnnotationComposer,
+    $$ApiConfigsTableCreateCompanionBuilder,
+    $$ApiConfigsTableUpdateCompanionBuilder,
+    (ApiConfig, BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig>),
+    ApiConfig,
     PrefetchHooks Function()> {
-  $$OpenAIConfigsTableTableManager(_$AppDatabase db, $OpenAIConfigsTable table)
+  $$ApiConfigsTableTableManager(_$AppDatabase db, $ApiConfigsTable table)
       : super(TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$OpenAIConfigsTableFilterComposer($db: db, $table: table),
+              $$ApiConfigsTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$OpenAIConfigsTableOrderingComposer($db: db, $table: table),
+              $$ApiConfigsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$OpenAIConfigsTableAnnotationComposer($db: db, $table: table),
+              $$ApiConfigsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<String> id = const Value.absent(),
             Value<String> name = const Value.absent(),
-            Value<String> baseUrl = const Value.absent(),
-            Value<String> apiKey = const Value.absent(),
+            Value<LlmType> apiType = const Value.absent(),
             Value<String> model = const Value.absent(),
+            Value<String?> apiKey = const Value.absent(),
+            Value<String?> baseUrl = const Value.absent(),
+            Value<bool> useCustomTemperature = const Value.absent(),
             Value<double?> temperature = const Value.absent(),
-            Value<int?> maxTokens = const Value.absent(),
+            Value<bool> useCustomTopP = const Value.absent(),
+            Value<double?> topP = const Value.absent(),
+            Value<bool> useCustomTopK = const Value.absent(),
+            Value<int?> topK = const Value.absent(),
+            Value<int?> maxOutputTokens = const Value.absent(),
+            Value<List<String>?> stopSequences = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
-              OpenAIConfigsCompanion(
+              ApiConfigsCompanion(
             id: id,
             name: name,
-            baseUrl: baseUrl,
-            apiKey: apiKey,
+            apiType: apiType,
             model: model,
+            apiKey: apiKey,
+            baseUrl: baseUrl,
+            useCustomTemperature: useCustomTemperature,
             temperature: temperature,
-            maxTokens: maxTokens,
+            useCustomTopP: useCustomTopP,
+            topP: topP,
+            useCustomTopK: useCustomTopK,
+            topK: topK,
+            maxOutputTokens: maxOutputTokens,
+            stopSequences: stopSequences,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -3152,23 +3354,37 @@ class $$OpenAIConfigsTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<String> id = const Value.absent(),
             required String name,
-            required String baseUrl,
-            required String apiKey,
+            required LlmType apiType,
             required String model,
+            Value<String?> apiKey = const Value.absent(),
+            Value<String?> baseUrl = const Value.absent(),
+            Value<bool> useCustomTemperature = const Value.absent(),
             Value<double?> temperature = const Value.absent(),
-            Value<int?> maxTokens = const Value.absent(),
+            Value<bool> useCustomTopP = const Value.absent(),
+            Value<double?> topP = const Value.absent(),
+            Value<bool> useCustomTopK = const Value.absent(),
+            Value<int?> topK = const Value.absent(),
+            Value<int?> maxOutputTokens = const Value.absent(),
+            Value<List<String>?> stopSequences = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
-              OpenAIConfigsCompanion.insert(
+              ApiConfigsCompanion.insert(
             id: id,
             name: name,
-            baseUrl: baseUrl,
-            apiKey: apiKey,
+            apiType: apiType,
             model: model,
+            apiKey: apiKey,
+            baseUrl: baseUrl,
+            useCustomTemperature: useCustomTemperature,
             temperature: temperature,
-            maxTokens: maxTokens,
+            useCustomTopP: useCustomTopP,
+            topP: topP,
+            useCustomTopK: useCustomTopK,
+            topK: topK,
+            maxOutputTokens: maxOutputTokens,
+            stopSequences: stopSequences,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -3180,20 +3396,17 @@ class $$OpenAIConfigsTableTableManager extends RootTableManager<
         ));
 }
 
-typedef $$OpenAIConfigsTableProcessedTableManager = ProcessedTableManager<
+typedef $$ApiConfigsTableProcessedTableManager = ProcessedTableManager<
     _$AppDatabase,
-    $OpenAIConfigsTable,
-    OpenAIConfig,
-    $$OpenAIConfigsTableFilterComposer,
-    $$OpenAIConfigsTableOrderingComposer,
-    $$OpenAIConfigsTableAnnotationComposer,
-    $$OpenAIConfigsTableCreateCompanionBuilder,
-    $$OpenAIConfigsTableUpdateCompanionBuilder,
-    (
-      OpenAIConfig,
-      BaseReferences<_$AppDatabase, $OpenAIConfigsTable, OpenAIConfig>
-    ),
-    OpenAIConfig,
+    $ApiConfigsTable,
+    ApiConfig,
+    $$ApiConfigsTableFilterComposer,
+    $$ApiConfigsTableOrderingComposer,
+    $$ApiConfigsTableAnnotationComposer,
+    $$ApiConfigsTableCreateCompanionBuilder,
+    $$ApiConfigsTableUpdateCompanionBuilder,
+    (ApiConfig, BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig>),
+    ApiConfig,
     PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
@@ -3203,8 +3416,6 @@ class $AppDatabaseManager {
       $$ChatsTableTableManager(_db, _db.chats);
   $$MessagesTableTableManager get messages =>
       $$MessagesTableTableManager(_db, _db.messages);
-  $$GeminiApiKeysTableTableManager get geminiApiKeys =>
-      $$GeminiApiKeysTableTableManager(_db, _db.geminiApiKeys);
-  $$OpenAIConfigsTableTableManager get openAIConfigs =>
-      $$OpenAIConfigsTableTableManager(_db, _db.openAIConfigs);
+  $$ApiConfigsTableTableManager get apiConfigs =>
+      $$ApiConfigsTableTableManager(_db, _db.apiConfigs);
 }

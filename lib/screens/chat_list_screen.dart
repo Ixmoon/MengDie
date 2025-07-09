@@ -6,11 +6,11 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖�
 
 // 导入模型、Provider 和 Widget
 import '../models/models.dart';
-import '../providers/api_key_provider.dart';
 import '../providers/chat_state_providers.dart';
 import '../repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
 import '../services/chat_export_import_service.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
+import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
 // import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
 
 // 本文件包含显示聊天列表的主屏幕。
@@ -65,10 +65,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   // --- 多选删除确认对话框 ---
    Future<void> _showMultiDeleteConfirmationDialog() async {
      if (_selectedItemIds.isEmpty) return; // 没有选中项则不显示
-
+ 
      // 在调用异步方法前检查 mounted
      if (!context.mounted) return;
-
+ 
      final confirm = await showDialog<bool>(
        context: context,
        builder: (ctx) => AlertDialog(
@@ -108,6 +108,68 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             }
           }
         }
+  }
+  
+  // --- 新增：多选操作方法 ---
+  void _selectAll(List<Chat> allItems) {
+    setState(() {
+      _selectedItemIds.addAll(allItems.map((item) => item.id));
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _invertSelection(List<Chat> allItems) {
+    setState(() {
+      final allIds = allItems.map((item) => item.id).toSet();
+      final currentSelection = Set<int>.from(_selectedItemIds);
+      _selectedItemIds.clear();
+      _selectedItemIds.addAll(allIds.difference(currentSelection));
+    });
+  }
+
+  Future<void> _exportSelected() async {
+    if (_selectedItemIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('没有选择任何项目'), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.showSnackBar(
+      SnackBar(content: Text('正在打包 ${_selectedItemIds.length} 个项目...'), duration: const Duration(days: 1)),
+    );
+
+    try {
+      final service = ref.read(chatExportImportServiceProvider);
+      final savePath = await service.exportChatsToZip(_selectedItemIds.toList());
+      
+      if (mounted) {
+        scaffoldMessenger.hideCurrentSnackBar();
+        if (savePath != null) {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(content: Text('已成功导出到: $savePath'), backgroundColor: Colors.green),
+          );
+        } else {
+           scaffoldMessenger.showSnackBar(
+            const SnackBar(content: Text('导出操作已取消'), duration: Duration(seconds: 2)),
+          );
+        }
+        _toggleMultiSelectMode(enable: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        scaffoldMessenger.hideCurrentSnackBar();
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('导出失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // --- 统一的拖放处理逻辑 ---
@@ -224,7 +286,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       buildDefaultDragHandles: false,
       itemBuilder: (context, index) {
         if (inFolder && index == 0) {
-          return const _MoveUpTarget(isListView: true);
+          return const _MoveUpTarget(key: ValueKey('move-up-target-list'), isListView: true);
         }
         final chatIndex = inFolder ? index - 1 : index;
         final chat = chats[chatIndex];
@@ -237,14 +299,19 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             chat: chat,
             isSelected: _selectedItemIds.contains(chat.id),
             isMultiSelectMode: _isMultiSelectMode,
-            onTap: () {
+            onTap: () async {
               if (_isMultiSelectMode) {
                 _toggleItemSelection(chat.id);
               } else {
                 if (chat.isFolder) {
                   ref.read(currentFolderIdProvider.notifier).state = chat.id;
                 } else {
-                  context.push('/chat/${chat.id}');
+                  // 保存最后打开的聊天ID
+                  final prefs = await ref.read(sharedPreferencesProvider.future);
+                  await prefs.setInt('last_open_chat_id', chat.id);
+                  ref.read(activeChatIdProvider.notifier).state = chat.id;
+                  if (!context.mounted) return;
+                  context.go('/chat');
                 }
               }
             },
@@ -272,7 +339,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (inFolder && index == 0) {
-          return const _MoveUpTarget(isListView: false);
+          return const _MoveUpTarget(key: ValueKey('move-up-target-grid'), isListView: false);
         }
         final chatIndex = inFolder ? index - 1 : index;
         final chat = chats[chatIndex];
@@ -284,14 +351,19 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           child: _ChatGridItem(
             chat: chat,
             isSelected: _selectedItemIds.contains(chat.id),
-            onTap: () {
+            onTap: () async {
               if (_isMultiSelectMode) {
                 _toggleItemSelection(chat.id);
               } else {
                 if (chat.isFolder) {
                   ref.read(currentFolderIdProvider.notifier).state = chat.id;
                 } else {
-                  context.push('/chat/${chat.id}');
+                  // 保存最后打开的聊天ID
+                  final prefs = await ref.read(sharedPreferencesProvider.future);
+                  await prefs.setInt('last_open_chat_id', chat.id);
+                  ref.read(activeChatIdProvider.notifier).state = chat.id;
+                  if (!context.mounted) return;
+                  context.go('/chat');
                 }
               }
             },
@@ -306,34 +378,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     final currentFolderId = ref.watch(currentFolderIdProvider);
-    final apiKeyState = ref.watch(apiKeyNotifierProvider);
     final chatListAsync = ref.watch(chatListProvider(currentFolderId));
     final currentFolderAsync = ref.watch(currentChatProvider(currentFolderId ?? -1));
 
     return Scaffold(
       appBar: _buildAppBar(context, ref, currentFolderId, currentFolderAsync), // 使用单独的方法构建 AppBar
-      body: Column(
-          children: [
-              if (apiKeyState.error != null)
-                 Padding(
-                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                   child: Card(
-                     color: Colors.orange.shade100,
-                     child: ListTile(
-                       leading: const Icon(Icons.warning_amber_rounded, color: Colors.orange),
-                       title: Text("API Key 问题", style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold)),
-                       subtitle: Text(apiKeyState.error!, style: TextStyle(color: Colors.orange.shade800)),
-                       trailing: IconButton(
-                         icon: const Icon(Icons.settings, color: Colors.orange),
-                         tooltip: '前往设置',
-                         onPressed: () => context.push('/settings'),
-                       ),
-                       dense: true,
-                     ),
-                   ),
-                 ),
-               Expanded(
-                 child: chatListAsync.when(
+      body: chatListAsync.when(
                    data: (chats) {
                      if (chats.isEmpty && currentFolderId == null) { // 根目录为空
                        return const Center(child: Text('点击右下角 + 开始新聊天'));
@@ -345,12 +395,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                          ? _buildGridView(chats, ref)
                          : _buildListView(chats, ref);
                    },
-                   loading: () => const Center(child: CircularProgressIndicator()),
+                   loading: () => const SizedBox.shrink(),
                    error: (error, stack) => Center(child: Text('无法加载列表: $error')),
                  ),
-               ),
-            ],
-      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateMenu(context, ref, currentFolderId), // 传递 currentFolderId
         tooltip: '新建',
@@ -363,6 +410,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   AppBar _buildAppBar(BuildContext context, WidgetRef ref, int? currentFolderId, AsyncValue<Chat?> currentFolderAsync) {
     if (_isMultiSelectMode) {
       // --- 多选模式 AppBar ---
+      final allItems = ref.watch(chatListProvider(currentFolderId)).value ?? [];
       return AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -371,6 +419,26 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         ),
         title: Text('已选择 ${_selectedItemIds.length} 项'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.select_all),
+            tooltip: '全选',
+            onPressed: () => _selectAll(allItems),
+          ),
+          IconButton(
+            icon: const Icon(Icons.deselect),
+            tooltip: '全不选',
+            onPressed: _deselectAll,
+          ),
+          IconButton(
+            icon: const Icon(Icons.flip_to_back_outlined),
+            tooltip: '反选',
+            onPressed: () => _invertSelection(allItems),
+          ),
+          IconButton(
+            icon: const Icon(Icons.upload_file_outlined),
+            tooltip: '导出所选',
+            onPressed: _selectedItemIds.isEmpty ? null : _exportSelected,
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: '删除所选',
@@ -426,20 +494,18 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               );
               try {
                 // 调用导入服务
-                final newChatId = await ref.read(chatExportImportServiceProvider).importChat();
+                final count = await ref.read(chatExportImportServiceProvider).importChats();
                 if (!context.mounted) return; // 检查 mounted
                 ScaffoldMessenger.of(context).hideCurrentSnackBar(); // 隐藏加载指示器
 
-                if (newChatId != null) {
+                if (count > 0) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('聊天导入成功！')),
+                    SnackBar(content: Text('成功导入 $count 个聊天！')),
                   );
-                  // 可选：直接导航到新导入的聊天
-                  // context.push('/chat/$newChatId');
                 } else {
                   // 用户可能取消了文件选择
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('导入已取消'), duration: Duration(seconds: 2)),
+                    const SnackBar(content: Text('导入已取消或没有导入任何项目'), duration: Duration(seconds: 2)),
                   );
                 }
               } catch (e) {
@@ -485,7 +551,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   final repo = ref.read(chatRepositoryProvider);
                   final chatId = await repo.saveChat(newChat);
                   if (context.mounted) {
-                      context.push('/chat/$chatId');
+                      ref.read(activeChatIdProvider.notifier).state = chatId;
+                      context.go('/chat');
                   }
                 } catch (e) {
                   if (context.mounted) {
@@ -573,13 +640,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 /// “返回上一级”的拖放目标小部件
 class _MoveUpTarget extends StatelessWidget {
   final bool isListView;
-  const _MoveUpTarget({required this.isListView});
+  const _MoveUpTarget({super.key, required this.isListView});
 
   @override
   Widget build(BuildContext context) {
     if (isListView) {
       return Container(
-        key: const ValueKey('move-up-target-list'),
         padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
         color: Theme.of(context).hoverColor,
         child: const Row(
@@ -593,7 +659,6 @@ class _MoveUpTarget extends StatelessWidget {
       );
     } else {
       return GridTile(
-        key: const ValueKey('move-up-target-grid'),
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).hoverColor,
@@ -659,12 +724,13 @@ class _ChatListItem extends StatelessWidget {
     final bool hasImage = chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty;
     Widget leadingWidget;
     if (hasImage) {
+      final pixelRatio = MediaQuery.of(context).devicePixelRatio;
       leadingWidget = CachedImageFromBase64(
         base64String: chat.coverImageBase64!,
         width: 50,
         height: 50,
-        cacheWidth: 100,
-        cacheHeight: 100,
+        cacheWidth: (50 * pixelRatio).round(),
+        cacheHeight: (50 * pixelRatio).round(),
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
       );
@@ -674,7 +740,7 @@ class _ChatListItem extends StatelessWidget {
     return CircleAvatar(
       radius: 25,
       backgroundColor: hasImage ? Colors.transparent : Theme.of(context).colorScheme.primaryContainer,
-      child: leadingWidget,
+      child: ClipOval(child: leadingWidget),
     );
   }
 }

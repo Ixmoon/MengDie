@@ -6,40 +6,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart'; // For debugPrint
 import 'package:tiktoken/tiktoken.dart' as tiktoken; // For token counting
 
-import '../models/models.dart'; // Chat, LlmType, Message, MessageRole etc.
-// OpenAIAPIConfig will be imported directly from its Drift model file
-import '../data/database/drift/models/drift_openai_api_config.dart'; // Import DriftOpenAIAPIConfig
-// import '../providers/api_key_provider.dart'; // Not directly needed here, LlmService handles config provision
-import '../repositories/message_repository.dart'; // For saving messages
-import '../repositories/chat_repository.dart';   // For updating chat timestamp
-import 'llm_service.dart'; // Generic LlmContent, LlmStreamChunk, LlmResponse
+import '../models/models.dart';
+import '../data/database/drift/app_database.dart'; // For ApiConfig
+import 'llm_service.dart';
 
 // 本文件包含与 OpenAI 兼容 API 交互的服务类和相关数据结构。
 
 // --- OpenAI Service Provider ---
 final openaiServiceProvider = Provider<OpenAIService>((ref) {
   final dio = Dio(); // Create a Dio instance
-  final messageRepository = ref.watch(messageRepositoryProvider); // Get MessageRepository
-  return OpenAIService(ref, dio, messageRepository); // Pass MessageRepository
+  return OpenAIService(ref, dio);
 });
 
 // --- OpenAI Service Implementation ---
 class OpenAIService {
+  // ignore: unused_field
   final Ref _ref;
   final Dio _dio;
-  final MessageRepository _messageRepository; // Add MessageRepository field
 
   // --- Cancellation ---
   CancelToken? _cancelToken;
 
-  OpenAIService(this._ref, this._dio, this._messageRepository); // Update constructor
+  OpenAIService(this._ref, this._dio);
 
   /// Sends messages and gets a streaming response from an OpenAI-compatible API.
   Stream<LlmStreamChunk> sendMessageStream({
     required List<LlmContent> llmContext,
-    required Chat chat, // Still needed for chat ID, etc.
-    required DriftOpenAIAPIConfig apiConfig,
-    required Map<String, dynamic> generationParams, // New parameter
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
   }) async* {
     _cancelToken = CancelToken(); // Create a new token for this request
     String accumulatedText = "";
@@ -137,7 +131,11 @@ class OpenAIService {
 
     final String apiUrl;
     try {
-      String tempBaseUrl = apiConfig.baseUrl;
+      final baseUrl = apiConfig.baseUrl;
+      if (baseUrl == null || baseUrl.isEmpty) {
+        throw Exception("OpenAI API Base URL is not set in the configuration.");
+      }
+      String tempBaseUrl = baseUrl;
       if (!tempBaseUrl.endsWith('/')) {
         tempBaseUrl += '/';
       }
@@ -164,12 +162,13 @@ class OpenAIService {
         cancelToken: _cancelToken, // Pass the cancel token
       );
 
+      final stringStream = utf8.decoder.bind(response.data!.stream);
       String carryOverBuffer = ''; // Buffer for incomplete lines from the stream
 
-      await for (var uInt8List in response.data!.stream) {
+      await for (var stringChunk in stringStream) {
         lastTimestamp = DateTime.now();
         // Prepend any carry-over from the previous chunk
-        final rawChunk = carryOverBuffer + utf8.decode(uInt8List, allowMalformed: true);
+        final rawChunk = carryOverBuffer + stringChunk;
         
         // Split into lines
         var lines = rawChunk.split('\n');
@@ -189,21 +188,8 @@ class OpenAIService {
             if (jsonData == '[DONE]') {
               debugPrint("OpenAI stream finished with [DONE]");
 
-              // Create message with raw text
-              final aiMessage = Message.create(
-                chatId: chat.id,
-                rawText: accumulatedText,
-                role: MessageRole.model,
-              );
-              try {
-                await _messageRepository.saveMessage(aiMessage);
-                chat.updatedAt = DateTime.now();
-                await _ref.read(chatRepositoryProvider).saveChat(chat);
-                debugPrint("OpenAIService.sendMessageStream: AI Message (raw) and chat timestamp saved.");
-              } catch (dbError) {
-                debugPrint("OpenAIService.sendMessageStream: Error saving message/chat: $dbError");
-                yield LlmStreamChunk.error("DB Error saving AI response: $dbError", accumulatedText);
-              }
+              // REMOVED: Database saving logic from service layer.
+              // This is now handled by ChatStateNotifier.
 
               yield LlmStreamChunk(
                 textChunk: '',
@@ -239,20 +225,8 @@ class OpenAIService {
       // If loop finishes without [DONE], assume stream ended.
       debugPrint("OpenAI stream finished without [DONE] (might be ok). Finalizing...");
 
-      final aiMessageAfterLoop = Message.create(
-        chatId: chat.id,
-        rawText: accumulatedText,
-        role: MessageRole.model,
-      );
-      try {
-        await _messageRepository.saveMessage(aiMessageAfterLoop);
-        chat.updatedAt = DateTime.now();
-        await _ref.read(chatRepositoryProvider).saveChat(chat);
-        debugPrint("OpenAIService.sendMessageStream (no DONE): AI Message (raw) and chat timestamp saved.");
-      } catch (dbError) {
-         debugPrint("OpenAIService.sendMessageStream (no DONE): Error saving message/chat: $dbError");
-         yield LlmStreamChunk.error("DB Error saving AI response (no DONE): $dbError", accumulatedText);
-      }
+      // REMOVED: Database saving logic from service layer.
+      // This is now handled by ChatStateNotifier.
 
       yield LlmStreamChunk(
           textChunk: '',
@@ -299,9 +273,8 @@ class OpenAIService {
   /// Sends messages and gets a single, complete response from an OpenAI-compatible API.
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
-    required Chat chat, // Still needed for chat ID etc.
-    required DriftOpenAIAPIConfig apiConfig,
-    required Map<String, dynamic> generationParams, // New parameter
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
   }) async {
     // 1. Convert LlmContent to OpenAI message format
     List<Map<String, dynamic>> openAIMessages = [];
@@ -393,7 +366,11 @@ class OpenAIService {
 
     final String apiUrl;
     try {
-      String tempBaseUrl = apiConfig.baseUrl;
+      final baseUrl = apiConfig.baseUrl;
+      if (baseUrl == null || baseUrl.isEmpty) {
+        throw Exception("OpenAI API Base URL is not set in the configuration.");
+      }
+      String tempBaseUrl = baseUrl;
       if (!tempBaseUrl.endsWith('/')) {
         tempBaseUrl += '/';
       }
@@ -425,19 +402,9 @@ class OpenAIService {
           if (messageData != null && messageData['content'] != null) {
             final rawText = messageData['content'] as String;
             
-            final aiMessage = Message.create(
-              chatId: chat.id,
-              rawText: rawText,
-              role: MessageRole.model,
-            );
-            try {
-              await _messageRepository.saveMessage(aiMessage);
-              chat.updatedAt = DateTime.now();
-              await _ref.read(chatRepositoryProvider).saveChat(chat);
-              debugPrint("OpenAIService.sendMessageOnce: AI Message (raw) and chat timestamp saved.");
-            } catch (dbError) {
-              debugPrint("OpenAIService.sendMessageOnce: Error saving message/chat: $dbError");
-            }
+            // REMOVED: Database saving logic from service layer.
+            // This is now handled by ChatStateNotifier.
+            
             return LlmResponse(
               parts: [MessagePart.text(rawText)],
               isSuccess: true,
@@ -482,33 +449,40 @@ class OpenAIService {
   /// Counts tokens for a given context using a client-side library (tiktoken).
   Future<int> countTokens({
     required List<LlmContent> llmContext,
-    required DriftOpenAIAPIConfig apiConfig,
+    required ApiConfig apiConfig,
   }) async {
     debugPrint("OpenAIService.countTokens called for model ${apiConfig.model}");
     try {
-      // Use encodingForModel to automatically select the correct encoding.
-      final encoding = tiktoken.encodingForModel(apiConfig.model);
+      // ignore: prefer_typing_uninitialized_variables
+      var encoding;
+      try {
+        // First, try to get the encoding for the specific model.
+        encoding = tiktoken.encodingForModel(apiConfig.model);
+      } catch (_) {
+        // If the model is not found (which throws an error), fall back to a generic but good encoder.
+        debugPrint("Model '${apiConfig.model}' not found in tiktoken, falling back to 'cl100k_base' for token counting.");
+        encoding = tiktoken.getEncoding('cl100k_base');
+      }
 
       int totalTokens = 0;
       for (final message in llmContext) {
         // A simple token counting logic: concatenate text parts and encode.
-        // Note: For perfect accuracy, the message structure (roles, etc.)
-        // should be formatted exactly as the API expects, as this can add
-        // a few extra tokens per message. This implementation is a close estimate.
+        // This provides a close estimate. For perfect accuracy, the message
+        // structure (roles, separators) would need to be replicated.
         final textContent = message.parts
             .whereType<LlmTextPart>()
             .map((part) => part.text)
             .join("\n");
 
         if (textContent.isNotEmpty) {
-          totalTokens += encoding.encode(textContent).length.toInt();
+          totalTokens += (encoding.encode(textContent).length as num).toInt();
         }
       }
       debugPrint("Calculated total tokens: $totalTokens for model ${apiConfig.model}");
       return totalTokens;
     } catch (e) {
-      debugPrint("Error getting tiktoken encoding for model '${apiConfig.model}': $e. Token count may be inaccurate, returning -1.");
-      // Fallback to -1 to indicate an error or unsupported model.
+      debugPrint("Unexpected error during token counting for model '${apiConfig.model}': $e. Returning -1.");
+      // Fallback to -1 for any other unexpected errors.
       return -1;
     }
   }

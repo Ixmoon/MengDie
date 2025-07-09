@@ -58,17 +58,31 @@ class ContextXmlService {
 
     for (int i = 0; i < fullHistory.length; i++) {
       final msg = fullHistory[i];
-      // XML calculation should only consider model messages as they are the source of <carry_over_xml_content>
-      // and other XML tags defined by rules.
-      if (msg.role != MessageRole.model || msg.rawText.isEmpty || !msg.rawText.contains('<')) {
+      // XML calculation should only consider model messages.
+      if (msg.role != MessageRole.model) {
+        continue;
+      }
+
+      // FIX: Construct the full XML text for parsing by respecting the chat setting.
+      // If secondary XML is enabled, use it; otherwise, use the original.
+      // This ensures that the context calculation uses the correct, separated XML fields.
+      final xmlContent = chat.enableSecondaryXml
+          ? msg.secondaryXmlContent
+          : msg.originalXmlContent;
+
+      // Combine the display text with the appropriate XML content.
+      // The rawText (which is now just displayText) might contain other things,
+      // but for XML calculation, we prioritize the dedicated fields.
+      final fullTextForXmlParsing = '${msg.rawText}\n${xmlContent ?? ''}'.trim();
+
+      if (fullTextForXmlParsing.isEmpty || !fullTextForXmlParsing.contains('<')) {
         continue;
       }
 
       xml_pkg.XmlDocument? doc;
       try {
-        // Attempt to parse the rawText. If it's not well-formed XML (e.g. just plain text with a stray '<'),
-        // this might fail. We wrap it in a root element to handle multiple top-level elements or text nodes.
-        doc = xml_pkg.XmlDocument.parse('<root>${msg.rawText.trim()}</root>');
+        // Attempt to parse the combined text.
+        doc = xml_pkg.XmlDocument.parse('<root>$fullTextForXmlParsing</root>');
       } catch (e) {
         debugPrint("ContextXmlService:_calculateCurrentCarriedOverXml - Failed to parse XML in message ID ${msg.id}: $e. Skipping message for XML calculation.");
         continue;
@@ -128,7 +142,7 @@ class ContextXmlService {
   }
 
   /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
-  _HistoryLimitResult _limitHistoryForPrompt(Chat chat, List<Message> fullHistory) {
+  Future<_HistoryLimitResult> _limitHistoryForPrompt(Chat chat, List<Message> fullHistory) async {
     if (fullHistory.isEmpty) return _HistoryLimitResult([], []);
 
     try {
@@ -143,32 +157,40 @@ class ContextXmlService {
         }
         return _HistoryLimitResult(fullHistory, []);
       } else if (chat.contextConfig.mode == ContextManagementMode.tokens && chat.contextConfig.maxContextTokens != null) {
+        final llmService = _ref.read(llmServiceProvider);
         final maxTokens = chat.contextConfig.maxContextTokens!;
-        int currentTokens = 0;
-        final List<Message> kept = [];
-        final List<Message> dropped = [];
-        const int promptOverheadTokens = 50;
-        int budget = maxTokens - promptOverheadTokens;
-        bool budgetExceeded = false;
+        debugPrint("ContextXmlService: Limiting context by tokens. Budget: $maxTokens");
+        
+        // Start with the full history and iteratively remove oldest messages until token count is within budget.
+        List<Message> keptHistory = List.from(fullHistory);
+        List<Message> droppedHistory = [];
 
-        for (int i = fullHistory.length - 1; i >= 0; i--) {
-          if (budgetExceeded) {
-            dropped.add(fullHistory[i]);
-            continue;
+        while (keptHistory.isNotEmpty) {
+          final contextParts = keptHistory.map(LlmContent.fromMessage).toList();
+          final currentTokens = await llmService.countTokens(llmContext: contextParts, chat: chat);
+          debugPrint("  - Checking ${keptHistory.length} messages... Current Tokens: $currentTokens");
+
+          if (currentTokens > 0 && currentTokens <= maxTokens) {
+            // Token count is within budget, we're done.
+            debugPrint("  - Token count is within budget. Kept ${keptHistory.length}, Dropped ${droppedHistory.length}.");
+            return _HistoryLimitResult(keptHistory, droppedHistory.reversed.toList());
+          } else if (currentTokens <= 0) {
+            debugPrint("  - Token count is invalid ($currentTokens). Cannot proceed with token-based limiting. Aborting.");
+            // If token counting fails, it's safer to drop everything than to send a potentially huge context.
+            return _HistoryLimitResult([], fullHistory);
           }
-          final message = fullHistory[i];
-          final textToCount = XmlProcessor.stripXmlContent(message.rawText);
-          int messageTokens = (textToCount.length / 3.5).ceil();
-
-          if (currentTokens + messageTokens <= budget) {
-            currentTokens += messageTokens;
-            kept.add(message);
-          } else {
-            budgetExceeded = true;
-            dropped.add(message);
+          else {
+            // Token count exceeds budget, remove the oldest message and try again.
+            final droppedMessage = keptHistory.removeAt(0);
+            droppedHistory.add(droppedMessage);
+            debugPrint("  - Token count exceeds budget. Dropping oldest message (ID: ${droppedMessage.id}).");
           }
         }
-        return _HistoryLimitResult(kept.reversed.toList(), dropped.reversed.toList());
+
+        // If the loop finishes, it means even a single message exceeds the budget,
+        // or the history was empty to begin with. Return everything as dropped.
+        debugPrint("ContextXmlService: Token limiting resulted in dropping all messages.");
+        return _HistoryLimitResult([], fullHistory);
       } else {
         // Fallback to default turn-based limiting
         final limit = chat.contextConfig.maxTurns * 2;
@@ -192,13 +214,15 @@ class ContextXmlService {
   Future<ApiRequestContext> buildApiRequestContext({
     required Chat chat,
     required Message currentUserMessage,
+    String? lastMessageOverride,
   }) async {
     final messageRepo = _ref.read(messageRepositoryProvider);
     final List<Message> fullHistory = await messageRepo.getMessagesForChat(chat.id);
 
     final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
     
-    final historyResult = _limitHistoryForPrompt(chat, fullHistory);
+    // Now an async method
+    final historyResult = await _limitHistoryForPrompt(chat, fullHistory);
     final List<Message> limitedHistoryForPrompt = historyResult.kept;
     final List<Message> droppedMessages = historyResult.dropped;
 
@@ -230,6 +254,11 @@ class ContextXmlService {
         // For user messages, convert the whole message with all its parts
         contextParts.add(LlmContent.fromMessage(message));
       }
+    }
+
+    // Add the override as the very last user message if it exists
+    if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+      contextParts.add(LlmContent("user", [LlmTextPart(lastMessageOverride)]));
     }
 
     if (kDebugMode) {

@@ -18,12 +18,10 @@ import 'config/router.dart'; // 导入路由配置
 import 'providers/settings_providers.dart'; // 导入主题设置 Provider
 
 // --- 应用主函数 ---
+// 将 main 函数修改为 async 以便在启动前执行异步操作
 void main() {
 	// 确保 Flutter 绑定已初始化。
 	WidgetsFlutterBinding.ensureInitialized();
-
-	// 注意：所有异步初始化（如 SharedPreferences, Drift）现在都由 Riverpod 的
-	// FutureProvider 或 Provider 自动处理。main 函数变得完全同步。
 
 	// 运行 Flutter 应用。
 	// ProviderScope 是 Riverpod 的根，使 Provider 在整个应用中可用。

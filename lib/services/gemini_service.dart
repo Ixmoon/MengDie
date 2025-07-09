@@ -4,13 +4,11 @@ import 'package:flutter/foundation.dart'; // for immutable, debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart' as genai;
 import 'package:flutter/material.dart'; // Added for debugPrint, consider removing if not needed elsewhere
+import 'package:tiktoken/tiktoken.dart' as tiktoken; // Import tiktoken for fallback
 
 // Import local models, providers, services, and the NEW generic LLM types
-import '../models/models.dart'; // Chat, Message, LlmType, etc. GenerationConfig will be replaced
-import '../data/database/drift/common_enums.dart' as drift_enums; // For LocalHarmCategory, LocalHarmBlockThreshold
+import '../data/database/drift/app_database.dart'; // For ApiConfig
 import 'llm_service.dart'; // Import LlmContent, LlmPart, LlmTextPart
-import '../repositories/chat_repository.dart'; // Still needed for saving chat timestamp
-import '../repositories/message_repository.dart';
 import '../providers/api_key_provider.dart';
 
 // 本文件包含与 Google Gemini API 交互的服务类和相关数据结构。
@@ -69,22 +67,21 @@ class GeminiStreamChunk {
 final geminiServiceProvider = Provider<GeminiService>((ref) {
   // 依赖注入：通过 Riverpod 获取其他 Provider 的实例
   final apiKeyNotifier = ref.watch(apiKeyNotifierProvider.notifier); // 获取 Notifier 用于调用方法
-  final messageRepository = ref.watch(messageRepositoryProvider);
     // Pass ref for reading ChatRepository
-    return GeminiService(apiKeyNotifier, messageRepository, ref);
+    return GeminiService(apiKeyNotifier, ref);
 });
 
 // --- Gemini Service Implementation ---
 // 封装与 Gemini API 交互的逻辑。
 class GeminiService {
    final ApiKeyNotifier _apiKeyNotifier; // 用于管理和获取 API Key
-   final MessageRepository _messageRepository; // 用于访问消息数据
+   // ignore: unused_field
    final Ref _ref; // Riverpod Ref，用于读取其他 Provider
 
   // --- Cancellation ---
   bool _isCancelled = false;
 
-   GeminiService(this._apiKeyNotifier, this._messageRepository, this._ref);
+   GeminiService(this._apiKeyNotifier, this._ref);
 
 
    // --- Private Helper for Context Conversion ---
@@ -145,32 +142,49 @@ class GeminiService {
 
    // 计算给定上下文的 Token 数量 (Now accepts generic LlmContent)
    Future<int> countTokens({
-     required List<LlmContent> llmContext, // Changed parameter type
-     required String modelName,
-     required String apiKey, // API Key must be provided externally now
+     required List<LlmContent> llmContext,
+     required ApiConfig apiConfig,
    }) async {
+     final apiKey = apiConfig.apiKey;
+     if (apiKey == null || apiKey.isEmpty) {
+       throw Exception("Gemini API key is missing in the provided ApiConfig.");
+     }
      try {
        // Convert generic context to API-specific context
        final (:systemInstructionAsContent, :chatHistory) = _buildApiContextFromLlm(llmContext); // Destructure here
 
        // Initialize model with provided name, key, and systemInstruction
        final model = genai.GenerativeModel(
-         model: modelName,
+         model: apiConfig.model,
          apiKey: apiKey,
          systemInstruction: systemInstructionAsContent, // Pass systemInstructionAsContent here
        );
 
-       // Call SDK's countTokens method with the chatHistory
-       final response = await model.countTokens(chatHistory);
+       // Call SDK's countTokens method with the chatHistory and a 3-second timeout
+       final response = await model.countTokens(chatHistory).timeout(const Duration(seconds: 3));
        debugPrint("countTokens 成功：总计 ${response.totalTokens} Tokens。");
        return response.totalTokens;
-     } on genai.GenerativeAIException catch (e) {
-       debugPrint("countTokens API 错误: ${e.message}");
-       _apiKeyNotifier.reportKeyError(apiKey); // Still report key error
-       return -1;
      } catch (e) {
-       debugPrint("countTokens 通用错误: $e");
-       return -1;
+       debugPrint("Gemini countTokens API failed: $e. Falling back to local estimation.");
+       // Fallback to local token counting using tiktoken
+       try {
+         final encoding = tiktoken.getEncoding('cl100k_base');
+         int totalTokens = 0;
+         for (final message in llmContext) {
+           final textContent = message.parts
+               .whereType<LlmTextPart>()
+               .map((part) => part.text)
+               .join("\n");
+           if (textContent.isNotEmpty) {
+             totalTokens += encoding.encode(textContent).length;
+           }
+         }
+         debugPrint("Fallback token count successful: $totalTokens");
+         return totalTokens;
+       } catch (localError) {
+         debugPrint("Fallback token count also failed: $localError");
+         return -1;
+       }
      }
    }
 
@@ -178,47 +192,38 @@ class GeminiService {
    // 发送消息并获取响应流 (Now accepts generic LlmContent and generationParams Map)
    Stream<GeminiStreamChunk> sendMessageStream({
      required List<LlmContent> llmContext,
-     required Chat chat, // Still needed for chat ID, safety settings, model name from original config
-     required Map<String, dynamic> generationParams, // New parameter
+     required ApiConfig apiConfig,
+     required Map<String, dynamic> generationParams,
    }) async* {
-    _isCancelled = false; // Reset cancellation flag for new request
+    _isCancelled = false;
      const int maxRetries = 3;
      int retryCount = 0;
      String? lastError;
 
-     // Convert LlmContent to API-specific context ONCE before the loop
      final (:systemInstructionAsContent, :chatHistory) = _buildApiContextFromLlm(llmContext);
 
      while (retryCount <= maxRetries) {
        debugPrint("sendMessageStream (尝试 ${retryCount + 1}/${maxRetries + 1}) 开始...");
-        // 1. 获取 API Key
-       String? apiKey = _apiKeyNotifier.getNextApiKey();
-       if (apiKey == null) {
-         final apiKeyError = _ref.read(apiKeyNotifierProvider).error;
-         debugPrint("sendMessageStream 错误：无可用 API Key。");
-         yield GeminiStreamChunk.error(lastError ?? apiKeyError ?? "无可用 API Key", '');
+       final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+       if (apiKey == null || apiKey.isEmpty) {
+         debugPrint("sendMessageStream 错误：没有可用的 Gemini API Key。");
+         yield GeminiStreamChunk.error("没有可用的 Gemini API Key。", '');
          return;
        }
 
-       // 2. 初始化 Gemini 模型
        genai.GenerativeModel? model;
        try {
-         // Use the passed generationParams Map to create the API-specific config
          final apiGenerationConfig = _createApiGenerationConfig(generationParams);
-         final apiSafetySettings = chat.generationConfig.safetySettings.map((rule) { // Safety settings still come from original chat config
-           final genaiCategory = _mapLocalToGenaiCategory(rule.category);
-           final genaiThreshold = _mapLocalToGenaiThreshold(rule.threshold);
-           return genai.SafetySetting(genaiCategory, genaiThreshold);
-         }).toList();
+         final apiSafetySettings = _defaultSafetySettings();
 
          model = genai.GenerativeModel(
-           model: chat.generationConfig.modelName,
+           model: apiConfig.model,
            apiKey: apiKey,
            generationConfig: apiGenerationConfig,
            safetySettings: apiSafetySettings,
-           systemInstruction: systemInstructionAsContent, // Pass systemInstructionAsContent here
+           systemInstruction: systemInstructionAsContent,
          );
-         debugPrint("sendMessageStream: Gemini 模型已初始化 (模型: ${chat.generationConfig.modelName})。");
+         debugPrint("sendMessageStream: Gemini 模型已初始化 (模型: ${apiConfig.model}, Key: ${apiKey.substring(0, 4)}...)。");
        } catch (e) {
          debugPrint("sendMessageStream 错误：初始化 Gemini 模型失败: $e");
          yield GeminiStreamChunk.error("初始化 Gemini 模型失败: $e", '');
@@ -255,35 +260,8 @@ class GeminiService {
            return;
          }
 
-         // 保存 AI 消息到数据库
-         final aiMessage = Message.create(
-           chatId: chat.id,
-           rawText: accumulatedResponse,
-           role: MessageRole.model,
-         );
-         bool messageSaved = false;
-         debugPrint("sendMessageStream: 正在保存 AI 消息 (raw text)");
-         try {
-           await _messageRepository.saveMessage(aiMessage);
-           messageSaved = true;
-           debugPrint("sendMessageStream: AI 消息 (raw) 保存成功。");
-         } catch (e) {
-           debugPrint("sendMessageStream 错误：保存 AI 消息失败: $e");
-           yield GeminiStreamChunk.error("数据库错误：无法保存 AI 响应。 $e", accumulatedResponse);
-           return;
-         }
-
-         // 更新聊天时间戳
-         if (messageSaved) {
-           chat.updatedAt = DateTime.now();
-           final chatRepo = _ref.read(chatRepositoryProvider);
-           try {
-             await chatRepo.saveChat(chat);
-             debugPrint("sendMessageStream: 聊天时间戳更新成功。");
-           } catch (e) {
-             debugPrint("sendMessageStream 错误：更新聊天时间戳失败: $e");
-           }
-         }
+         // REMOVED: Database saving logic from service layer.
+         // This is now handled by ChatStateNotifier.
 
          debugPrint("sendMessageStream: 发出最终 chunk。");
          yield GeminiStreamChunk(
@@ -299,24 +277,15 @@ class GeminiService {
 
        } on genai.GenerativeAIException catch (e) { // 处理 API 特定错误
          debugPrint("sendMessageStream (尝试 ${retryCount + 1}) 失败。Gemini API 错误: ${e.message}");
-         _apiKeyNotifier.reportKeyError(apiKey); // 报告 Key 问题
+         // _apiKeyNotifier.reportKeyError(apiKey); // This logic is removed
          lastError = "API 错误: ${e.message}"; // 记录错误
 
          // --- BEGIN MODIFICATION ---
          // 尝试保存部分内容 (不在此处处理XML)
          if (accumulatedResponse.isNotEmpty) {
-           debugPrint("sendMessageStream: API 错误发生，但尝试保存已接收的部分内容 (长度: ${accumulatedResponse.length})");
-           try {
-             final partialMessage = Message.create(
-               chatId: chat.id,
-               rawText: accumulatedResponse,
-               role: MessageRole.model,
-             );
-             await _messageRepository.saveMessage(partialMessage);
-             debugPrint("sendMessageStream: 部分内容 (raw) 因 API 错误而保存成功。");
-           } catch (saveError) {
-             debugPrint("sendMessageStream 错误：在 API 错误后尝试保存部分内容失败: $saveError");
-           }
+           debugPrint("sendMessageStream: API 错误发生，不再从此保存部分内容。");
+           // REMOVED: Partial saving logic. This is now handled by the unified
+           // finalization logic in ChatStateNotifier.
          }
          // --- END MODIFICATION ---
 
@@ -336,18 +305,9 @@ class GeminiService {
          // --- BEGIN MODIFICATION ---
          // 尝试保存部分内容 (不在此处处理XML)
          if (accumulatedResponse.isNotEmpty) {
-           debugPrint("sendMessageStream: 通用错误发生，但尝试保存已接收的部分内容 (长度: ${accumulatedResponse.length})");
-           try {
-             final partialMessage = Message.create(
-               chatId: chat.id,
-               rawText: accumulatedResponse,
-               role: MessageRole.model,
-             );
-             await _messageRepository.saveMessage(partialMessage);
-             debugPrint("sendMessageStream: 部分内容 (raw) 因通用错误而保存成功。");
-           } catch (saveError) {
-             debugPrint("sendMessageStream 错误：在通用错误后尝试保存部分内容失败: $saveError");
-           }
+           debugPrint("sendMessageStream: 通用错误发生，不再从此保存部分内容。");
+           // REMOVED: Partial saving logic. This is now handled by the unified
+           // finalization logic in ChatStateNotifier.
          }
          // --- END MODIFICATION ---
 
@@ -361,44 +321,35 @@ class GeminiService {
    // 发送消息并获取单个完整响应 (Now accepts generic LlmContent and generationParams Map)
    Future<GeminiResponse> sendMessageOnce({
      required List<LlmContent> llmContext,
-     required Chat chat, // Still needed for chat ID, safety settings, model name from original config
-     required Map<String, dynamic> generationParams, // New parameter
+     required ApiConfig apiConfig,
+     required Map<String, dynamic> generationParams,
    }) async {
-    _isCancelled = false; // Reset cancellation flag for new request
+    _isCancelled = false;
      const int maxRetries = 3;
      int retryCount = 0;
      String? lastError;
 
-     // Convert LlmContent to API-specific context ONCE before the loop
      final (:systemInstructionAsContent, :chatHistory) = _buildApiContextFromLlm(llmContext);
 
      while (retryCount <= maxRetries) {
        debugPrint("sendMessageOnce (尝试 ${retryCount + 1}/${maxRetries + 1}) 开始...");
-        // 1. 获取 API Key
-       String? apiKey = _apiKeyNotifier.getNextApiKey();
-       if (apiKey == null) {
-         final apiKeyError = _ref.read(apiKeyNotifierProvider).error;
-         debugPrint("sendMessageOnce 错误：无可用 API Key。");
-         return GeminiResponse.error(lastError ?? apiKeyError ?? "无可用 API Key");
+       final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+       if (apiKey == null || apiKey.isEmpty) {
+         debugPrint("sendMessageOnce 错误：没有可用的 Gemini API Key。");
+         return const GeminiResponse.error("没有可用的 Gemini API Key。");
        }
 
-       // 2. 初始化 Gemini 模型
        genai.GenerativeModel? model;
        try {
-         // Use the passed generationParams Map to create the API-specific config
          final apiGenerationConfig = _createApiGenerationConfig(generationParams);
-         final apiSafetySettings = chat.generationConfig.safetySettings.map((rule) { // Safety settings still come from original chat config
-           final genaiCategory = _mapLocalToGenaiCategory(rule.category);
-           final genaiThreshold = _mapLocalToGenaiThreshold(rule.threshold);
-           return genai.SafetySetting(genaiCategory, genaiThreshold);
-         }).toList();
+         final apiSafetySettings = _defaultSafetySettings();
 
          model = genai.GenerativeModel(
-           model: chat.generationConfig.modelName,
+           model: apiConfig.model,
            apiKey: apiKey,
            generationConfig: apiGenerationConfig,
            safetySettings: apiSafetySettings,
-           systemInstruction: systemInstructionAsContent, // Pass systemInstructionAsContent here
+           systemInstruction: systemInstructionAsContent,
          );
          debugPrint("sendMessageOnce: Gemini 模型已初始化。");
        } catch (e) {
@@ -417,28 +368,8 @@ class GeminiService {
            return const GeminiResponse.error("Request cancelled by user.");
          }
 
-         // 保存 AI 消息
-         final aiMessage = Message.create(
-           chatId: chat.id,
-           rawText: rawResponseText,
-           role: MessageRole.model,
-         );
-         try {
-           await _messageRepository.saveMessage(aiMessage);
-           debugPrint("sendMessageOnce: AI 消息 (raw) 保存成功。");
-         } catch (e) {
-           debugPrint("sendMessageOnce 错误：保存 AI 消息失败: $e");
-         }
-
-         // 更新聊天时间戳
-         chat.updatedAt = DateTime.now();
-         final chatRepo = _ref.read(chatRepositoryProvider);
-         try {
-           await chatRepo.saveChat(chat);
-           debugPrint("sendMessageOnce: 聊天时间戳更新成功。");
-         } catch (e) {
-           debugPrint("sendMessageOnce 错误：更新聊天时间戳失败: $e");
-         }
+         // REMOVED: Database saving logic from service layer.
+         // This is now handled by ChatStateNotifier.
 
          final successResponse = GeminiResponse(
            rawText: rawResponseText, // Return the full raw text
@@ -449,7 +380,7 @@ class GeminiService {
 
        } on genai.GenerativeAIException catch (e) { // 处理 API 特定错误
          debugPrint("sendMessageOnce (尝试 ${retryCount + 1}) 失败。Gemini API 错误: ${e.message}");
-         _apiKeyNotifier.reportKeyError(apiKey);
+         // _apiKeyNotifier.reportKeyError(apiKey); // This logic is removed
          lastError = "API 错误: ${e.message}";
          retryCount++;
 
@@ -490,37 +421,20 @@ class GeminiService {
 
   // --- Private Safety Setting Mapping Helpers ---
   // These now take drift_enums directly
-  genai.HarmCategory _mapLocalToGenaiCategory(drift_enums.LocalHarmCategory local) { // Use drift_enums
-     switch (local) {
-       case drift_enums.LocalHarmCategory.harassment: return genai.HarmCategory.harassment;
-       case drift_enums.LocalHarmCategory.hateSpeech: return genai.HarmCategory.hateSpeech;
-       case drift_enums.LocalHarmCategory.sexuallyExplicit: return genai.HarmCategory.sexuallyExplicit;
-       case drift_enums.LocalHarmCategory.dangerousContent: return genai.HarmCategory.dangerousContent;
-       case drift_enums.LocalHarmCategory.unknown:
-          debugPrint("警告：映射过程中遇到 LocalHarmCategory.unknown。");
-          return genai.HarmCategory.harassment; // Fallback
-     }
-   }
 
-   genai.HarmBlockThreshold _mapLocalToGenaiThreshold(drift_enums.LocalHarmBlockThreshold local) { // Use drift_enums
-     switch (local) {
-       case drift_enums.LocalHarmBlockThreshold.none: return genai.HarmBlockThreshold.none;
-       case drift_enums.LocalHarmBlockThreshold.lowAndAbove:
-          debugPrint("映射 LocalHarmBlockThreshold.lowAndAbove 到 genai.HarmBlockThreshold.none");
-          return genai.HarmBlockThreshold.none;
-       case drift_enums.LocalHarmBlockThreshold.mediumAndAbove:
-          debugPrint("映射 LocalHarmBlockThreshold.mediumAndAbove 到 genai.HarmBlockThreshold.none");
-          return genai.HarmBlockThreshold.none;
-       case drift_enums.LocalHarmBlockThreshold.highAndAbove:
-          debugPrint("映射 LocalHarmBlockThreshold.highAndAbove 到 genai.HarmBlockThreshold.none");
-          return genai.HarmBlockThreshold.none;
-       case drift_enums.LocalHarmBlockThreshold.unspecified:
-          debugPrint("映射 LocalHarmBlockThreshold.unspecified 到 genai.HarmBlockThreshold.unspecified");
-          return genai.HarmBlockThreshold.unspecified;
-     }
-   }
-  Future<void> cancelRequest() async {
-    debugPrint("GeminiService: Setting cancellation flag.");
-    _isCancelled = true;
-  }
+  
+// Helper to create default safety settings
+List<genai.SafetySetting> _defaultSafetySettings() {
+  return [
+    genai.SafetySetting(genai.HarmCategory.harassment, genai.HarmBlockThreshold.none),
+    genai.SafetySetting(genai.HarmCategory.hateSpeech, genai.HarmBlockThreshold.none),
+    genai.SafetySetting(genai.HarmCategory.sexuallyExplicit, genai.HarmBlockThreshold.none),
+    genai.SafetySetting(genai.HarmCategory.dangerousContent, genai.HarmBlockThreshold.none),
+  ];
+}
+
+Future<void> cancelRequest() async {
+  debugPrint("GeminiService: Setting cancellation flag.");
+  _isCancelled = true;
+}
 }

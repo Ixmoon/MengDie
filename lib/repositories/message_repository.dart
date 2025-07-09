@@ -54,6 +54,7 @@ class MessageRepository {
       role: data.role,
       timestamp: data.timestamp,
       originalXmlContent: data.originalXmlContent,
+      secondaryXmlContent: data.secondaryXmlContent, // FIX: 从数据库读取时添加缺失的字段
     );
   }
 
@@ -68,6 +69,7 @@ class MessageRepository {
       role: Value(message.role),
       timestamp: Value(message.timestamp),
       originalXmlContent: Value(message.originalXmlContent),
+      secondaryXmlContent: Value(message.secondaryXmlContent), // FIX: 写入数据库时添加缺失的字段
     );
   }
 

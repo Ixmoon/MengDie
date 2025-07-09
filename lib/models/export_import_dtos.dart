@@ -10,7 +10,7 @@ class XmlRuleDto {
 
   const XmlRuleDto({
     this.tagName,
-    this.action = XmlAction.ignore, // 更新默认值为 ignore
+    this.action = XmlAction.ignore,
   });
 
   factory XmlRuleDto.fromJson(Map<String, dynamic> json) {
@@ -18,7 +18,7 @@ class XmlRuleDto {
       tagName: json['tagName'] as String?,
       action: XmlAction.values.firstWhere(
         (e) => e.toString() == json['action'],
-        orElse: () => XmlAction.ignore, // 更新 orElse 默认值为 ignore
+        orElse: () => XmlAction.ignore,
       ),
     );
   }
@@ -42,150 +42,9 @@ class XmlRuleDto {
   int get hashCode => tagName.hashCode ^ action.hashCode;
 }
 
-// --- DTO for SafetySettingRule ---
-@immutable
-class SafetySettingRuleDto {
-  final LocalHarmCategory category;
-  final LocalHarmBlockThreshold threshold;
+// SafetySettingRuleDto is no longer needed for export
 
-  const SafetySettingRuleDto({
-    this.category = LocalHarmCategory.harassment,
-    this.threshold = LocalHarmBlockThreshold.none,
-  });
-
-  factory SafetySettingRuleDto.fromJson(Map<String, dynamic> json) {
-    return SafetySettingRuleDto(
-      category: LocalHarmCategory.values.firstWhere(
-        (e) => e.toString() == json['category'],
-        orElse: () => LocalHarmCategory.unknown, // 默认值
-      ),
-      threshold: LocalHarmBlockThreshold.values.firstWhere(
-        (e) => e.toString() == json['threshold'],
-        orElse: () => LocalHarmBlockThreshold.unspecified, // 默认值
-      ),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'category': category.toString(),
-      'threshold': threshold.toString(),
-    };
-  }
-
-   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SafetySettingRuleDto &&
-          runtimeType == other.runtimeType &&
-          category == other.category &&
-          threshold == other.threshold;
-
-  @override
-  int get hashCode => category.hashCode ^ threshold.hashCode;
-}
-
-// --- DTO for GenerationConfig ---
-@immutable
-class GenerationConfigDto {
-  final String modelName;
-  final double? temperature;
-  final double? topP;
-  final int? topK;
-  final int? maxOutputTokens;
-  final List<String>? stopSequences;
-  final List<SafetySettingRuleDto> safetySettings;
-  final bool useCustomTemperature; // 新增
-  final bool useCustomTopP; // 新增
-  final bool useCustomTopK; // 新增
-
-  const GenerationConfigDto({
-    this.modelName = 'gemini-2.5-pro-exp-03-25',
-    this.temperature,
-    this.topP,
-    this.topK,
-    this.maxOutputTokens = 2048,
-    this.stopSequences,
-    this.useCustomTemperature = false, // 新增
-    this.useCustomTopP = false, // 新增
-    this.useCustomTopK = false, // 新增
-    this.safetySettings = const [ // 提供默认值
-      SafetySettingRuleDto(category: LocalHarmCategory.harassment, threshold: LocalHarmBlockThreshold.none),
-      SafetySettingRuleDto(category: LocalHarmCategory.hateSpeech, threshold: LocalHarmBlockThreshold.none),
-      SafetySettingRuleDto(category: LocalHarmCategory.sexuallyExplicit, threshold: LocalHarmBlockThreshold.none),
-      SafetySettingRuleDto(category: LocalHarmCategory.dangerousContent, threshold: LocalHarmBlockThreshold.none),
-    ],
-  });
-
-  factory GenerationConfigDto.fromJson(Map<String, dynamic> json) {
-    return GenerationConfigDto(
-      modelName: json['modelName'] as String? ?? 'gemini-2.5-pro-exp-03-25',
-      temperature: (json['temperature'] as num?)?.toDouble(),
-      topP: (json['topP'] as num?)?.toDouble(),
-      topK: json['topK'] as int?,
-      maxOutputTokens: json['maxOutputTokens'] as int? ?? 2048,
-      stopSequences: (json['stopSequences'] as List<dynamic>?)
-          ?.map((e) => e as String)
-          .toList(),
-      useCustomTemperature: json['useCustomTemperature'] as bool? ?? false, // 新增
-      useCustomTopP: json['useCustomTopP'] as bool? ?? false, // 新增
-      useCustomTopK: json['useCustomTopK'] as bool? ?? false, // 新增
-      safetySettings: (json['safetySettings'] as List<dynamic>?)
-              ?.map((e) => SafetySettingRuleDto.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [ // 解析失败或缺失时的默认值
-            SafetySettingRuleDto(category: LocalHarmCategory.harassment, threshold: LocalHarmBlockThreshold.none),
-            SafetySettingRuleDto(category: LocalHarmCategory.hateSpeech, threshold: LocalHarmBlockThreshold.none),
-            SafetySettingRuleDto(category: LocalHarmCategory.sexuallyExplicit, threshold: LocalHarmBlockThreshold.none),
-            SafetySettingRuleDto(category: LocalHarmCategory.dangerousContent, threshold: LocalHarmBlockThreshold.none),
-          ],
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'modelName': modelName,
-      'temperature': temperature,
-      'topP': topP,
-      'topK': topK,
-      'maxOutputTokens': maxOutputTokens,
-      'stopSequences': stopSequences,
-      'useCustomTemperature': useCustomTemperature, // 新增
-      'useCustomTopP': useCustomTopP, // 新增
-      'useCustomTopK': useCustomTopK, // 新增
-      'safetySettings': safetySettings.map((e) => e.toJson()).toList(),
-    };
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is GenerationConfigDto &&
-          runtimeType == other.runtimeType &&
-          modelName == other.modelName &&
-          temperature == other.temperature &&
-          topP == other.topP &&
-          topK == other.topK &&
-          maxOutputTokens == other.maxOutputTokens &&
-          listEquals(stopSequences, other.stopSequences) &&
-          useCustomTemperature == other.useCustomTemperature && // 新增
-          useCustomTopP == other.useCustomTopP && // 新增
-          useCustomTopK == other.useCustomTopK && // 新增
-          listEquals(safetySettings, other.safetySettings);
-
-  @override
-  int get hashCode =>
-      modelName.hashCode ^
-      temperature.hashCode ^
-      topP.hashCode ^
-      topK.hashCode ^
-      maxOutputTokens.hashCode ^
-      stopSequences.hashCode ^
-      useCustomTemperature.hashCode ^ // 新增
-      useCustomTopP.hashCode ^ // 新增
-      useCustomTopK.hashCode ^ // 新增
-      safetySettings.hashCode;
-}
+// GenerationConfigDto is no longer needed for export
 
 // --- DTO for ContextConfig ---
 @immutable
@@ -204,9 +63,9 @@ class ContextConfigDto {
     return ContextConfigDto(
       mode: ContextManagementMode.values.firstWhere(
         (e) => e.toString() == json['mode'],
-        orElse: () => ContextManagementMode.turns, // 默认值
+        orElse: () => ContextManagementMode.turns,
       ),
-      maxTurns: json['maxTurns'] as int? ?? 10, // 默认值
+      maxTurns: json['maxTurns'] as int? ?? 10,
       maxContextTokens: json['maxContextTokens'] as int?,
     );
   }
@@ -236,16 +95,18 @@ class ContextConfigDto {
 // --- DTO for Message ---
 @immutable
 class MessageExportDto {
-  final String rawText; // Kept for backward compatibility
+  final String rawText;
   final MessageRole role;
-  final List<Map<String, dynamic>>? parts; // New field for multi-part content
-  final String? originalXmlContent; // New field
+  final List<Map<String, dynamic>>? parts;
+  final String? originalXmlContent;
+  final String? secondaryXmlContent;
 
   const MessageExportDto({
     required this.rawText,
     required this.role,
     this.parts,
     this.originalXmlContent,
+    this.secondaryXmlContent,
   });
 
   factory MessageExportDto.fromJson(Map<String, dynamic> json) {
@@ -256,15 +117,17 @@ class MessageExportDto {
           ?.map((e) => e as Map<String, dynamic>)
           .toList(),
       originalXmlContent: json['originalXmlContent'] as String?,
+      secondaryXmlContent: json['secondaryXmlContent'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'rawText': rawText,
-      'role': role.name, // Use .name for clean enum string
+      'role': role.name,
       'parts': parts,
       'originalXmlContent': originalXmlContent,
+      'secondaryXmlContent': secondaryXmlContent,
     };
   }
 
@@ -276,14 +139,16 @@ class MessageExportDto {
           rawText == other.rawText &&
           role == other.role &&
           listEquals(parts, other.parts) &&
-          originalXmlContent == other.originalXmlContent;
+          originalXmlContent == other.originalXmlContent &&
+          secondaryXmlContent == other.secondaryXmlContent;
 
   @override
   int get hashCode =>
       rawText.hashCode ^
       role.hashCode ^
       parts.hashCode ^
-      originalXmlContent.hashCode;
+      originalXmlContent.hashCode ^
+      secondaryXmlContent.hashCode;
 }
 
 // --- DTO for Chat ---
@@ -291,38 +156,38 @@ class MessageExportDto {
 class ChatExportDto {
   final String? title;
   final String? systemPrompt;
-  // final String? coverImagePath; // Cover image is the exported image itself
-  // final String? backgroundImagePath; // Background image might be complex to export/import
-  final bool isFolder; // Keep folder status if needed, though import might always create a chat
-  final GenerationConfigDto generationConfig;
+  final bool isFolder;
+  final String? apiConfigId;
   final ContextConfigDto contextConfig;
   final List<XmlRuleDto> xmlRules;
-  final List<MessageExportDto> messages; // Include messages within the chat DTO
-  final LlmType apiType; // 新增
-  final String? selectedOpenAIConfigId; // 新增
-  final String? coverImageBase64; // 新增: 存储封面图片的 Base64 字符串
+  final List<MessageExportDto> messages;
+  final String? coverImageBase64;
   final bool enablePreprocessing;
   final String? preprocessingPrompt;
-  final bool enablePostprocessing;
-  final String? postprocessingPrompt;
-  final String? contextSummary; // Export current summary
+  final String? preprocessingApiConfigId;
+  final bool enableSecondaryXml;
+  final String? secondaryXmlPrompt;
+  final String? secondaryXmlApiConfigId;
+  final String? contextSummary;
+  final String? continuePrompt;
 
   const ChatExportDto({
     this.title,
     this.systemPrompt,
-    this.isFolder = false, // Default to false on import
-    required this.generationConfig,
+    this.isFolder = false,
+    this.apiConfigId,
     required this.contextConfig,
     required this.xmlRules,
     required this.messages,
-    this.apiType = LlmType.gemini, // 新增，提供默认值
-    this.selectedOpenAIConfigId, // 新增
-    this.coverImageBase64, // 新增
+    this.coverImageBase64,
     this.enablePreprocessing = false,
     this.preprocessingPrompt,
-    this.enablePostprocessing = false,
-    this.postprocessingPrompt,
+    this.preprocessingApiConfigId,
+    this.enableSecondaryXml = false,
+    this.secondaryXmlPrompt,
+    this.secondaryXmlApiConfigId,
     this.contextSummary,
+    this.continuePrompt,
   });
 
   factory ChatExportDto.fromJson(Map<String, dynamic> json) {
@@ -330,7 +195,7 @@ class ChatExportDto {
       title: json['title'] as String?,
       systemPrompt: json['systemPrompt'] as String?,
       isFolder: json['isFolder'] as bool? ?? false,
-      generationConfig: GenerationConfigDto.fromJson(json['generationConfig'] as Map<String, dynamic>),
+      apiConfigId: json['apiConfigId'] as String?,
       contextConfig: ContextConfigDto.fromJson(json['contextConfig'] as Map<String, dynamic>),
       xmlRules: (json['xmlRules'] as List<dynamic>)
           .map((e) => XmlRuleDto.fromJson(e as Map<String, dynamic>))
@@ -338,17 +203,15 @@ class ChatExportDto {
       messages: (json['messages'] as List<dynamic>)
           .map((e) => MessageExportDto.fromJson(e as Map<String, dynamic>))
           .toList(),
-      apiType: LlmType.values.firstWhere(
-        (e) => e.toString() == json['apiType'],
-        orElse: () => LlmType.gemini,
-      ),
-      selectedOpenAIConfigId: json['selectedOpenAIConfigId'] as String?,
-      coverImageBase64: json['coverImageBase64'] as String?, // 新增
+      coverImageBase64: json['coverImageBase64'] as String?,
       enablePreprocessing: json['enablePreprocessing'] as bool? ?? false,
       preprocessingPrompt: json['preprocessingPrompt'] as String?,
-      enablePostprocessing: json['enablePostprocessing'] as bool? ?? false,
-      postprocessingPrompt: json['postprocessingPrompt'] as String?,
+      preprocessingApiConfigId: json['preprocessingApiConfigId'] as String?,
+      enableSecondaryXml: json['enableSecondaryXml'] as bool? ?? false,
+      secondaryXmlPrompt: json['secondaryXmlPrompt'] as String?,
+      secondaryXmlApiConfigId: json['secondaryXmlApiConfigId'] as String?,
       contextSummary: json['contextSummary'] as String?,
+      continuePrompt: json['continuePrompt'] as String?,
     );
   }
 
@@ -357,18 +220,19 @@ class ChatExportDto {
       'title': title,
       'systemPrompt': systemPrompt,
       'isFolder': isFolder,
-      'generationConfig': generationConfig.toJson(),
+      'apiConfigId': apiConfigId,
       'contextConfig': contextConfig.toJson(),
       'xmlRules': xmlRules.map((e) => e.toJson()).toList(),
       'messages': messages.map((e) => e.toJson()).toList(),
-      'apiType': apiType.toString(),
-      'selectedOpenAIConfigId': selectedOpenAIConfigId,
-      'coverImageBase64': coverImageBase64, // 新增
+      'coverImageBase64': coverImageBase64,
       'enablePreprocessing': enablePreprocessing,
       'preprocessingPrompt': preprocessingPrompt,
-      'enablePostprocessing': enablePostprocessing,
-      'postprocessingPrompt': postprocessingPrompt,
+      'preprocessingApiConfigId': preprocessingApiConfigId,
+      'enableSecondaryXml': enableSecondaryXml,
+      'secondaryXmlPrompt': secondaryXmlPrompt,
+      'secondaryXmlApiConfigId': secondaryXmlApiConfigId,
       'contextSummary': contextSummary,
+      'continuePrompt': continuePrompt,
     };
   }
 
@@ -380,34 +244,36 @@ class ChatExportDto {
           title == other.title &&
           systemPrompt == other.systemPrompt &&
           isFolder == other.isFolder &&
-          generationConfig == other.generationConfig &&
+          apiConfigId == other.apiConfigId &&
           contextConfig == other.contextConfig &&
           listEquals(xmlRules, other.xmlRules) &&
           listEquals(messages, other.messages) &&
-          apiType == other.apiType &&
-          selectedOpenAIConfigId == other.selectedOpenAIConfigId &&
-          coverImageBase64 == other.coverImageBase64 && // 新增
+          coverImageBase64 == other.coverImageBase64 &&
           enablePreprocessing == other.enablePreprocessing &&
           preprocessingPrompt == other.preprocessingPrompt &&
-          enablePostprocessing == other.enablePostprocessing &&
-          postprocessingPrompt == other.postprocessingPrompt &&
-          contextSummary == other.contextSummary;
+          preprocessingApiConfigId == other.preprocessingApiConfigId &&
+          enableSecondaryXml == other.enableSecondaryXml &&
+          secondaryXmlPrompt == other.secondaryXmlPrompt &&
+          secondaryXmlApiConfigId == other.secondaryXmlApiConfigId &&
+          contextSummary == other.contextSummary &&
+          continuePrompt == other.continuePrompt;
 
   @override
   int get hashCode =>
       title.hashCode ^
       systemPrompt.hashCode ^
       isFolder.hashCode ^
-      generationConfig.hashCode ^
+      apiConfigId.hashCode ^
       contextConfig.hashCode ^
       xmlRules.hashCode ^
       messages.hashCode ^
-      apiType.hashCode ^
-      selectedOpenAIConfigId.hashCode ^
-      coverImageBase64.hashCode ^ // 新增
+      coverImageBase64.hashCode ^
       enablePreprocessing.hashCode ^
       preprocessingPrompt.hashCode ^
-      enablePostprocessing.hashCode ^
-      postprocessingPrompt.hashCode ^
-      contextSummary.hashCode;
+      preprocessingApiConfigId.hashCode ^
+      enableSecondaryXml.hashCode ^
+      secondaryXmlPrompt.hashCode ^
+      secondaryXmlApiConfigId.hashCode ^
+      contextSummary.hashCode ^
+      continuePrompt.hashCode;
 }

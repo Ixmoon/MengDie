@@ -1,14 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:google_generative_ai/google_generative_ai.dart' as genai; // REMOVED
 
 // Import local models and services
-import '../models/models.dart'; // Access to Chat, Message, GenerationConfig, LlmType, OpenAIAPIConfig etc.
-import '../data/database/drift/models/drift_generation_config.dart'; // Import for DriftGenerationConfig
-import 'gemini_service.dart'; // Access to the specific Gemini implementation
-import 'openai_service.dart'; // 新增：Access to the specific OpenAI implementation
-import '../providers/api_key_provider.dart'; // Needed for API key access and OpenAI configs
+import '../models/models.dart';
+import '../data/database/drift/app_database.dart'; // For ApiConfig
+import 'gemini_service.dart';
+import 'openai_service.dart';
+import '../providers/api_key_provider.dart';
 
 // --- Generic LLM Data Structures ---
 // These structures abstract away the specifics of the underlying LLM API (e.g., Gemini)
@@ -210,55 +209,46 @@ class LlmService {
 
   LlmService(this._ref, this._geminiService, this._openAIService, this._apiKeyNotifier);
 
-  // Helper to create a Map of generation parameters based on DriftGenerationConfig
-  Map<String, dynamic> _prepareGenerationParametersMap(DriftGenerationConfig appDriftConfig) {
-    final Map<String, dynamic> params = {};
-
-    if (appDriftConfig.useCustomTemperature && appDriftConfig.temperature != null) {
-      params['temperature'] = appDriftConfig.temperature;
+  /// Retrieves the API configuration for a given chat and prepares generation parameters.
+  (ApiConfig?, Map<String, dynamic>) _getApiConfigAndParams(Chat chat, {String? apiConfigIdOverride}) {
+    final configId = apiConfigIdOverride ?? chat.apiConfigId;
+    if (configId == null) {
+      return (null, {});
     }
-    if (appDriftConfig.useCustomTopP && appDriftConfig.topP != null) {
-      params['topP'] = appDriftConfig.topP;
-    }
-    if (appDriftConfig.useCustomTopK && appDriftConfig.topK != null) {
-      params['topK'] = appDriftConfig.topK;
-    }
-    // maxOutputTokens is often a required or always-present parameter,
-    // but if it can be omitted when null, this check can be more stringent.
-    // Assuming for now it's okay to pass null if the API handles it, or it has a default.
-    // To strictly omit if null: if (appDriftConfig.maxOutputTokens != null)
-    if (appDriftConfig.maxOutputTokens != null) { // Let's be strict and only add if not null
-        params['maxOutputTokens'] = appDriftConfig.maxOutputTokens;
+    final apiConfig = _apiKeyNotifier.getConfigById(configId);
+    if (apiConfig == null) {
+      return (null, {});
     }
 
-    if (appDriftConfig.stopSequences != null && appDriftConfig.stopSequences!.isNotEmpty) {
-      params['stopSequences'] = appDriftConfig.stopSequences;
-    }
-    return params;
+    final Map<String, dynamic> params = {
+      if (apiConfig.temperature != null) 'temperature': apiConfig.temperature,
+      if (apiConfig.topP != null) 'topP': apiConfig.topP,
+      if (apiConfig.topK != null) 'topK': apiConfig.topK,
+      if (apiConfig.maxOutputTokens != null) 'maxOutputTokens': apiConfig.maxOutputTokens,
+      if (apiConfig.stopSequences != null && apiConfig.stopSequences!.isNotEmpty) 'stopSequences': apiConfig.stopSequences,
+    };
+    return (apiConfig, params);
   }
-
-  // REMOVED: _buildApiContext method
 
   /// Sends messages and gets a streaming response.
   Stream<LlmStreamChunk> sendMessageStream({
-    required List<LlmContent> llmContext, // Use generic LlmContent
-    required Chat chat, // Still need Chat for some general info, but config is handled
+    required List<LlmContent> llmContext,
+    required Chat chat,
+    String? apiConfigIdOverride,
   }) {
-    // 1. Set active service type for cancellation tracking
-    _activeServiceType = chat.apiType;
+    final (apiConfig, generationParams) = _getApiConfigAndParams(chat, apiConfigIdOverride: apiConfigIdOverride);
+
+    if (apiConfig == null) {
+      return Stream.value(LlmStreamChunk.error("API configuration not found for this chat.", ''));
+    }
+
+    _activeServiceType = apiConfig.apiType;
     debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
 
-    // 2. Select the LLM based on chat.apiType
-    final llmType = chat.apiType;
-    // Prepare the generation parameters map
-    final generationParams = _prepareGenerationParametersMap(chat.generationConfig);
-
-    // 2. Delegate to the appropriate service
-    switch (llmType) {
+    switch (apiConfig.apiType) {
       case LlmType.gemini:
         try {
-          // GeminiService now needs to accept Map<String, dynamic>
-          return _geminiService.sendMessageStream(llmContext: llmContext, chat: chat, generationParams: generationParams)
+          return _geminiService.sendMessageStream(llmContext: llmContext, apiConfig: apiConfig, generationParams: generationParams)
               .map(LlmStreamChunk.fromGeminiChunk)
               .handleError((error, stackTrace) {
                 debugPrint("Error in Gemini stream during mapping: $error\n$stackTrace");
@@ -269,21 +259,11 @@ class LlmService {
           return Stream.value(LlmStreamChunk.error("Failed to start Gemini stream: $e", ''));
         }
       case LlmType.openai:
-        final configId = chat.selectedOpenAIConfigId;
-        if (configId == null) {
-          return Stream.value(LlmStreamChunk.error("OpenAI config ID not selected for this chat.", ''));
-        }
-        final apiConfig = _apiKeyNotifier.getOpenAIConfigById(configId);
-        if (apiConfig == null) {
-          return Stream.value(LlmStreamChunk.error("Selected OpenAI config (ID: $configId) not found.", ''));
-        }
         if (apiConfig.apiKey == null || apiConfig.apiKey!.isEmpty) {
           return Stream.value(LlmStreamChunk.error("API Key for OpenAI config '${apiConfig.name}' is missing.", ''));
         }
         try {
-          // OpenAIService is expected to return LlmStreamChunk directly
-          // It will also need to be updated to accept Map<String, dynamic>
-          return _openAIService.sendMessageStream(llmContext: llmContext, chat: chat, apiConfig: apiConfig, generationParams: generationParams);
+          return _openAIService.sendMessageStream(llmContext: llmContext, apiConfig: apiConfig, generationParams: generationParams);
         } catch (e) {
           debugPrint("Error setting up OpenAI stream: $e");
           return Stream.value(LlmStreamChunk.error("Failed to start OpenAI stream: $e", ''));
@@ -291,45 +271,36 @@ class LlmService {
     }
   }
 
-
   /// Sends messages and gets a single, complete response.
   Future<LlmResponse> sendMessageOnce({
-    required List<LlmContent> llmContext, // Use generic LlmContent
-    required Chat chat, // Still need Chat for some general info
+    required List<LlmContent> llmContext,
+    required Chat chat,
+    String? apiConfigIdOverride,
   }) async {
-    // Set active service type for cancellation tracking
-    _activeServiceType = chat.apiType;
-    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
-    final llmType = chat.apiType;
-    // Prepare the generation parameters map
-    final generationParams = _prepareGenerationParametersMap(chat.generationConfig);
+    final (apiConfig, generationParams) = _getApiConfigAndParams(chat, apiConfigIdOverride: apiConfigIdOverride);
 
-    switch (llmType) {
+    if (apiConfig == null) {
+      return const LlmResponse.error("API configuration not found for this chat.");
+    }
+
+    _activeServiceType = apiConfig.apiType;
+    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
+
+    switch (apiConfig.apiType) {
       case LlmType.gemini:
         try {
-          // GeminiService now needs to accept Map<String, dynamic>
-          final geminiResponse = await _geminiService.sendMessageOnce(llmContext: llmContext, chat: chat, generationParams: generationParams);
+          final geminiResponse = await _geminiService.sendMessageOnce(llmContext: llmContext, apiConfig: apiConfig, generationParams: generationParams);
           return LlmResponse.fromGeminiResponse(geminiResponse);
         } catch (e) {
-          debugPrint("Error during Gemini sendMessageOnce or context conversion: $e");
+          debugPrint("Error during Gemini sendMessageOnce: $e");
           return LlmResponse.error("Gemini API Error: $e");
         }
       case LlmType.openai:
-        final configId = chat.selectedOpenAIConfigId;
-        if (configId == null) {
-          return const LlmResponse.error("OpenAI config ID not selected for this chat.");
-        }
-        final apiConfig = _apiKeyNotifier.getOpenAIConfigById(configId);
-        if (apiConfig == null) {
-          return LlmResponse.error("Selected OpenAI config (ID: $configId) not found.");
-        }
         if (apiConfig.apiKey == null || apiConfig.apiKey!.isEmpty) {
           return LlmResponse.error("API Key for OpenAI config '${apiConfig.name}' is missing.");
         }
         try {
-          // OpenAIService is expected to return LlmResponse directly
-          // It will also need to be updated to accept Map<String, dynamic>
-          return await _openAIService.sendMessageOnce(llmContext: llmContext, chat: chat, apiConfig: apiConfig, generationParams: generationParams);
+          return await _openAIService.sendMessageOnce(llmContext: llmContext, apiConfig: apiConfig, generationParams: generationParams);
         } catch (e) {
           debugPrint("Error during OpenAI sendMessageOnce: $e");
           return LlmResponse.error("OpenAI API Error: $e");
@@ -340,50 +311,30 @@ class LlmService {
   /// Counts tokens for a given context.
   Future<int> countTokens({
     required List<LlmContent> llmContext,
-    required Chat chat, // Pass the whole chat object
-    // required String modelName, // Model name is now derived from chat or config
+    required Chat chat,
   }) async {
-    final llmType = chat.apiType;
+    final (apiConfig, _) = _getApiConfigAndParams(chat);
 
-    switch (llmType) {
+    if (apiConfig == null) {
+      debugPrint("LlmService.countTokens Error: API configuration not found.");
+      return -1;
+    }
+
+    switch (apiConfig.apiType) {
       case LlmType.gemini:
-        final apiKey = _apiKeyNotifier.getNextApiKey(); // For Gemini, we still use the rotating key
-        if (apiKey == null) {
-          debugPrint("LlmService.countTokens (Gemini) Error: No API Key available.");
-          return -1;
-        }
         try {
-          return await _geminiService.countTokens(
-            llmContext: llmContext,
-            modelName: chat.generationConfig.modelName, // Gemini model from chat's generation config
-            apiKey: apiKey,
-          );
+          return await _geminiService.countTokens(llmContext: llmContext, apiConfig: apiConfig);
         } catch (e) {
           debugPrint("Error during Gemini countTokens: $e");
           return -1;
         }
       case LlmType.openai:
-        final configId = chat.selectedOpenAIConfigId;
-        if (configId == null) {
-          debugPrint("LlmService.countTokens (OpenAI) Error: OpenAI config ID not selected.");
-          return -1;
-        }
-        final apiConfig = _apiKeyNotifier.getOpenAIConfigById(configId);
-        if (apiConfig == null) {
-          debugPrint("LlmService.countTokens (OpenAI) Error: Selected OpenAI config (ID: $configId) not found.");
-          return -1;
-        }
-        // Note: OpenAI's modelName comes from apiConfig.modelName
-        // The apiKey is also in apiConfig
         if (apiConfig.apiKey == null || apiConfig.apiKey!.isEmpty) {
            debugPrint("LlmService.countTokens (OpenAI) Error: API Key for config '${apiConfig.name}' is missing.");
           return -1;
         }
         try {
-          return await _openAIService.countTokens(
-            llmContext: llmContext,
-            apiConfig: apiConfig, // Pass the whole config
-          );
+          return await _openAIService.countTokens(llmContext: llmContext, apiConfig: apiConfig);
         } catch (e) {
           debugPrint("Error during OpenAI countTokens: $e");
           return -1;
@@ -396,6 +347,11 @@ class LlmService {
   /// Cancels the ongoing request on the currently active service.
   Future<void> cancelActiveRequest() async {
     debugPrint("LlmService: Received cancellation request for active service: $_activeServiceType");
+    if (_activeServiceType == null) {
+      debugPrint("LlmService: Cancellation request ignored, no active service.");
+      return;
+    }
+
     if (_activeServiceType == LlmType.openai) {
       await _openAIService.cancelRequest();
     } else if (_activeServiceType == LlmType.gemini) {
@@ -403,6 +359,7 @@ class LlmService {
     }
     // Reset the active service type after cancellation to prevent dangling state
     _activeServiceType = null;
+    debugPrint("LlmService: Active service has been cancelled and reset.");
   }
 }
 

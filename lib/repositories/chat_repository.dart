@@ -1,9 +1,10 @@
+import 'dart:convert';
+import 'package:drift/drift.dart';
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:isar/isar.dart'; // Removed Isar
 
 // 导入模型和核心 Provider
-import '../models/models.dart'; // Still used for Chat, Message model classes
+import '../models/models.dart';
 import '../models/export_import_dtos.dart'; // 导入 DTOs
 import '../providers/core_providers.dart'; // Needs appDatabaseProvider
 import '../data/database/drift/app_database.dart'; 
@@ -80,7 +81,31 @@ class ChatRepository {
   // --- 导入聊天 ---
   Future<int> importChat(ChatExportDto chatDto) async {
     debugPrint("ChatRepository: 开始导入聊天: ${chatDto.title ?? '无标题'} (Drift)...");
-    // The DAO method importChatFromDto needs the AppDatabase instance itself for transactions with type converters
     return await _chatDao.importChatFromDto(chatDto, _db);
+  }
+
+  Future<int> forkChat(int originalChatId, int fromMessageId) async {
+    debugPrint("ChatRepository: Forking chat ID: $originalChatId from message ID: $fromMessageId (Drift)...");
+    return await _chatDao.forkChat(originalChatId, fromMessageId);
+  }
+
+  // --- Migration Helpers ---
+  Future<List<Map<String, dynamic>>> getRawChatsForMigration() async {
+    // This is a raw query to fetch data from columns that may no longer exist in the schema
+    // This is an advanced Drift feature and should be used with caution.
+    final result = await _db.customSelect('SELECT id, title, generation_config, api_type FROM chats').get();
+    return result.map((row) {
+      final data = row.data;
+      // The generation_config is a JSON string, so we need to decode it.
+      if (data['generation_config'] is String) {
+        data['generation_config'] = json.decode(data['generation_config']);
+      }
+      return data;
+    }).toList();
+  }
+
+  Future<void> updateApiConfigId(int chatId, String apiConfigId) async {
+    await (_db.update(_db.chats)..where((t) => t.id.equals(chatId)))
+        .write(ChatsCompanion(apiConfigId: Value(apiConfigId)));
   }
 }

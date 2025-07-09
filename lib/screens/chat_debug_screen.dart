@@ -16,8 +16,7 @@ import '../widgets/app_card.dart';
 // XML 和上下文构建的核心逻辑已移至 ContextXmlService。
 
 class ChatDebugScreen extends ConsumerStatefulWidget {
-  final int chatId;
-  const ChatDebugScreen({super.key, required this.chatId});
+  const ChatDebugScreen({super.key});
 
   @override
   ConsumerState<ChatDebugScreen> createState() => _ChatDebugScreenState();
@@ -34,7 +33,12 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _loadDebugContext(); // Renamed and consolidated
+        _loadDebugContext();
+      }
+    });
+    ref.listen<int?>(activeChatIdProvider, (_, __) {
+      if (mounted) {
+        _loadDebugContext();
       }
     });
   }
@@ -46,7 +50,17 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       _errorLoadingContext = "";
     });
 
-    final chat = ref.read(currentChatProvider(widget.chatId)).value;
+    final chatId = ref.read(activeChatIdProvider);
+    if (chatId == null) {
+      if (mounted) {
+        setState(() {
+          _errorLoadingContext = "错误：没有活动的聊天。";
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+    final chat = ref.read(currentChatProvider(chatId)).value;
     if (chat == null) {
       if (mounted) {
         setState(() {
@@ -97,8 +111,15 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chatAsyncValue = ref.watch(currentChatProvider(widget.chatId));
-    final historyLoaded = ref.watch(chatMessagesProvider(widget.chatId)).hasValue; // Still useful to know if base data is there
+    final chatId = ref.watch(activeChatIdProvider);
+    if (chatId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('调试信息')),
+        body: const Center(child: Text("没有活动的聊天。")),
+      );
+    }
+    final chatAsyncValue = ref.watch(currentChatProvider(chatId));
+    final historyLoaded = ref.watch(chatMessagesProvider(chatId)).hasValue; // Still useful to know if base data is there
 
     return Scaffold(
       appBar: AppBar(
@@ -108,7 +129,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       body: Builder(builder: (context) {
         // Adjusted loading condition slightly
         if (_isLoading && _displayedApiContextParts == null && !chatAsyncValue.hasValue && _errorLoadingContext.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+          return const SizedBox.shrink();
         }
         if (!chatAsyncValue.hasValue && !historyLoaded && _errorLoadingContext.isEmpty) {
             return const Center(child: Text("正在加载聊天数据..."));
@@ -130,7 +151,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         }
         
         if (_isLoading) { // General loading state after chat data is available but context isn't yet
-            return const Center(child: CircularProgressIndicator());
+            return const SizedBox.shrink();
         }
 
 
@@ -227,9 +248,18 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         style: TextStyle(fontFamily: 'monospace', fontSize: 12),
       );
     } else {
+      // 优化：在映射之前一次性获取消息列表
+      final chatId = ref.read(activeChatIdProvider);
+      if (chatId == null) return const SizedBox.shrink();
+      final messages = ref.read(chatMessagesProvider(chatId)).value;
+      final bool messagesAvailable = messages != null && messages.isNotEmpty;
+
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: _displayedApiContextParts!.map((content) { // Use renamed variable
+        children: _displayedApiContextParts!.asMap().entries.map((entry) {
+          final int contentIndex = entry.key;
+          final LlmContent content = entry.value;
+
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0),
             child: Column(
@@ -243,8 +273,9 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                 if (content.parts.isNotEmpty)
                   ...content.parts.map((part) {
                     if (part is LlmTextPart) {
-                      final message = (_displayedApiContextParts!.indexOf(content) < ref.read(chatMessagesProvider(widget.chatId)).value!.length)
-                          ? ref.read(chatMessagesProvider(widget.chatId)).value![_displayedApiContextParts!.indexOf(content)]
+                      // 优化：使用预先计算的索引和消息列表
+                      final message = (messagesAvailable && contentIndex < messages.length)
+                          ? messages[contentIndex]
                           : null;
                       final originalXml = message?.originalXmlContent;
 

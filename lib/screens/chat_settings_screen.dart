@@ -5,29 +5,27 @@ import 'package:drift/drift.dart' show Value;
 // 导入模型、Provider 和仓库
 import '../models/models.dart';
 import '../data/database/drift/models/drift_xml_rule.dart';
-import '../data/database/drift/models/drift_openai_api_config.dart';
 import '../data/database/drift/common_enums.dart' as drift_enums;
 import '../providers/api_key_provider.dart';
 import '../providers/chat_settings_provider.dart';
-
-// 本文件包含用于配置单个聊天会话设置的屏幕界面。
-
-// 使用 ConsumerStatefulWidget 来处理本地 UI 状态（如 _showAdvancedSettings）
+import '../providers/chat_state_providers.dart';
+import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
+ 
+ // 本文件包含用于配置单个聊天会话设置的屏幕界面。
+ 
 class ChatSettingsScreen extends ConsumerStatefulWidget {
-  final int chatId;
-  const ChatSettingsScreen({super.key, required this.chatId});
+  const ChatSettingsScreen({super.key});
 
   @override
   ConsumerState<ChatSettingsScreen> createState() => _ChatSettingsScreenState();
 }
 
 class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
-  // 本地 UI 状态，与业务逻辑无关
-  bool _showAdvancedSettings = false;
-
   // --- 显示添加/编辑 XML 规则的对话框 ---
   void _showXmlRuleDialog(BuildContext context, {DriftXmlRule? existingRule, int? ruleIndex}) {
-    final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
+    final chatId = ref.read(activeChatIdProvider);
+    if (chatId == null) return;
+    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
     drift_enums.XmlAction selectedAction = existingRule?.action ?? drift_enums.XmlAction.ignore;
 
@@ -111,12 +109,19 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final settingsState = ref.watch(chatSettingsProvider(widget.chatId));
-    final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
+    final chatId = ref.watch(activeChatIdProvider);
+    if (chatId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('聊天设置')),
+        body: const Center(child: Text('没有活动的聊天。')),
+      );
+    }
+    final settingsState = ref.watch(chatSettingsProvider(chatId));
+    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_showAdvancedSettings ? '高级模型设置' : '聊天设置'),
+        title: const Text('聊天设置'),
         actions: [
           IconButton(
             icon: const Icon(Icons.save_outlined),
@@ -135,62 +140,43 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
               }
             },
           ),
-          TextButton.icon(
-            icon: Icon(_showAdvancedSettings ? Icons.settings_outlined : Icons.tune_outlined),
-            label: Text(_showAdvancedSettings ? '基本设置' : '高级选项'),
-            onPressed: () => setState(() => _showAdvancedSettings = !_showAdvancedSettings),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).appBarTheme.foregroundColor ?? Theme.of(context).colorScheme.onPrimary,
-            ),
-          ),
         ],
       ),
       body: settingsState.initialChat.when(
         data: (_) {
           final chat = settingsState.chatForDisplay;
           if (chat == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const SizedBox.shrink();
           }
           return GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
             child: Form(
-              child: _showAdvancedSettings
-                  ? _buildAdvancedSettingsForm(context, ref, chat)
-                  : _buildMainSettingsForm(context, ref, chat),
+              child: _buildMainSettingsForm(context, ref, chat, chatId),
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SizedBox.shrink(),
         error: (err, stack) => Center(child: Text('无法加载聊天设置: $err')),
       ),
     );
   }
 
-  Widget _buildMainSettingsForm(BuildContext context, WidgetRef ref, Chat chat) {
+  Widget _buildMainSettingsForm(BuildContext context, WidgetRef ref, Chat chat, int chatId) {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
-        _BasicInfoSettings(chatId: widget.chatId),
+        _BasicInfoSettings(chatId: chatId),
         const Divider(height: 30),
-        _ApiProviderSettings(chatId: widget.chatId),
+        _ApiProviderSettings(chatId: chatId),
         const Divider(height: 30),
-        _ContextManagementSettings(chatId: widget.chatId),
+        _ContextManagementSettings(chatId: chatId),
         const Divider(height: 30),
         _XmlRulesSettings(
-          chatId: widget.chatId,
+          chatId: chatId,
           onShowXmlRuleDialog: (rule, index) => _showXmlRuleDialog(context, existingRule: rule, ruleIndex: index),
         ),
         const Divider(height: 30),
-        _AutomationSettings(chatId: widget.chatId),
-      ],
-    );
-  }
-
-  Widget _buildAdvancedSettingsForm(BuildContext context, WidgetRef ref, Chat chat) {
-    return ListView(
-      padding: const EdgeInsets.all(16.0),
-      children: [
-        _ModelParametersSettings(chatId: widget.chatId),
+        _AutomationSettings(chatId: chatId),
       ],
     );
   }
@@ -232,10 +218,61 @@ class _BasicInfoSettings extends ConsumerWidget {
         TextFormField(
           key: ValueKey('systemPrompt_${chat.id}'),
           initialValue: chat.systemPrompt,
-          decoration: const InputDecoration(labelText: '系统提示词', hintText: '定义 AI 的角色或行为...', border: OutlineInputBorder()),
+          decoration: InputDecoration(
+            labelText: '系统提示词',
+            hintText: '定义 AI 的角色或行为...',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.fullscreen),
+              tooltip: '全屏编辑',
+              onPressed: () async {
+                final newText = await Navigator.of(context).push<String>(
+                  MaterialPageRoute(
+                    builder: (context) => FullScreenTextEditorScreen(
+                      initialText: chat.systemPrompt ?? '',
+                      title: '编辑系统提示词',
+                    ),
+                  ),
+                );
+                if (newText != null) {
+                  notifier.updateSettings((c) => c.copyWith(systemPrompt: newText));
+                }
+              },
+            ),
+          ),
           maxLines: 4,
           minLines: 2,
           onChanged: (value) => notifier.updateSettings((c) => c.copyWith(systemPrompt: value)),
+        ),
+        const SizedBox(height: 15),
+        TextFormField(
+          key: ValueKey('continuePrompt_${chat.id}'),
+          initialValue: chat.continuePrompt,
+          decoration: InputDecoration(
+            labelText: '续写提示词 (可选)',
+            hintText: '为空时，续写功能将使用系统提示词',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.fullscreen),
+              tooltip: '全屏编辑',
+              onPressed: () async {
+                final newText = await Navigator.of(context).push<String>(
+                  MaterialPageRoute(
+                    builder: (context) => FullScreenTextEditorScreen(
+                      initialText: chat.continuePrompt ?? '',
+                      title: '编辑续写提示词',
+                    ),
+                  ),
+                );
+                if (newText != null) {
+                  notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(newText)));
+                }
+              },
+            ),
+          ),
+          maxLines: 4,
+          minLines: 2,
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(value))),
         ),
       ],
     );
@@ -250,52 +287,28 @@ class _ApiProviderSettings extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
-    final openAIConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.openAIConfigs));
+    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('API 提供者'),
         const SizedBox(height: 15),
-        DropdownButtonFormField<drift_enums.LlmType>(
-          value: chat.apiType,
-          decoration: const InputDecoration(labelText: '选择 API 类型', border: OutlineInputBorder()),
-          items: drift_enums.LlmType.values.map((type) => DropdownMenuItem(
-            value: type,
-            child: Text(type == drift_enums.LlmType.gemini ? 'Google Gemini' : 'OpenAI 兼容 API'),
-          )).toList(),
-          onChanged: (value) {
-            if (value != null) {
-              notifier.updateSettings((c) {
-                String? newConfigId = c.selectedOpenAIConfigId;
-                if (value == drift_enums.LlmType.openai) {
-                   final currentIdIsValid = newConfigId != null && openAIConfigs.any((conf) => conf.id == newConfigId);
-                   if (!currentIdIsValid) {
-                     newConfigId = openAIConfigs.isNotEmpty ? openAIConfigs.first.id : null;
-                   }
-                } else {
-                  newConfigId = null;
-                }
-                return c.copyWith(apiType: value, selectedOpenAIConfigId: Value(newConfigId));
-              });
-            }
-          },
-        ),
-        const SizedBox(height: 15),
-        if (chat.apiType == drift_enums.LlmType.openai)
-          if (openAIConfigs.isEmpty)
-            const Text('没有可用的 OpenAI 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
-          else
-            DropdownButtonFormField<String>(
-              value: openAIConfigs.any((c) => c.id == chat.selectedOpenAIConfigId) ? chat.selectedOpenAIConfigId : null,
-              decoration: const InputDecoration(labelText: '选择 OpenAI 配置', border: OutlineInputBorder()),
-              items: openAIConfigs.map((config) => DropdownMenuItem(
-                value: config.id,
-                child: Text(config.name),
-              )).toList(),
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(selectedOpenAIConfigId: Value(value))),
-              validator: (value) => (value == null) ? '请选择一个 OpenAI 配置。' : null,
-            ),
+        if (apiConfigs.isEmpty)
+          const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
+        else
+          DropdownButtonFormField<String>(
+            value: apiConfigs.any((c) => c.id == chat.apiConfigId) ? chat.apiConfigId : null,
+            decoration: const InputDecoration(labelText: '选择 API 配置', border: OutlineInputBorder()),
+            items: apiConfigs.map((config) => DropdownMenuItem(
+              value: config.id,
+              child: Text(config.name),
+            )).toList(),
+            onChanged: (value) {
+              notifier.updateSettings((c) => c.copyWith(apiConfigId: Value(value)));
+            },
+            validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
+          ),
       ],
     );
   }
@@ -427,6 +440,7 @@ class _AutomationSettings extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
+    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,132 +459,94 @@ class _AutomationSettings extends ConsumerWidget {
             child: TextFormField(
               key: ValueKey('preprocessingPrompt_${chat.id}'),
               initialValue: chat.preprocessingPrompt,
-              decoration: const InputDecoration(labelText: '前处理提示词', hintText: '例如：请总结以下对话...', border: OutlineInputBorder()),
+              decoration: InputDecoration(
+                labelText: '前处理提示词',
+                hintText: '例如：请总结以下对话...',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.fullscreen),
+                  tooltip: '全屏编辑',
+                  onPressed: () async {
+                    final newText = await Navigator.of(context).push<String>(
+                      MaterialPageRoute(
+                        builder: (context) => FullScreenTextEditorScreen(
+                          initialText: chat.preprocessingPrompt ?? '',
+                          title: '编辑前处理提示词',
+                        ),
+                      ),
+                    );
+                    if (newText != null) {
+                      notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(newText)));
+                    }
+                  },
+                ),
+              ),
               maxLines: 3,
               minLines: 1,
               onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(value))),
             ),
           ),
+       if (chat.enablePreprocessing)
+         Padding(
+           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+           child: DropdownButtonFormField<String>(
+             value: apiConfigs.any((c) => c.id == chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
+             decoration: const InputDecoration(labelText: '用于总结的 API 配置', border: OutlineInputBorder()),
+             items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: Value(value))),
+             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
+           ),
+         ),
         SwitchListTile(
-          title: const Text('启用回复增强 (后处理)'),
-          subtitle: const Text('在回复后，使用特定提示词强化XML输出'),
-          value: chat.enablePostprocessing,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enablePostprocessing: value)),
+          title: const Text('启用附加XML生成'),
+          subtitle: const Text('在回复后，使用附加提示词生成额外XML内容'),
+          value: chat.enableSecondaryXml,
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
         ),
-        if (chat.enablePostprocessing)
+        if (chat.enableSecondaryXml)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 16.0),
+            padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 8.0),
             child: TextFormField(
-              key: ValueKey('postprocessingPrompt_${chat.id}'),
-              initialValue: chat.postprocessingPrompt,
-              decoration: const InputDecoration(labelText: '后处理提示词', hintText: '例如：请根据对话历史，生成tool_code标签...', border: OutlineInputBorder()),
+              key: ValueKey('secondaryXmlPrompt_${chat.id}'),
+              initialValue: chat.secondaryXmlPrompt,
+              decoration: InputDecoration(
+                labelText: '附加XML提示词',
+                hintText: '例如：请根据对话历史，生成tool_code标签...',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.fullscreen),
+                  tooltip: '全屏编辑',
+                  onPressed: () async {
+                    final newText = await Navigator.of(context).push<String>(
+                      MaterialPageRoute(
+                        builder: (context) => FullScreenTextEditorScreen(
+                          initialText: chat.secondaryXmlPrompt ?? '',
+                          title: '编辑附加XML提示词',
+                        ),
+                      ),
+                    );
+                    if (newText != null) {
+                      notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(newText)));
+                    }
+                  },
+                ),
+              ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(postprocessingPrompt: Value(value))),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(value))),
             ),
           ),
-      ],
-    );
-  }
-}
-
-class _ModelParametersSettings extends ConsumerWidget {
-  final int chatId;
-  const _ModelParametersSettings({required this.chatId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
-    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
-    final genConfig = chat.generationConfig;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionTitle('模型与生成设置'),
-        const SizedBox(height: 15),
-        if (chat.apiType == drift_enums.LlmType.gemini) ...[
-          TextFormField(
-            key: ValueKey('modelName_${chat.id}'),
-            initialValue: genConfig.modelName,
-            decoration: const InputDecoration(labelText: 'Gemini 模型名称', hintText: '例如: gemini-1.5-pro-latest', border: OutlineInputBorder()),
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(modelName: value))),
-          ),
-          const SizedBox(height: 15),
-        ] else if (chat.apiType == drift_enums.LlmType.openai) ...[
-          Consumer(builder: (context, ref, child) {
-            final openAIConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.openAIConfigs));
-            final selectedConfig = openAIConfigs.firstWhere(
-                (c) => c.id == chat.selectedOpenAIConfigId,
-                orElse: () => DriftOpenAIAPIConfig(id: '', name: '未找到配置', model: 'N/A', baseUrl: ''),
-            );
-            return ListTile(
-              title: const Text('OpenAI 模型名称'),
-              subtitle: Text(selectedConfig.model.isNotEmpty ? selectedConfig.model : '(来自所选配置)'),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            );
-          }),
-          const SizedBox(height: 15),
-        ],
-        TextFormField(
-          key: ValueKey('maxOutputTokens_${chat.id}'),
-          initialValue: genConfig.maxOutputTokens?.toString() ?? '',
-          decoration: const InputDecoration(labelText: '最大输出 Tokens (可选)', border: OutlineInputBorder()),
-          keyboardType: TextInputType.number,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(maxOutputTokens: int.tryParse(value)))),
-        ),
-        const SizedBox(height: 15),
-        TextFormField(
-          key: ValueKey('stopSequences_${chat.id}'),
-          initialValue: genConfig.stopSequences?.join(', ') ?? '',
-          decoration: const InputDecoration(labelText: '停止序列 (可选)', hintText: '用逗号分隔, 例如: END,STOP', border: OutlineInputBorder()),
-          maxLines: 2,
-          minLines: 1,
-          onChanged: (value) {
-            final sequences = value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
-            notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(stopSequences: sequences)));
-          },
-        ),
-        const Divider(height: 20),
-        SwitchListTile(
-          title: const Text('自定义 Temperature'),
-          subtitle: Text(genConfig.useCustomTemperature ? (genConfig.temperature?.toStringAsFixed(1) ?? '1.0') : 'API 默认'),
-          value: genConfig.useCustomTemperature,
-          onChanged: (bool value) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(useCustomTemperature: value, temperature: value ? (c.generationConfig.temperature ?? 1.0) : null))),
-        ),
-        Slider(
-           value: genConfig.temperature ?? 1.0,
-           min: 0.0, max: 2.0, divisions: 40,
-           label: (genConfig.temperature ?? 1.0).toStringAsFixed(1),
-           onChanged: genConfig.useCustomTemperature ? (val) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(temperature: val))) : null,
-        ),
-        const SizedBox(height: 10),
-        SwitchListTile(
-          title: const Text('自定义 Top P'),
-          subtitle: Text(genConfig.useCustomTopP ? (genConfig.topP?.toStringAsFixed(2) ?? '0.95') : 'API 默认'),
-          value: genConfig.useCustomTopP,
-          onChanged: (bool value) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(useCustomTopP: value, topP: value ? (c.generationConfig.topP ?? 0.95) : null))),
-        ),
-        Slider(
-            value: genConfig.topP ?? 0.95,
-            min: 0.0, max: 1.0, divisions: 100,
-            label: (genConfig.topP ?? 0.95).toStringAsFixed(2),
-            onChanged: genConfig.useCustomTopP ? (val) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(topP: val))) : null,
-        ),
-        const SizedBox(height: 10),
-        SwitchListTile(
-          title: const Text('自定义 Top K'),
-          subtitle: Text(genConfig.useCustomTopK ? (genConfig.topK?.round().toString() ?? '40') : 'API 默认'),
-          value: genConfig.useCustomTopK,
-          onChanged: (bool value) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(useCustomTopK: value, topK: value ? (c.generationConfig.topK ?? 40) : null))),
-        ),
-        Slider(
-          value: genConfig.topK?.toDouble() ?? 40.0,
-          min: 1.0, max: 100.0, divisions: 99,
-          label: (genConfig.topK?.round() ?? 40).toString(),
-          onChanged: genConfig.useCustomTopK ? (val) => notifier.updateSettings((c) => c.copyWith(generationConfig: genConfig.copyWith(topK: val.round()))) : null,
-        ),
+       if (chat.enableSecondaryXml)
+         Padding(
+           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+           child: DropdownButtonFormField<String>(
+             value: apiConfigs.any((c) => c.id == chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
+             decoration: const InputDecoration(labelText: '用于附加XML的 API 配置', border: OutlineInputBorder()),
+             items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: Value(value))),
+             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
+           ),
+         ),
       ],
     );
   }

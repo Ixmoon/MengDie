@@ -14,8 +14,7 @@ import '../widgets/cached_image.dart'; // 导入缓存图片组件
 // --- 聊天图库屏幕 ---
 // 使用 ConsumerWidget 因为主要逻辑在辅助函数中，不需要复杂的状态管理。
 class ChatGalleryScreen extends ConsumerWidget {
-  final int chatId;
-  const ChatGalleryScreen({super.key, required this.chatId});
+  const ChatGalleryScreen({super.key});
 
   // --- 业务逻辑：选择并设置封面图片 (Base64) ---
   Future<void> _pickAndSetCoverImageBase64(ImageSource source, BuildContext context, WidgetRef ref) async {
@@ -30,6 +29,8 @@ class ChatGalleryScreen extends ConsumerWidget {
       final Uint8List imageBytes = await image.readAsBytes();
       final String newBase64String = base64Encode(imageBytes);
 
+      final chatId = ref.read(activeChatIdProvider);
+      if (chatId == null) return;
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat != null) {
         final chatToUpdate = chat;
@@ -50,6 +51,15 @@ class ChatGalleryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final chatId = ref.watch(activeChatIdProvider);
+
+    if (chatId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('封面图片管理')),
+        body: const Center(child: Text('没有活动的聊天。')),
+      );
+    }
+
     final chatAsync = ref.watch(currentChatProvider(chatId));
 
     return Scaffold(
@@ -95,7 +105,7 @@ class ChatGalleryScreen extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const SizedBox.shrink(),
         error: (err, stack) => Center(child: Text('无法加载图片信息: $err')),
       ),
     );
@@ -112,9 +122,13 @@ class _CoverImageDisplay extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget imageWidget;
     if (base64String != null && base64String!.isNotEmpty) {
+      final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+      final screenWidth = MediaQuery.of(context).size.width;
       imageWidget = CachedImageFromBase64(
         base64String: base64String!,
         fit: BoxFit.contain,
+        cacheWidth: (screenWidth * pixelRatio).round(),
+        cacheHeight: (150 * pixelRatio).round(),
         errorBuilder: (ctx, err, st) => Icon(Icons.broken_image, size: 60, color: Colors.grey.shade400),
       );
     } else {

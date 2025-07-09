@@ -1,25 +1,11 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
-import 'models/drift_generation_config.dart';
 import 'models/drift_context_config.dart';
 import 'models/drift_xml_rule.dart';
-import 'models/drift_openai_api_config.dart'; // Assuming this will be stored in settings, not directly in chat
 import 'common_enums.dart';
 
-// For GenerationConfig
-class GenerationConfigConverter extends TypeConverter<DriftGenerationConfig, String> {
-  const GenerationConfigConverter();
-
-  @override
-  DriftGenerationConfig fromSql(String fromDb) {
-    return DriftGenerationConfig.fromJson(json.decode(fromDb) as Map<String, dynamic>);
-  }
-
-  @override
-  String toSql(DriftGenerationConfig value) {
-    return json.encode(value.toJson());
-  }
-}
+// Note: GenerationConfigConverter is removed as its fields are now part of the ApiConfigs table.
+// Note: OpenAIAPIConfigConverter is removed for the same reason.
 
 // For ContextConfig
 class ContextConfigConverter extends TypeConverter<DriftContextConfig, String> {
@@ -83,19 +69,29 @@ class MessageRoleConverter extends TypeConverter<MessageRole, String> {
   }
 }
 
-// Note: DriftOpenAIAPIConfig might be better stored as a separate table if it becomes complex
-// or if multiple chats can share the same config.
-// For now, if it were to be stored as JSON in a single chat's settings:
-class OpenAIAPIConfigConverter extends TypeConverter<DriftOpenAIAPIConfig, String> {
-  const OpenAIAPIConfigConverter();
+// For List<String>
+class StringListConverter extends TypeConverter<List<String>?, String?> {
+  const StringListConverter();
 
   @override
-  DriftOpenAIAPIConfig fromSql(String fromDb) {
-    return DriftOpenAIAPIConfig.fromJson(json.decode(fromDb) as Map<String, dynamic>);
+  List<String>? fromSql(String? fromDb) {
+    if (fromDb == null || fromDb.isEmpty) {
+      return null;
+    }
+    try {
+      final List<dynamic> jsonData = json.decode(fromDb) as List<dynamic>;
+      return jsonData.map((item) => item as String).toList();
+    } catch (e) {
+      // Handle potential old data that was stored as comma-separated.
+      return fromDb.split(',');
+    }
   }
 
   @override
-  String toSql(DriftOpenAIAPIConfig value) {
-    return json.encode(value.toJson());
+  String? toSql(List<String>? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return json.encode(value);
   }
 }

@@ -1,7 +1,5 @@
 import 'dart:async'; // For StreamSubscription, Timer
-import 'dart:math'; // Import for min function
 
-import 'package:flutter/foundation.dart'; // for immutable, kDebugMode, debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // Added for Color type
 
@@ -12,11 +10,16 @@ import '../repositories/message_repository.dart';
 import '../services/llm_service.dart'; // Import the generic LLM service and types
 import '../services/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
-import '../data/database/drift/common_enums.dart' as drift_enums; // Added import
 import '../services/xml_processor.dart'; // Added import
+import '../providers/settings_providers.dart';
 
 
 // 本文件包含与聊天数据和聊天界面状态相关的 Riverpod 提供者。
+
+// --- 当前激活的聊天 ID Provider ---
+// 这个 Provider 允许我们拥有一个单一的 ChatScreen 实例，
+// 该实例根据此状态更新其内容，而不是为每个聊天推送新的路由。
+final activeChatIdProvider = StateProvider<int?>((ref) => null);
 
 // --- 当前文件夹 ID Provider ---
 final currentFolderIdProvider = StateProvider<int?>((ref) => null);
@@ -82,25 +85,23 @@ class ChatScreenState {
   final String? errorMessage; // For critical errors, might still be useful
   final String? topMessageText; // For general informational messages
   final Color? topMessageColor; // Color for the top message banner
-  final String? streamingMessageContent;
-  final DateTime? streamingTimestamp;
   final DateTime? generationStartTime;
-  final bool isStreaming;
+  final bool isStreaming; // Still useful to know if a stream is active overall
   final bool isStreamMode;
   final int? elapsedSeconds;
   final bool isBubbleTransparent;
   final bool isBubbleHalfWidth;
   final bool isMessageListHalfHeight;
   final int? totalTokens;
+  final List<String>? helpMeReplySuggestions;
+  final bool isProcessingInBackground; // New state for background tasks
 
   const ChatScreenState({
     this.isLoading = false,
-    this.streamingTimestamp,
     this.generationStartTime,
     this.errorMessage,
     this.topMessageText,
     this.topMessageColor,
-    this.streamingMessageContent,
     this.isStreaming = false,
     this.isStreamMode = true,
     this.elapsedSeconds,
@@ -108,6 +109,8 @@ class ChatScreenState {
     this.isBubbleHalfWidth = false,
     this.isMessageListHalfHeight = false,
     this.totalTokens,
+    this.helpMeReplySuggestions,
+    this.isProcessingInBackground = false, // Default to false
   });
 
   ChatScreenState copyWith({
@@ -117,8 +120,6 @@ class ChatScreenState {
     String? topMessageText,
     Color? topMessageColor,
     bool clearTopMessage = false, // If true, sets topMessageText and topMessageColor to null
-    String? streamingMessageContent,
-    DateTime? streamingTimestamp,
     DateTime? generationStartTime,
     bool clearGenerationStartTime = false,
     bool? isStreaming,
@@ -131,14 +132,15 @@ class ChatScreenState {
     bool? isMessageListHalfHeight,
     int? totalTokens,
     bool clearTotalTokens = false,
+    List<String>? helpMeReplySuggestions,
+    bool clearHelpMeReplySuggestions = false,
+    bool? isProcessingInBackground,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       topMessageText: clearTopMessage ? null : (topMessageText ?? this.topMessageText),
       topMessageColor: clearTopMessage ? null : (topMessageColor ?? this.topMessageColor),
-      streamingMessageContent: clearStreaming ? null : (streamingMessageContent ?? this.streamingMessageContent),
-      streamingTimestamp: clearStreaming ? null : (streamingTimestamp ?? this.streamingTimestamp),
       generationStartTime: clearGenerationStartTime ? null : (generationStartTime ?? this.generationStartTime),
       isStreaming: clearStreaming ? false : (isStreaming ?? this.isStreaming),
       isStreamMode: isStreamMode ?? this.isStreamMode,
@@ -147,6 +149,8 @@ class ChatScreenState {
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
       isMessageListHalfHeight: isMessageListHalfHeight ?? this.isMessageListHalfHeight,
       totalTokens: clearTotalTokens ? null : (totalTokens ?? this.totalTokens),
+      helpMeReplySuggestions: clearHelpMeReplySuggestions ? null : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
+      isProcessingInBackground: isProcessingInBackground ?? this.isProcessingInBackground,
     );
   }
 }
@@ -163,6 +167,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   StreamSubscription<LlmStreamChunk>? _llmStreamSubscription;
   Timer? _updateTimer;
   Timer? _topMessageTimer; // Timer for top messages
+  bool _isCancelling = false; // Flag to prevent reentry into cancelGeneration
+  bool _isFinalizing = false; // Flag to prevent reentry into _finalizeStreamedMessage
+  bool _isBackgroundTaskCancelled = false; // Cancellation flag for background tasks
 
   ChatStateNotifier(this._ref, this._chatId) : super(const ChatScreenState());
 
@@ -272,6 +279,13 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         if (deleted) {
           showTopMessage('消息已删除', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
           calculateAndStoreTokenCount(); // Recalculate tokens
+          // 清除上下文摘要，因为它现在可能已失效
+          final chatRepo = _ref.read(chatRepositoryProvider);
+          final chat = await chatRepo.getChat(_chatId);
+          if (chat != null && chat.contextSummary != null) {
+            await chatRepo.saveChat(chat.copyWith(contextSummary: const Value(null)));
+            debugPrint("ChatStateNotifier($_chatId): 因消息删除已清除上下文摘要。");
+          }
         } else {
           showTopMessage('删除消息失败，可能已被删除', backgroundColor: Colors.orange);
         }
@@ -284,30 +298,40 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     }
   }
 
-  Future<void> editMessage(int messageId, {String? newText, List<MessagePart>? newParts}) async {
+  Future<void> editMessage(int messageId, {String? newText, List<MessagePart>? newParts, Message? updatedMessage}) async {
     if (!mounted) return;
     try {
       final messageRepo = _ref.read(messageRepositoryProvider);
-      final message = await messageRepo.getMessageById(messageId);
-      if (message == null) {
-        showTopMessage('无法编辑：未找到消息', backgroundColor: Colors.red);
-        return;
-      }
+      
+      Message? messageToSave = updatedMessage;
 
-      Message updatedMessage;
-      if (newParts != null) {
-        updatedMessage = message.copyWith(parts: newParts);
-      } else if (newText != null) {
-        updatedMessage = message.copyWith(rawText: newText);
-      } else {
-        return; // Nothing to update
+      if (messageToSave == null) {
+        final message = await messageRepo.getMessageById(messageId);
+        if (message == null) {
+          showTopMessage('无法编辑：未找到消息', backgroundColor: Colors.red);
+          return;
+        }
+        if (newParts != null) {
+          messageToSave = message.copyWith(parts: newParts);
+        } else if (newText != null) {
+          messageToSave = message.copyWith(rawText: newText);
+        } else {
+          return; // Nothing to update
+        }
       }
       
-      await messageRepo.saveMessage(updatedMessage);
+      await messageRepo.saveMessage(messageToSave);
 
       if (mounted) {
         showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
         calculateAndStoreTokenCount(); // Recalculate tokens
+        // 清除上下文摘要，因为它现在可能已失效
+        final chatRepo = _ref.read(chatRepositoryProvider);
+        final chat = await chatRepo.getChat(_chatId);
+        if (chat != null && chat.contextSummary != null) {
+          await chatRepo.saveChat(chat.copyWith(contextSummary: const Value(null)));
+          debugPrint("ChatStateNotifier($_chatId): 因消息编辑已清除上下文摘要。");
+        }
       }
     } catch (e) {
       debugPrint("Notifier 更新消息时出错: $e");
@@ -364,16 +388,17 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         ..systemPrompt = originalChat.systemPrompt
         ..coverImageBase64 = originalChat.coverImageBase64
         ..backgroundImagePath = originalChat.backgroundImagePath
-        ..generationConfig = originalChat.generationConfig
+        ..apiConfigId = originalChat.apiConfigId
         ..contextConfig = originalChat.contextConfig
         ..xmlRules = List.from(originalChat.xmlRules)
-        ..apiType = originalChat.apiType
-        ..selectedOpenAIConfigId = originalChat.selectedOpenAIConfigId
         ..enablePreprocessing = originalChat.enablePreprocessing
         ..preprocessingPrompt = originalChat.preprocessingPrompt
+        ..preprocessingApiConfigId = originalChat.preprocessingApiConfigId
         ..contextSummary = null // Forked chat starts fresh
-        ..enablePostprocessing = originalChat.enablePostprocessing
-        ..postprocessingPrompt = originalChat.postprocessingPrompt
+        ..enableSecondaryXml = originalChat.enableSecondaryXml
+        ..secondaryXmlPrompt = originalChat.secondaryXmlPrompt
+        ..secondaryXmlApiConfigId = originalChat.secondaryXmlApiConfigId
+        ..continuePrompt = originalChat.continuePrompt
         ..createdAt = DateTime.now()
         ..updatedAt = DateTime.now();
       
@@ -386,6 +411,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
           parts: originalMsg.parts, // Keep original parts
           role: originalMsg.role,
           timestamp: originalMsg.timestamp,
+          // FIX: Ensure forked messages retain their complete XML history
+          originalXmlContent: originalMsg.originalXmlContent,
+          secondaryXmlContent: originalMsg.secondaryXmlContent,
         );
       }).toList();
       await messageRepo.saveMessages(newMessages);
@@ -457,13 +485,29 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     await sendMessage(userMessage: userMessage, isRegeneration: true);
   }
 
+  Future<void> continueGeneration() async {
+    if (state.isLoading) {
+      debugPrint("续写操作取消：已在加载中。");
+      return;
+    }
+
+    final allMessages = _ref.read(chatMessagesProvider(_chatId)).value ?? [];
+    if (allMessages.isEmpty || allMessages.last.role != MessageRole.model) {
+      showTopMessage('只能在模型回复后进行续写', backgroundColor: Colors.orange);
+      return;
+    }
+
+    await sendMessage(isContinuation: true);
+  }
+
   Future<void> sendMessage({
     List<MessagePart>? userParts,
     Message? userMessage, // Used for regeneration
-    bool isRegeneration = false
+    bool isRegeneration = false,
+    bool isContinuation = false,
   }) async {
-    if (state.isLoading && !isRegeneration) {
-      debugPrint("sendMessage ($_chatId) 取消：已在加载中且非重新生成。");
+    if (state.isLoading && !isRegeneration && !isContinuation) {
+      debugPrint("sendMessage ($_chatId) 取消：已在加载中。");
       return;
     }
     
@@ -480,6 +524,11 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     if (isRegeneration && userMessage != null) {
       messageForContext = userMessage;
       debugPrint("重新生成操作，使用现有消息作为上下文。");
+    } else if (isContinuation) {
+      final allMessages = _ref.read(chatMessagesProvider(_chatId)).value ?? [];
+      if (allMessages.isEmpty) return;
+      messageForContext = allMessages.last;
+      debugPrint("续写操作，使用现有历史作为上下文。");
     } else if (userParts != null && userParts.isNotEmpty) {
       // Create a separate message for each part
       for (var part in userParts) {
@@ -501,12 +550,13 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         clearError: true,
         clearTopMessage: true,
         clearStreaming: true,
+        clearHelpMeReplySuggestions: true, // 清除建议缓存
         generationStartTime: DateTime.now(),
         elapsedSeconds: 0);
     _startUpdateTimer();
     
-    // --- Save new user messages (if not regenerating) ---
-    if (!isRegeneration) {
+    // --- Save new user messages (if not regenerating or continuing) ---
+    if (!isRegeneration && !isContinuation) {
       try {
         final messageRepo = _ref.read(messageRepositoryProvider);
         await messageRepo.saveMessages(messagesToSave); // Batch save
@@ -530,9 +580,20 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     String? carriedOverXmlForThisTurn;
     try {
       final contextXmlService = _ref.read(contextXmlServiceProvider);
+      
+      Chat chatForContext = chat;
+      String? lastMessageOverride;
+
+      if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
+        lastMessageOverride = chat.continuePrompt;
+        chatForContext = chat.copyWith(systemPrompt: ''); // 清空系统提示词
+        debugPrint("续写操作：将续写提示词作为最后的用户消息。");
+      }
+
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
-        chat: chat,
+        chat: chatForContext,
         currentUserMessage: messageForContext, // Pass the representative message for context
+        lastMessageOverride: lastMessageOverride,
       );
       
       llmApiContext = apiRequestContext.contextParts;
@@ -551,7 +612,8 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
      final llmService = _ref.read(llmServiceProvider);
 
      if (state.isStreamMode) {
-       _handleStreamResponse(llmService, chat, llmApiContext, carriedOverXmlForThisTurn);
+       // The new stream handling logic now returns a Future
+       await _handleStreamResponse(llmService, chat, llmApiContext);
      } else {
        await _handleSingleResponse(llmService, chat, llmApiContext, carriedOverXmlForThisTurn);
      }
@@ -563,151 +625,158 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    final chat = _ref.read(currentChatProvider(_chatId)).value;
    if (chat == null) return;
 
+   // 1. Reset cancellation flag and set background processing state
+   _isBackgroundTaskCancelled = false;
+   if (mounted) {
+     state = state.copyWith(isProcessingInBackground: true);
+   }
+
    List<Future> tasks = [];
 
-   if (chat.enablePostprocessing && (chat.postprocessingPrompt?.isNotEmpty ?? false)) {
-     tasks.add(_executePostprocessing(chat, modelMessage));
-   }
-   
-   // Pre-processing depends on the result of context building, which happened before sending.
-   // We need access to the `droppedMessages` from that step.
-   // This is a structural challenge. For now, we'll re-calculate it.
-   // A better approach would be to pass `apiRequestContext` through the send methods.
+   // 2. Gather all tasks
+   tasks.add(_executeAutoTitleGeneration(chat, modelMessage));
+   tasks.add(_executePostGenerationProcessing(chat, modelMessage));
    if (chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false)) {
-      tasks.add(_executePreprocessing(chat));
+     tasks.add(_executePreprocessing(chat));
+   }
+   final globalSettings = _ref.read(globalSettingsProvider);
+   if (globalSettings.enableHelpMeReply && globalSettings.helpMeReplyTriggerMode == 'auto') {
+     tasks.add(generateHelpMeReply());
    }
 
+   // 3. Run tasks and clear state in a finally block
    if (tasks.isNotEmpty) {
      try {
        await Future.wait(tasks);
        debugPrint("ChatStateNotifier($_chatId): Async processing tasks completed.");
+       // Show completion message only on success and if not cancelled
+       // The "Completed" message is now shown by the caller contexts
+       // (_finalizeStreamedMessage or _handleSingleResponse) after this whole process finishes.
      } catch (e) {
-       debugPrint("ChatStateNotifier($_chatId): Error during async processing tasks: $e");
-       if (mounted) {
-         showTopMessage("后台处理任务出错: $e", backgroundColor: Colors.red.withAlpha(204));
+       if (!_isBackgroundTaskCancelled) { // Only show error if not cancelled by user
+         debugPrint("ChatStateNotifier($_chatId): Error during async processing tasks: $e");
+         if (mounted) {
+           showTopMessage("后台处理任务出错: $e", backgroundColor: Colors.red.withAlpha(204));
+         }
        }
+     } finally {
+       if (mounted) {
+         // Clear all processing states together, including the timer.
+         state = state.copyWith(
+           isProcessingInBackground: false,
+           clearGenerationStartTime: true,
+           clearElapsedSeconds: true,
+         );
+         _stopUpdateTimer();
+         debugPrint("ChatStateNotifier($_chatId): Background processing state and timer cleared.");
+       }
+     }
+   } else {
+     // If there are no tasks, ensure the state is cleared immediately.
+     if (mounted) {
+       state = state.copyWith(isProcessingInBackground: false);
      }
    }
  }
 
- Future<void> _executePostprocessing(Chat chat, Message modelMessage) async {
-   debugPrint("ChatStateNotifier($_chatId): Executing post-processing...");
+ Future<void> _executePostGenerationProcessing(Chat chat, Message modelMessage) async {
+   if (_isBackgroundTaskCancelled) return; // Check for cancellation
+   debugPrint("ChatStateNotifier($_chatId): Starting post-generation processing for an existing message...");
    final messageRepo = _ref.read(messageRepositoryProvider);
-   final llmService = _ref.read(llmServiceProvider);
 
-   // 1. Save original XML content
-   final originalRawText = modelMessage.rawText;
-   final originalXml = XmlProcessor.extractXmlContent(originalRawText);
-   
    var messageToUpdate = await messageRepo.getMessageById(modelMessage.id);
-   if (messageToUpdate == null) return;
+   if (messageToUpdate == null) {
+     debugPrint("ChatStateNotifier($_chatId): Post-processing failed: message to update not found.");
+     return;
+   }
    
-   messageToUpdate = messageToUpdate.copyWith(originalXmlContent: originalXml);
-   await messageRepo.saveMessage(messageToUpdate);
+   if (_isBackgroundTaskCancelled) return; // Check again before heavy lifting
+   final finalMessage = await _getFinalProcessedMessage(chat, messageToUpdate);
 
-   // 2. Build new request for post-processing
-   final contextXmlService = _ref.read(contextXmlServiceProvider);
-   final apiRequestContext = await contextXmlService.buildApiRequestContext(
-     chat: chat.copyWith(systemPrompt: chat.postprocessingPrompt), // Replace system prompt
-     currentUserMessage: messageToUpdate,
-   );
-   
-   // 3. Call LLM service (not streaming)
-   final response = await llmService.sendMessageOnce(
-     llmContext: apiRequestContext.contextParts,
-     chat: chat,
-   );
+   if (_isBackgroundTaskCancelled) return; // Check again before saving
 
-   if (response.isSuccess && response.parts.isNotEmpty) {
-     // 4. Merge results
-     final postprocessedText = response.parts.map((p) => p.text ?? "").join("\n");
-     final originalDisplayText = XmlProcessor.stripXmlContent(originalRawText);
-     
-     final newRawText = (originalDisplayText.isNotEmpty && postprocessedText.isNotEmpty)
-         ? '$originalDisplayText\n$postprocessedText'
-         : originalDisplayText + postprocessedText;
-     
-     messageToUpdate = await messageRepo.getMessageById(modelMessage.id); // Re-fetch latest version
-     if (messageToUpdate == null) return;
-
-     messageToUpdate = messageToUpdate.copyWith(rawText: newRawText);
-     await messageRepo.saveMessage(messageToUpdate);
-     debugPrint("ChatStateNotifier($_chatId): Post-processing successful. Message updated.");
+   if (finalMessage.rawText != messageToUpdate.rawText ||
+       finalMessage.originalXmlContent != messageToUpdate.originalXmlContent ||
+       finalMessage.secondaryXmlContent != messageToUpdate.secondaryXmlContent) {
+     await messageRepo.saveMessage(finalMessage);
+     debugPrint("ChatStateNotifier($_chatId): Existing message has been updated with post-processing.");
    } else {
-     throw Exception("Post-processing failed: ${response.error ?? 'No content'}");
+     debugPrint("ChatStateNotifier($_chatId): No changes for existing message after post-processing. Skipping save.");
    }
  }
 
  Future<void> _executePreprocessing(Chat chat) async {
-     debugPrint("ChatStateNotifier($_chatId): Executing pre-processing (summarization)...");
-     final contextXmlService = _ref.read(contextXmlServiceProvider);
-     final llmService = _ref.read(llmServiceProvider);
-     final chatRepo = _ref.read(chatRepositoryProvider);
+   if (_isBackgroundTaskCancelled) return; // Check for cancellation
+   debugPrint("ChatStateNotifier($_chatId): Executing pre-processing (summarization)...");
+   final contextXmlService = _ref.read(contextXmlServiceProvider);
+   final llmService = _ref.read(llmServiceProvider);
+   final chatRepo = _ref.read(chatRepositoryProvider);
 
-     // Re-build context to find dropped messages. This is inefficient but necessary with current structure.
-     final placeholderMessage = Message.create(chatId: _chatId, role: MessageRole.user, rawText: "[Preprocessing Placeholder]");
-     final apiRequestContext = await contextXmlService.buildApiRequestContext(chat: chat, currentUserMessage: placeholderMessage);
-     final droppedMessages = apiRequestContext.droppedMessages;
+   final placeholderMessage = Message.create(chatId: _chatId, role: MessageRole.user, rawText: "[Preprocessing Placeholder]");
+   final apiRequestContext = await contextXmlService.buildApiRequestContext(chat: chat, currentUserMessage: placeholderMessage);
+   final droppedMessages = apiRequestContext.droppedMessages;
 
-     if (droppedMessages.isEmpty) {
-       debugPrint("ChatStateNotifier($_chatId): No messages dropped, skipping summarization.");
-       return;
-     }
-     
-     // Build summarization prompt
-     final summaryPrompt = chat.preprocessingPrompt!;
-     final previousSummary = chat.contextSummary;
-     
-     List<LlmContent> summaryContext = [
-       LlmContent("system", [LlmTextPart(summaryPrompt)])
-     ];
+   if (droppedMessages.isEmpty) {
+     debugPrint("ChatStateNotifier($_chatId): No messages dropped, skipping summarization.");
+     return;
+   }
+   
+   if (_isBackgroundTaskCancelled) return; // Check again before API call
 
-     if(previousSummary != null && previousSummary.isNotEmpty) {
-       summaryContext.add(LlmContent("user", [LlmTextPart("This is the previous summary:\n${XmlProcessor.wrapWithTag('previous_summary', previousSummary)}")]));
-     }
+   final summaryPrompt = chat.preprocessingPrompt!;
+   final previousSummary = chat.contextSummary;
+   List<LlmContent> summaryContext = [
+     LlmContent("system", [LlmTextPart(summaryPrompt)])
+   ];
+   if(previousSummary != null && previousSummary.isNotEmpty) {
+     summaryContext.add(LlmContent("user", [LlmTextPart("This is the previous summary:\n${XmlProcessor.wrapWithTag('previous_summary', previousSummary)}")]));
+   }
+   summaryContext.add(LlmContent("user", [
+     LlmTextPart("These are the messages to be summarized:\n${droppedMessages.map((m) => "${m.role.name}: ${m.rawText}").join('\n---\n')}")
+   ]));
+   
+   final response = await llmService.sendMessageOnce(
+     llmContext: summaryContext,
+     chat: chat,
+     apiConfigIdOverride: chat.preprocessingApiConfigId,
+   );
 
-     summaryContext.add(LlmContent("user", [
-       LlmTextPart("These are the messages to be summarized:\n${droppedMessages.map((m) => "${m.role.name}: ${m.rawText}").join('\n---\n')}")
-     ]));
-     
-     // Call LLM service
-     final response = await llmService.sendMessageOnce(
-       llmContext: summaryContext,
-       chat: chat, // Pass chat for generation config
-     );
+   if (_isBackgroundTaskCancelled) return; // Check after API call, before saving
 
-     if (response.isSuccess && response.parts.isNotEmpty) {
-       final newSummary = response.parts.map((p) => p.text ?? "").join("\n");
-       await chatRepo.saveChat(chat.copyWith(contextSummary: Value(newSummary)));
-       debugPrint("ChatStateNotifier($_chatId): Summarization successful. New summary saved.");
-     } else {
-        throw Exception("Summarization failed: ${response.error ?? 'No content'}");
-     }
+   if (response.isSuccess && response.parts.isNotEmpty) {
+     final newSummary = response.parts.map((p) => p.text ?? "").join("\n");
+     await chatRepo.saveChat(chat.copyWith(contextSummary: Value(newSummary)));
+     debugPrint("ChatStateNotifier($_chatId): Summarization successful. New summary saved.");
+   } else {
+      throw Exception("Summarization failed: ${response.error ?? 'No content'}");
+   }
  }
 
  // --- State variables for streaming XML processing ---
  final StringBuffer _rawAccumulatedBuffer = StringBuffer();
   final StringBuffer _displayableTextBuffer = StringBuffer();
-  int _displayLogicOpenTagCount = 0;
-  bool _displayLogicLastTagWasClosing = false;
-  bool _suppressDisplay = false;
   // StringBuffer _currentXmlSegmentForDisplay = StringBuffer(); // Not strictly needed if we just suppress
   final Set<String> _processedRuleTagNamesThisTurn = {};
-  String? _currentTurnCarriedOverXml;
   // --- End of state variables for streaming XML processing ---
 
-  void _handleStreamResponse(LlmService llmService, Chat chat, List<LlmContent> llmContext, String? initialCarriedOverXml) {
+  Future<void> _handleStreamResponse(LlmService llmService, Chat chat, List<LlmContent> llmContext) async {
+    final messageRepo = _ref.read(messageRepositoryProvider);
+
+    // 1. Create and save a placeholder message to get a stable ID
+    final placeholderMessage = Message.create(
+      chatId: _chatId,
+      role: MessageRole.model,
+      rawText: "...", // Start with a placeholder text
+    );
+    final placeholderId = await messageRepo.saveMessage(placeholderMessage);
+    debugPrint("ChatStateNotifier($_chatId): Created placeholder message with ID: $placeholderId.");
+
     // Initialize stream-specific state
     _rawAccumulatedBuffer.clear();
     _displayableTextBuffer.clear();
-    _displayLogicOpenTagCount = 0;
-    _displayLogicLastTagWasClosing = false;
-    _suppressDisplay = false;
     _processedRuleTagNamesThisTurn.clear();
-    _currentTurnCarriedOverXml = initialCarriedOverXml;
 
     // Regex to find XML tags
-    final xmlTagRegex = RegExp(r"<(\/)?([a-zA-Z0-9_:\-]+)[^>]*>", caseSensitive: false);
 
     final stream = llmService.sendMessageStream(llmContext: llmContext, chat: chat);
        _llmStreamSubscription?.cancel();
@@ -716,259 +785,93 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
            if (!mounted) return;
 
            if (chunk.error != null) {
-             showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
-             state = state.copyWith(
-               isLoading: false, isStreaming: false, // errorMessage: chunk.error, // Error is shown via top message
-               clearStreaming: true, clearGenerationStartTime: true, clearElapsedSeconds: true,
-             );
-             _stopUpdateTimer();
+             // On error, we still finalize to save what we have and clean up.
              _llmStreamSubscription?.cancel();
              return;
            }
            
            if (chunk.isFinished) {
-          // Final processing on stream completion
-          // The LlmService's saveMessageFromStream should handle saving with the final buffers.
-          // No explicit XmlProcessor.process call here unless specifically needed for a final sweep,
-          // as rule closures should have been handled during the stream.
-          debugPrint("ChatStateNotifier:handleStreamResponse - Stream finished. Raw: ${_rawAccumulatedBuffer.toString().substring(0, min(_rawAccumulatedBuffer.length, 100))}, Displayed: ${_displayableTextBuffer.toString().substring(0, min(_displayableTextBuffer.length, 100))}");
-          state = state.copyWith(
-            isLoading: false, isStreaming: false,
-            clearStreaming: true, clearGenerationStartTime: true, clearElapsedSeconds: true,
-          );
-          _stopUpdateTimer();
-          calculateAndStoreTokenCount(); // Recalculate on finish
-          // Ensure the LlmService knows about the final raw and displayable text, and carriedOverXml
-          // This is implicitly handled by how LlmService.saveMessageFromStream gets its data.
-          // We might need to explicitly pass these if LlmService doesn't have access to these buffers.
-          // For now, assuming LlmService's saveMessageFromStream uses chunk.accumulatedText (raw)
-          // and we provide the final _displayableTextBuffer and _currentTurnCarriedOverXml separately if needed.
-          // The LlmService's stream listener itself is responsible for calling saveMessageFromStream with the correct final data.
-          // The `accumulatedText` in `LlmStreamChunk` should be the raw, full text.
-          // `displayedText` and `finalCarriedOverXml` are now managed here.
-          // This part might need refinement depending on LlmService's actual save mechanism.
-          // Let's assume LlmService.sendMessageStream's onDone or isFinished handling will get the correct accumulated raw text.
-          // We need a way to communicate _displayableTextBuffer and _currentTurnCarriedOverXml.
-          // This might involve modifying LlmService or having save logic here.
-          // For now, the primary goal is the streaming display and XML processing logic.
-          // The llmService.saveMessageFromStream will eventually be called by the LlmService itself when the stream ends.
-          // It will pass the raw accumulated text. We need to ensure the correct 'displayed' text and 'carriedOverXml'
-          // are also persisted for that message. This typically means the Message object itself needs to store these,
-          // or the save mechanism in LlmService needs to be aware of them.
-          // Given the current structure, LlmService's saveMessageFromStream takes the raw text.
-          // The XmlProcessor.process is called by ContextXmlService *before* sending, and then *after* response by LlmService.
-          // This needs to be harmonized.
-          // The user's last point "总结: 只有规则闭合才调用xml处理" implies XmlProcessor.process is called *during* the stream on rule closure.
+             // This chunk signals the end, but onDone is the sole handler for finalization.
+             return;
+           }
 
-          // Let's assume that when chunk.isFinished, LlmService will save the raw message (_rawAccumulatedBuffer).
-          // We need to ensure the *message object* eventually stored reflects the correct carriedOverXml for the *next* turn,
-          // which is _currentTurnCarriedOverXml.
-          // And if the UI shows something different from raw text, that also needs consideration for storage if necessary.
-          // The existing LlmService.saveMessageFromStream likely calls XmlProcessor.process on the full raw text at the end.
-          // This might be redundant if we've processed rules mid-stream.
+           // --- Live Update Logic ---
+           final newText = chunk.accumulatedText;
+           _rawAccumulatedBuffer.clear();
+           _rawAccumulatedBuffer.write(newText);
+           
+           // Update the placeholder in the database in real-time
+           final messageToUpdate = placeholderMessage.copyWith(id: placeholderId, rawText: newText);
+           await messageRepo.saveMessage(messageToUpdate);
+           // The UI will react to this change via the chatMessagesProvider stream.
 
-          // For now, let's focus on the streaming logic and assume the save mechanism will be adapted.
-          // The key is that _currentTurnCarriedOverXml holds the latest state.
-          debugPrint("ChatStateNotifier($_chatId): Stream successful.");
-          return;
-        }
-
-        // Actual new text for this chunk
-        String newTextSegment;
-        final String currentChunkAccumulatedText = chunk.accumulatedText;
-        final int rawBufferLength = _rawAccumulatedBuffer.length;
-
-        if (currentChunkAccumulatedText.length > rawBufferLength && currentChunkAccumulatedText.startsWith(_rawAccumulatedBuffer.toString())) {
-          newTextSegment = currentChunkAccumulatedText.substring(rawBufferLength);
-        } else if (rawBufferLength == 0) {
-          newTextSegment = currentChunkAccumulatedText;
-        } else {
-          newTextSegment = ""; // Fallback or log an issue if accumulated text isn't a superset
-          if (kDebugMode) {
-            // Avoid debugPrint in release builds if not Flutter's debugPrint
-            print("ChatStateNotifier: Warning - Could not derive newTextSegment reliably. Accumulated: ${currentChunkAccumulatedText.substring(0, min(currentChunkAccumulatedText.length, 50))}, Buffer: ${_rawAccumulatedBuffer.toString().substring(0, min(_rawAccumulatedBuffer.length, 50))}");
-          }
-        }
-        
-        if (newTextSegment.isNotEmpty) {
-          _rawAccumulatedBuffer.write(newTextSegment);
-
-          int currentPosInNewSegment = 0;
-          for (final match in xmlTagRegex.allMatches(newTextSegment)) {
-            // Text before the tag in the new segment
-            String textBeforeTagInSegment = newTextSegment.substring(currentPosInNewSegment, match.start);
-            if (!_suppressDisplay) {
-              _displayableTextBuffer.write(textBeforeTagInSegment);
-            }
-            currentPosInNewSegment = match.end;
-
-            // Process the tag
-            bool isClosingTag = match.group(1) != null; // group(1) is "/"
-            // String tagName = match.group(2)!; // If needed
-
-            if (isClosingTag) {
-              _displayLogicOpenTagCount--;
-              _displayLogicLastTagWasClosing = true;
-            } else {
-              _displayLogicOpenTagCount++;
-              _displayLogicLastTagWasClosing = false;
-              _suppressDisplay = true; // Start suppressing on any open tag
-            }
-
-            if (_displayLogicOpenTagCount == 0 && _displayLogicLastTagWasClosing) {
-              if (_suppressDisplay) { // Only flip if we were suppressing
-                  _suppressDisplay = false; // Simple closure, allow display of subsequent text
-              }
-            } else if (_displayLogicOpenTagCount < 0) {
-              _displayLogicOpenTagCount = 0; // Reset on malformed
-            }
-          }
-
-          // Text after the last tag in the current new segment
-          String textAfterLastTagInSegment = newTextSegment.substring(currentPosInNewSegment);
-          if (!_suppressDisplay) {
-            _displayableTextBuffer.write(textAfterLastTagInSegment);
-          }
-        } else if (_rawAccumulatedBuffer.isEmpty && currentChunkAccumulatedText.isNotEmpty && newTextSegment.isEmpty) {
-            // This case might happen if the very first chunk's accumulatedText was assigned to newTextSegment,
-            // and then _rawAccumulatedBuffer was updated.
-            // For safety, if newTextSegment is empty but raw buffer isn't, and display isn't suppressed,
-            // it might mean the display buffer is out of sync.
-            // However, the primary logic relies on processing `newTextSegment`.
-            // If `newTextSegment` is empty, no new displayable text from tags processing.
-            // But if _suppressDisplay is false, and newTextSegment IS empty because the delta was empty,
-            // _displayableTextBuffer won't change, which is correct.
-        }
-        
-        // --- Rule Closure Processing (always based on the full _rawAccumulatedBuffer) ---
-        final fullRawText = _rawAccumulatedBuffer.toString();
-        bool newXmlProcessedThisChunk = false;
-        for (final rule in chat.xmlRules) {
-          if (rule.tagName == null || (rule.action != drift_enums.XmlAction.save && rule.action != drift_enums.XmlAction.update)) {
-            continue;
-          }
-          final ruleTagName = rule.tagName!;
-          final ruleTagNameLower = ruleTagName.toLowerCase();
-
-          if (_processedRuleTagNamesThisTurn.contains(ruleTagNameLower)) {
-            continue;
-          }
-
-          // Basic check for rule tag closure. This is a simplified check.
-          // A more robust solution might involve a mini-parser or more complex regex.
-          // This checks for the presence of both an opening and a closing tag for the specific rule.
-          // It doesn't guarantee well-formedness or correct nesting with other tags.
-          final openingRuleTagPattern = RegExp("<${RegExp.escape(ruleTagName)}([\\s>][^>]*)?>", caseSensitive: false);
-          final closingRuleTagPattern = RegExp("</${RegExp.escape(ruleTagName)}\\s*>", caseSensitive: false);
-          
-          if (openingRuleTagPattern.hasMatch(fullRawText) && closingRuleTagPattern.hasMatch(fullRawText)) {
-             // To ensure the closing tag appears after an opening tag (very basic order check)
-             final firstOpenMatch = openingRuleTagPattern.firstMatch(fullRawText);
-             final firstCloseMatch = closingRuleTagPattern.firstMatch(fullRawText);
-
-             if (firstOpenMatch != null && firstCloseMatch != null && firstCloseMatch.start > firstOpenMatch.start) {
-                debugPrint("ChatStateNotifier: Rule <$ruleTagName> detected as closed. Processing XML.");
-                try {
-                    final processResult = XmlProcessor.process(
-                    fullRawText, // Process the whole accumulated buffer
-                    chat.xmlRules, // Pass all rules, XmlProcessor will find the relevant one
-                    previousCarriedOverContent: _currentTurnCarriedOverXml
-                  );
-                  // XmlProcessor.process is designed to handle all rules internally
-                  // and figure out what changed based on the full rawText.
-                  // The key is that it gets the *current* _currentTurnCarriedOverXml.
-                  // If it internally processes multiple rules, the result.carriedOverContent will reflect that.
-
-                  if (_currentTurnCarriedOverXml != processResult.carriedOverContent) {
-                    _currentTurnCarriedOverXml = processResult.carriedOverContent;
-                    newXmlProcessedThisChunk = true; // Indicate that XML state might have changed
-                     debugPrint("ChatStateNotifier: _currentTurnCarriedOverXml updated to: ${_currentTurnCarriedOverXml?.substring(0,min(_currentTurnCarriedOverXml?.length ?? 0, 100))}");
-                  }
-                  _processedRuleTagNamesThisTurn.add(ruleTagNameLower); // Mark as processed for this turn
-                } catch (e) {
-                   debugPrint("ChatStateNotifier: Error processing XML for rule <$ruleTagName>: $e");
-                }
-             }
-          }
-        }
-
-         state = state.copyWith(
-           isLoading: true, // Still loading as stream is active
-           isStreaming: true,
-           streamingMessageContent: _displayableTextBuffer.toString(),
-           streamingTimestamp: chunk.timestamp,
-           clearError: true, // Clears critical error
-           clearTopMessage: false, // Don't clear top message during stream
-         );
-         
-         // If XML was processed, we might want to signal LlmService or ensure the final carriedOverXml is used.
-        // This is handled by _currentTurnCarriedOverXml being updated.
-        if (newXmlProcessedThisChunk) {
-            // Potentially log or handle side-effects of XML processing if necessary
-        }
-
-      },
-       onError: (error) {
-         if (mounted) {
-           showTopMessage('消息流错误: $error', backgroundColor: Colors.red);
-           state = state.copyWith(
-               isLoading: false, isStreaming: false, // errorMessage: "消息流错误: $error", // Error shown via top message
-               clearGenerationStartTime: true, clearElapsedSeconds: true
-           );
-           _stopUpdateTimer();
-         }
-       },
-       onDone: () {
-       if (mounted && (state.isStreaming || state.isLoading)) {
-         // This onDone is for the stream subscription.
-         // The LlmService's onDone/isFinished logic will handle the final message saving.
-         // We ensure our internal buffers are up-to-date.
-         // The final state update for isLoading=false etc., is typically done when chunk.isFinished is true.
-         state = state.copyWith(
-             isLoading: false, isStreaming: false,
-             clearStreaming: true, clearGenerationStartTime: true, clearElapsedSeconds: true,
-             // Potentially clear top message here if it was a stream-specific message
-             // clearTopMessage: state.topMessageText == "Streaming..." // Example condition
-         );
-         _stopUpdateTimer();
-         debugPrint("ChatStateNotifier: Stream subscription onDone. Final raw: ${_rawAccumulatedBuffer.toString().substring(0, min(_rawAccumulatedBuffer.length, 100))}, Displayed: ${_displayableTextBuffer.toString().substring(0, min(_displayableTextBuffer.length, 100))}");
-         calculateAndStoreTokenCount(); // Recalculate on done
-      }
-     },
-     cancelOnError: true,
-   );
+           // We no longer need to manage displayable text or complex state here.
+           // Just ensure the overall streaming state is active.
+           if (!state.isStreaming) {
+             state = state.copyWith(isStreaming: true);
+           }
+         },
+         onError: (error) {
+           if (mounted) {
+             showTopMessage('消息流错误: $error', backgroundColor: Colors.red);
+           }
+           // `onDone` will be called even on error, so finalization is handled there.
+         },
+         onDone: () async {
+           // onDone is the single source of truth for saving a completed or canceled stream.
+           await _finalizeStreamedMessage(placeholderId);
+         },
+         cancelOnError: true,
+       );
  }
 
  Future<void> _handleSingleResponse(LlmService llmService, Chat chat, List<LlmContent> llmContext, String? initialCarriedOverXml) async {
    try {
      final response = await llmService.sendMessageOnce(llmContext: llmContext, chat: chat);
-     if (mounted) {
-       if (response.isSuccess && response.parts.isNotEmpty) {
-         // The response now contains parts, we need to save it as a message
-         final messageRepo = _ref.read(messageRepositoryProvider);
-         final aiMessage = Message.create(
-           chatId: _chatId,
-           role: MessageRole.model,
-           parts: response.parts,
-         );
-         await messageRepo.saveMessage(aiMessage);
-         
-         state = state.copyWith(
-             isLoading: false,
-             clearError: true,
-             clearTopMessage: true,
-             clearGenerationStartTime: true,
-             clearElapsedSeconds: true);
-         debugPrint("ChatStateNotifier($_chatId): Single response successful and saved.");
-         calculateAndStoreTokenCount(); // Recalculate on success
+     if (!mounted) return;
 
-         // Run post-processing tasks
-         _runAsyncProcessingTasks(aiMessage);
+     if (response.isSuccess && response.parts.isNotEmpty) {
+       final messageRepo = _ref.read(messageRepositoryProvider);
 
+       // 1. Create an initial message object from the response.
+       final aiMessage = Message.create(
+         chatId: _chatId,
+         role: MessageRole.model,
+         parts: response.parts,
+       );
+
+       // 2. Immediately save the initial message to the database.
+       // This gives us a stable ID and makes it visible in the UI.
+       final savedMessageId = await messageRepo.saveMessage(aiMessage);
+       final savedMessage = await messageRepo.getMessageById(savedMessageId);
+       
+       // 3. The main generation is "done", so stop the loading state for the input bar.
+       state = state.copyWith(
+         isLoading: false,
+         clearError: true,
+         clearTopMessage: true,
+       );
+       // Timer is NOT stopped here anymore; it continues for background tasks.
+
+       // 4. Asynchronously run post-processing tasks on the saved message.
+       // We now await this to ensure proper completion handling.
+       if (savedMessage != null) {
+         await _runAsyncProcessingTasks(savedMessage);
        } else {
-         showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
-         state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
+         // If there's no message, ensure loading state is cleared.
+          state = state.copyWith(
+            isLoading: false,
+            clearGenerationStartTime: true,
+            clearElapsedSeconds: true
+          );
+          _stopUpdateTimer();
        }
+
+       debugPrint("ChatStateNotifier($_chatId): Single response and async tasks finished (ID: $savedMessageId).");
+       calculateAndStoreTokenCount(); // Recalculate tokens based on initial saved message.
+     } else {
+       showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
+       state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
      }
    } catch (e) {
      if (mounted) {
@@ -976,72 +879,176 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
      }
    } finally {
-     if (mounted && (state.isLoading || state.generationStartTime != null)) {
-        state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
-     }
-     _stopUpdateTimer();
+     // No need for a finally block to stop the timer, as it's stopped on success.
    }
  }
 
+ // A helper to contain the logic of _executePostGenerationProcessing but return the final message
+ Future<Message> _getFinalProcessedMessage(Chat chat, Message initialMessage) async {
+   final llmService = _ref.read(llmServiceProvider);
+   final contextXmlService = _ref.read(contextXmlServiceProvider);
+
+   final originalRawText = initialMessage.rawText;
+   final displayText = XmlProcessor.stripXmlContent(originalRawText);
+   final initialXml = XmlProcessor.extractXmlContent(originalRawText);
+
+   String? newSecondaryXmlContent;
+
+   if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
+     try {
+       // 1. 创建一个临时的 Chat 对象用于附加 XML 调用，并清空系统提示词。
+       final chatForSecondaryXmlCall = chat.copyWith(
+         systemPrompt: '',
+       );
+
+       // 2. 使用主构建逻辑构建上下文，并将附加XML提示词作为最后的用户消息传递。
+       final secondaryApiRequestContext = await contextXmlService.buildApiRequestContext(
+         chat: chatForSecondaryXmlCall,
+         currentUserMessage: initialMessage, // 上下文将包含此消息
+         lastMessageOverride: chat.secondaryXmlPrompt, // 将提示词作为最后的用户消息
+       );
+
+       // 3. 使用生成的上下文进行调用。
+       final response = await llmService.sendMessageOnce(
+         llmContext: secondaryApiRequestContext.contextParts,
+         chat: chatForSecondaryXmlCall, // 传递相同的修改后的 chat 对象以获取生成配置
+         apiConfigIdOverride: chat.secondaryXmlApiConfigId, // Use dedicated API config
+       );
+
+       if (response.isSuccess && response.parts.isNotEmpty) {
+         final generatedContent = response.parts.map((p) => p.text ?? "").join("\n");
+         debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content START ==========");
+         debugPrint(generatedContent);
+         debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content END ==========");
+         newSecondaryXmlContent = generatedContent;
+       } else {
+         debugPrint("ChatStateNotifier($_chatId): Secondary XML generation failed. Error: ${response.error}");
+       }
+     } catch (e) {
+       debugPrint("ChatStateNotifier($_chatId): Error during secondary XML generation: $e");
+       // Do not assign secondary content on error
+     }
+   }
+
+   final newRawText = displayText;
+ 
+   // Return a new message object with all final values, ready to be saved.
+   return initialMessage.copyWith(
+     rawText: newRawText, // rawText now only contains displayable text
+     originalXmlContent: initialXml,
+     secondaryXmlContent: newSecondaryXmlContent,
+   );
+ }
+
   Future<void> cancelGeneration() async {
-    if (!state.isLoading && !state.isStreaming) return;
-
-    debugPrint("尝试取消聊天 $_chatId 的生成...");
-
-    // 1. 通知服务层取消上游请求
-    await _ref.read(llmServiceProvider).cancelActiveRequest();
-    
-    // 2. 取消本地的流订阅
-    // 注意：在调用 cancel() 后，流的 onDone 可能会被触发，
-    // onDone 中的状态清理逻辑会处理 isStreaming, isLoading 等。
-    // 所以我们在这里不需要立即重置所有状态。
-    await _llmStreamSubscription?.cancel();
-    _llmStreamSubscription = null;
-    debugPrint("本地 LLM 流订阅已取消。");
-
-    // 3. 保存已接收到的部分内容
-    String? contentToSave = state.streamingMessageContent;
-    bool savedPartial = false;
-    if (contentToSave != null && contentToSave.isNotEmpty) {
-      debugPrint("检测到部分内容，尝试保存...");
-      try {
-        final chat = _ref.read(currentChatProvider(_chatId)).value;
-        if (chat != null) {
-          final partialMessage = Message.create(
-            chatId: _chatId,
-            role: MessageRole.model,
-            rawText: contentToSave, // 保存可见的、已处理过的内容
-          );
-          final savedMessageId = await _ref.read(messageRepositoryProvider).saveMessage(partialMessage);
-          final savedMessage = await _ref.read(messageRepositoryProvider).getMessageById(savedMessageId);
-          debugPrint("部分内容已成功保存 (长度: ${contentToSave.length})。");
-          savedPartial = true;
-          if (savedMessage != null) {
-            _runAsyncProcessingTasks(savedMessage);
-          }
-        } else {
-          debugPrint("无法保存部分内容：聊天数据未加载。");
-        }
-      } catch (e) {
-        debugPrint("保存部分内容时出错: $e");
-      }
+    // Check against all loading states
+    if ((!state.isLoading && !state.isStreaming && !state.isProcessingInBackground) || _isCancelling) {
+      debugPrint("Cancel generation skipped: isLoading=${state.isLoading}, isStreaming=${state.isStreaming}, isProcessingInBackground=${state.isProcessingInBackground}, isCancelling=$_isCancelling");
+      return;
     }
 
-    // 4. 更新UI状态以提供即时反馈
+    _isCancelling = true;
+    debugPrint("Attempting to cancel generation for chat $_chatId...");
+
+    try {
+      // 1. Set cancellation flag for background tasks
+      _isBackgroundTaskCancelled = true;
+      debugPrint("ChatStateNotifier($_chatId): Background task cancellation flag set.");
+
+      // 2. Cancel any active LLM request (covers main stream and background tasks)
+      await _ref.read(llmServiceProvider).cancelActiveRequest();
+
+      // 3. Cancel the stream subscription if it exists
+      if (_llmStreamSubscription != null) {
+        await _llmStreamSubscription?.cancel();
+        _llmStreamSubscription = null;
+      }
+
+      // 4. Finalize state immediately
+      final lastMessage = _ref.read(chatMessagesProvider(_chatId)).value?.lastWhereOrNull((m) => m.role == MessageRole.model);
+      if (state.isStreaming && lastMessage != null) {
+        // If a stream was active, finalize it to save partial progress
+        await _finalizeStreamedMessage(lastMessage.id);
+      } else {
+        // If it was a non-stream or background task, just reset all loading states
+        if (mounted) {
+          state = state.copyWith(
+            isLoading: false,
+            isStreaming: false,
+            isProcessingInBackground: false,
+            clearStreaming: true,
+            clearGenerationStartTime: true,
+            clearElapsedSeconds: true,
+          );
+          _stopUpdateTimer();
+          showTopMessage("已停止", backgroundColor: Colors.blueGrey);
+        }
+      }
+
+    } catch (e) {
+      debugPrint("Error during cancelGeneration: $e");
+      if (mounted) {
+        showTopMessage("取消操作时出错: $e", backgroundColor: Colors.red);
+      }
+    } finally {
+      _isCancelling = false;
+      debugPrint("Cancellation process finished for chat $_chatId. _isCancelling reset to false.");
+    }
+  }
+
+  Future<void> _finalizeStreamedMessage(int messageId) async {
+    if (!mounted || _isFinalizing) return;
+    _isFinalizing = true;
+    debugPrint("Finalizing stream for message ID $messageId...");
+
+    final messageRepo = _ref.read(messageRepositoryProvider);
+    Message? messageToFinalize;
+    bool wasRunning = state.isLoading || state.isStreaming;
+
+    // 1. Get the message object first
+    try {
+      messageToFinalize = await messageRepo.getMessageById(messageId);
+    } catch (e) {
+      debugPrint("Error fetching message for finalization (ID $messageId): $e");
+    }
+
+    // 2. Always reset the main loading state *before* running background tasks.
+    // This makes the UI responsive and clears the way for background tasks.
     if (mounted) {
-      showTopMessage(savedPartial ? "已停止并保存部分内容" : "已停止生成",
-                     backgroundColor: savedPartial ? Colors.orangeAccent : Colors.blueGrey);
+      // Messages are now handled in the post-processing block to ensure correct timing.
       state = state.copyWith(
         isLoading: false,
         isStreaming: false,
         clearStreaming: true,
-        clearGenerationStartTime: true,
-        clearElapsedSeconds: true,
       );
-      debugPrint("UI 状态已重置以反映取消操作。");
-      _stopUpdateTimer();
-    } else {
-       debugPrint("取消时 Notifier 已销毁，无法更新状态。");
+      // _stopUpdateTimer() and timer state clearing are moved to _runAsyncProcessingTasks's finally block.
+      calculateAndStoreTokenCount();
+    }
+
+    // 3. Now, with the main state cleared, run async post-processing.
+    try {
+      final chat = _ref.read(currentChatProvider(_chatId)).value;
+      if (chat != null && messageToFinalize != null) {
+        debugPrint("Running async post-processing for message ID $messageId...");
+        await _runAsyncProcessingTasks(messageToFinalize);
+        debugPrint("Async post-processing for message ID $messageId finished.");
+        if (mounted && !_isBackgroundTaskCancelled) {
+          showTopMessage("已完成", backgroundColor: Colors.green);
+        }
+      } else {
+        debugPrint("Skipping async post-processing for message ID $messageId: chat or message not found.");
+        if (mounted && wasRunning) {
+           showTopMessage("已停止", backgroundColor: Colors.blueGrey);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error during async post-processing for ID $messageId: $e");
+      if (mounted) {
+        showTopMessage('后台处理任务出错: $e', backgroundColor: Colors.red);
+      }
+    } finally {
+      _isFinalizing = false;
+      debugPrint("Finalization process finished for message ID $messageId. _isFinalizing reset to false.");
     }
   }
 
@@ -1077,6 +1084,149 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    }
  }
 
+  Future<void> _executeAutoTitleGeneration(Chat chat, Message currentModelMessage) async {
+    if (_isBackgroundTaskCancelled) return; // Check for cancellation
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted || _isBackgroundTaskCancelled) return;
+
+    final globalSettings = _ref.read(globalSettingsProvider);
+    if (!globalSettings.enableAutoTitleGeneration ||
+        globalSettings.titleGenerationPrompt.isEmpty ||
+        globalSettings.titleGenerationApiConfigId == null) {
+      return;
+    }
+
+    final allMessages = _ref.read(chatMessagesProvider(_chatId)).value ?? [];
+    final modelMessagesCount = allMessages.where((m) => m.role == MessageRole.model).length;
+
+    if (modelMessagesCount != 1) {
+      debugPrint("ChatStateNotifier($_chatId): Skipping auto title generation. Model messages count: $modelMessagesCount");
+      return;
+    }
+
+    debugPrint("ChatStateNotifier($_chatId): Starting auto title generation...");
+
+    try {
+      final contextXmlService = _ref.read(contextXmlServiceProvider);
+      final llmService = _ref.read(llmServiceProvider);
+      final chatRepo = _ref.read(chatRepositoryProvider);
+
+      final chatForTitleCall = chat.copyWith(
+        systemPrompt: globalSettings.titleGenerationPrompt,
+      );
+
+      final apiRequestContext = await contextXmlService.buildApiRequestContext(
+        chat: chatForTitleCall,
+        currentUserMessage: currentModelMessage,
+        lastMessageOverride: globalSettings.titleGenerationPrompt,
+      );
+
+      if (_isBackgroundTaskCancelled) return; // Check before API call
+
+      final response = await llmService.sendMessageOnce(
+        llmContext: apiRequestContext.contextParts,
+        chat: chatForTitleCall,
+        apiConfigIdOverride: globalSettings.titleGenerationApiConfigId,
+      );
+
+      if (_isBackgroundTaskCancelled) return; // Check after API call
+
+      if (response.isSuccess && response.parts.isNotEmpty) {
+        final newTitle = response.parts.map((p) => p.text ?? "").join("").trim().replaceAll(RegExp(r'["\n]'), '');
+        if (newTitle.isNotEmpty) {
+          final currentChat = await chatRepo.getChat(_chatId);
+          if (currentChat != null && mounted && !_isBackgroundTaskCancelled) {
+            await chatRepo.saveChat(currentChat.copyWith(title: newTitle));
+            debugPrint("ChatStateNotifier($_chatId): Auto title generation successful. New title: $newTitle");
+          }
+        } else {
+          debugPrint("ChatStateNotifier($_chatId): Auto title generation resulted in an empty title. Skipping update.");
+        }
+      } else {
+        throw Exception("Title generation failed: ${response.error ?? 'No content'}");
+      }
+    } catch (e) {
+      if (!_isBackgroundTaskCancelled) {
+        debugPrint("ChatStateNotifier($_chatId): Error during auto title generation: $e");
+        // Silently fail.
+      }
+    }
+  }
+
+  // --- Special Actions ---
+
+  Future<void> resumeGeneration() async {
+    if (state.isLoading) {
+      showTopMessage('正在生成中，请稍后...', backgroundColor: Colors.orange);
+      return;
+    }
+
+    final lastMessage = _ref.read(lastModelMessageProvider(_chatId));
+    if (lastMessage == null) {
+      showTopMessage('没有可恢复的消息', backgroundColor: Colors.orange);
+      return;
+    }
+
+    final globalSettings = _ref.read(globalSettingsProvider);
+    if (!globalSettings.enableResume) {
+      showTopMessage('中断恢复功能已禁用', backgroundColor: Colors.orange);
+      return;
+    }
+
+    await _sendMessageForSpecialAction(
+      prompt: globalSettings.resumePrompt,
+      apiConfigIdOverride: globalSettings.resumeApiConfigId,
+      actionType: _SpecialActionType.resume,
+      targetMessage: lastMessage,
+    );
+  }
+
+  Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady}) async {
+    // Rely on the new unified background processing state, but only for manual calls.
+    if ((state.isLoading || state.isProcessingInBackground) && onSuggestionsReady != null) {
+      // For manual clicks, show a message. For auto-runs, this will be skipped.
+      showTopMessage('正在处理中，请稍后...', backgroundColor: Colors.orange);
+      return;
+    }
+
+    if (state.helpMeReplySuggestions != null && state.helpMeReplySuggestions!.isNotEmpty) {
+      debugPrint("ChatStateNotifier($_chatId): Using cached 'Help Me Reply' suggestions.");
+      onSuggestionsReady?.call(state.helpMeReplySuggestions!);
+      return;
+    }
+
+    final lastMessage = _ref.read(lastModelMessageProvider(_chatId));
+    if (lastMessage == null) {
+      if (onSuggestionsReady != null) showTopMessage('没有可供回复的消息', backgroundColor: Colors.orange);
+      return;
+    }
+
+    final globalSettings = _ref.read(globalSettingsProvider);
+    if (!globalSettings.enableHelpMeReply) {
+      if (onSuggestionsReady != null) showTopMessage('“帮我回复”功能已禁用', backgroundColor: Colors.orange);
+      return;
+    }
+
+    // This method is now a wrapper. The actual work is in _sendMessageForSpecialAction.
+    // For manual calls, we need to wrap it in the background task handler.
+    // For automatic calls, it's already wrapped by _runAsyncProcessingTasks.
+    final task = _sendMessageForSpecialAction(
+      prompt: globalSettings.helpMeReplyPrompt,
+      apiConfigIdOverride: globalSettings.helpMeReplyApiConfigId,
+      actionType: _SpecialActionType.helpMeReply,
+      targetMessage: lastMessage,
+      onSuggestionsReady: onSuggestionsReady,
+    );
+
+    // If called manually (onSuggestionsReady is not null), we need to manage the background state.
+    if (onSuggestionsReady != null) {
+      await _runManagedSingleTask(task);
+    } else {
+      // If called automatically, just return the future to be awaited by Future.wait
+      await task;
+    }
+  }
+
   @override
  void dispose() {
    _llmStreamSubscription?.cancel();
@@ -1084,4 +1234,95 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    _topMessageTimer?.cancel(); // Dispose the top message timer
    super.dispose();
  }
+
+  Future<void> _sendMessageForSpecialAction({
+    required String prompt,
+    required String? apiConfigIdOverride,
+    required _SpecialActionType actionType,
+    required Message targetMessage,
+    Function(List<String>)? onSuggestionsReady,
+  }) async {
+    // This method no longer manages loading state directly.
+    // It's managed by the calling context (_runAsyncProcessingTasks or _runManagedSingleTask)
+    if (_isBackgroundTaskCancelled) return;
+
+    final chat = _ref.read(currentChatProvider(_chatId)).value;
+    if (chat == null) {
+      if (mounted) showTopMessage('无法执行操作：聊天数据未加载', backgroundColor: Colors.red);
+      return;
+    }
+
+    final contextXmlService = _ref.read(contextXmlServiceProvider);
+    final llmService = _ref.read(llmServiceProvider);
+
+    final chatForCall = chat.copyWith(systemPrompt: prompt);
+
+    final apiRequestContext = await contextXmlService.buildApiRequestContext(
+      chat: chatForCall,
+      currentUserMessage: targetMessage,
+      lastMessageOverride: prompt,
+    );
+
+    if (_isBackgroundTaskCancelled) return;
+
+    final response = await llmService.sendMessageOnce(
+      llmContext: apiRequestContext.contextParts,
+      chat: chatForCall,
+      apiConfigIdOverride: apiConfigIdOverride ?? chat.apiConfigId,
+    );
+
+    if (!mounted || _isBackgroundTaskCancelled) return;
+
+    if (response.isSuccess && response.parts.isNotEmpty) {
+      final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
+      switch (actionType) {
+        case _SpecialActionType.resume:
+          final originalXml = XmlProcessor.extractXmlContent(targetMessage.rawText);
+          final newXml = XmlProcessor.extractXmlContent(generatedText);
+          final newText = XmlProcessor.stripXmlContent(generatedText);
+          await editMessage(
+            targetMessage.id,
+            updatedMessage: targetMessage.copyWith(
+              appendToRawText: newText,
+              originalXmlContent: newXml.isNotEmpty ? newXml : originalXml,
+            ),
+          );
+          if (mounted) showTopMessage('内容已续写', backgroundColor: Colors.green);
+          break;
+        case _SpecialActionType.helpMeReply:
+          final suggestions = RegExp(r'^\s*\d+\.\s*(.*)', multiLine: true)
+              .allMatches(generatedText)
+              .map((m) => m.group(1)!.trim())
+              .toList();
+          final finalSuggestions = suggestions.isNotEmpty ? suggestions : [generatedText.trim()];
+          if (mounted) {
+            state = state.copyWith(helpMeReplySuggestions: finalSuggestions);
+          }
+          onSuggestionsReady?.call(finalSuggestions);
+          break;
+      }
+    } else {
+      if (mounted) showTopMessage(response.error ?? "操作失败", backgroundColor: Colors.red);
+    }
+  }
+
+  // Helper to run a single manual background task with state management
+  Future<void> _runManagedSingleTask(Future<void> task) async {
+    if (!mounted) return;
+    _isBackgroundTaskCancelled = false;
+    state = state.copyWith(isProcessingInBackground: true);
+    try {
+      await task;
+    } catch (e) {
+      if (!_isBackgroundTaskCancelled && mounted) {
+        showTopMessage('操作失败: $e', backgroundColor: Colors.red);
+      }
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isProcessingInBackground: false);
+      }
+    }
+  }
 }
+
+enum _SpecialActionType { resume, helpMeReply }

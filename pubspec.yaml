@@ -13,7 +13,7 @@ dependencies:
   google_generative_ai: ^0.4.7 # Check pub.dev for latest version
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
   flutter_secure_storage: ^9.0.0 # Check pub.dev for latest version
-  shared_preferences: ^2.2.2  # Check pub.dev for latest version
+  shared_preferences: ^2.5.3  # Check pub.dev for latest version
   uuid: ^4.3.3             # Check pub.dev for latest version
   intl: ^0.20.2              # Check pub.dev for latest version, adjust based on Flutter version
   flutter_markdown: ^0.7.7    # 更新版本约束以允许最新版本
@@ -39,7 +39,7 @@ dependencies:
   dio: ^5.4.0               # 添加 dio 用于 HTTP 请求
   mime: ^2.0.0              # 用于查找 Mime 类型
   tiktoken: ^1.0.3          # For OpenAI token counting
-
+  archive: ^3.5.1           # For creating ZIP archives
   # For real persistence (replace in-memory history):
   # hive: ^latest
   # hive_flutter: ^latest

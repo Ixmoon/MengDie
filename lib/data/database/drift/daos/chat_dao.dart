@@ -4,12 +4,9 @@ import '../tables/chats.dart';
 import 'dart:convert';
 import '../tables/messages.dart'; // For deleting related messages
 import '../../../../models/export_import_dtos.dart'; // For DTOs in importChat
-// Import the new Drift model classes if needed for conversion, or the original ones if they are kept
-import '../models/drift_generation_config.dart';
 import '../models/drift_context_config.dart';
 import '../models/drift_xml_rule.dart';
-import '../models/drift_safety_setting_rule.dart'; // Added import for DriftSafetySettingRule
-import '../common_enums.dart' as drift_enums; // Alias to avoid conflict with old enums
+import '../common_enums.dart' as drift_enums;
 
 
 part 'chat_dao.g.dart'; // Drift will generate this file
@@ -89,77 +86,47 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
 
   // --- Import Chat ---
   Future<int> importChatFromDto(ChatExportDto chatDto, AppDatabase attachedDb) async {
-    // Implementation for importing chat from DTO
-    // print("ChatDao.importChatFromDto is not fully implemented yet for Drift."); // Remove print
-
-    final generationConfigDrift = DriftGenerationConfig(
-        modelName: chatDto.generationConfig.modelName,
-        temperature: chatDto.generationConfig.temperature,
-        topP: chatDto.generationConfig.topP,
-        topK: chatDto.generationConfig.topK,
-        maxOutputTokens: chatDto.generationConfig.maxOutputTokens,
-        stopSequences: chatDto.generationConfig.stopSequences,
-        useCustomTemperature: chatDto.generationConfig.useCustomTemperature, // 新增
-        useCustomTopP: chatDto.generationConfig.useCustomTopP, // 新增
-        useCustomTopK: chatDto.generationConfig.useCustomTopK, // 新增
-        safetySettings: chatDto.generationConfig.safetySettings.map((dto) {
-            // Assuming DTO enums (LocalHarmCategory, LocalHarmBlockThreshold) are from 'models/enums.dart'
-            // and drift_enums are from '../common_enums.dart'
-            // The DTO uses LocalHarmCategory from models/enums.dart, which should be compatible if names match
-            final dtoCategoryName = dto.category.name; // Assuming .name gives string like 'harassment'
-            final dtoThresholdName = dto.threshold.name;
-
-            return DriftSafetySettingRule( // This class is from ../models/drift_safety_setting_rule.dart
-              category: drift_enums.LocalHarmCategory.values.firstWhere(
-                  (e) => e.name == dtoCategoryName, 
-                  orElse: () => drift_enums.LocalHarmCategory.unknown),
-              threshold: drift_enums.LocalHarmBlockThreshold.values.firstWhere(
-                  (e) => e.name == dtoThresholdName, 
-                  orElse: () => drift_enums.LocalHarmBlockThreshold.unspecified),
-            );
-          }
-        ).toList(),
-      );
-
     final contextConfigDrift = DriftContextConfig(
         mode: drift_enums.ContextManagementMode.values.firstWhere(
-                  (e) => e.name == chatDto.contextConfig.mode.name, // DTO uses ContextManagementMode from 'models/enums.dart'
-                  orElse:()=> drift_enums.ContextManagementMode.turns), // Default to 'turns'
+                  (e) => e.name == chatDto.contextConfig.mode.name,
+                  orElse:()=> drift_enums.ContextManagementMode.turns),
         maxTurns: chatDto.contextConfig.maxTurns,
         maxContextTokens: chatDto.contextConfig.maxContextTokens,
       );
 
     final xmlRulesDrift = chatDto.xmlRules.map((dto) =>
         DriftXmlRule(
-          tagName: dto.tagName, 
+          tagName: dto.tagName,
           action: drift_enums.XmlAction.values.firstWhere(
-                      (e) => e.name == dto.action.name, // DTO uses XmlAction from 'models/enums.dart'
+                      (e) => e.name == dto.action.name,
                       orElse: ()=> drift_enums.XmlAction.ignore)
         )
       ).toList();
     
     final now = DateTime.now();
 
-    // Fields not in ChatExportDto: apiType, selectedOpenAIConfigId, parentFolderId, orderIndex, coverImagePath, backgroundImagePath
     final chatCompanion = ChatsCompanion.insert(
       title: Value(chatDto.title),
       systemPrompt: Value(chatDto.systemPrompt),
-      isFolder: Value(chatDto.isFolder), // DTO has isFolder, default is false
-      generationConfig: generationConfigDrift, 
-      contextConfig: contextConfigDrift,       
-      xmlRules: xmlRulesDrift,                 
+      isFolder: Value(chatDto.isFolder),
+      contextConfig: contextConfigDrift,
+      xmlRules: xmlRulesDrift,
       createdAt: now,
       updatedAt: now,
-      // apiType is not in ChatExportDto, default to gemini or make it nullable in table if it can be absent
-      apiType: drift_enums.LlmType.values.firstWhere(
-                    (e) => e.name == chatDto.apiType.name, // DTO 使用 LlmType from 'models/enums.dart'
-                    orElse: () => drift_enums.LlmType.gemini), // 默认值
-      selectedOpenAIConfigId: Value(chatDto.selectedOpenAIConfigId), // 使用 DTO 中的 selectedOpenAIConfigId
-      parentFolderId: const Value(null),      // Not in DTO
-      orderIndex: const Value(0),              // Not in DTO, default to 0
-      // coverImagePath: const Value(null),    // 移除或注释掉，因为我们现在使用 Base64
-      coverImageBase64: Value(chatDto.coverImageBase64), // 新增：使用 DTO 中的 Base64 字符串
-      backgroundImagePath: const Value(null),  // Not in DTO
+      apiConfigId: Value(chatDto.apiConfigId),
+      parentFolderId: const Value(null),
+      orderIndex: const Value(0),
+      coverImageBase64: Value(chatDto.coverImageBase64),
+      backgroundImagePath: const Value(null),
+      // new fields
+      enablePreprocessing: Value(chatDto.enablePreprocessing),
+      preprocessingPrompt: Value(chatDto.preprocessingPrompt),
+      preprocessingApiConfigId: Value(chatDto.preprocessingApiConfigId),
+      enableSecondaryXml: Value(chatDto.enableSecondaryXml),
+      secondaryXmlPrompt: Value(chatDto.secondaryXmlPrompt),
+      secondaryXmlApiConfigId: Value(chatDto.secondaryXmlApiConfigId),
+      contextSummary: Value(chatDto.contextSummary),
+      continuePrompt: Value(chatDto.continuePrompt),
     );
 
     return attachedDb.transaction(() async {
@@ -195,5 +162,52 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       return newChatId;
     });
     // return Future.value(0); // Remove dummy return
+  }
+
+  Future<int> forkChat(int originalChatId, int fromMessageId) async {
+    return db.transaction(() async {
+      // 1. Get the original chat
+      final originalChat = await getChat(originalChatId);
+      if (originalChat == null) {
+        throw Exception('Original chat not found for forking.');
+      }
+
+      // 2. Create a new chat companion from the original, resetting some fields
+      final now = DateTime.now();
+      final forkedChatCompanion = originalChat.toCompanion(true).copyWith(
+        id: const Value.absent(), // New ID will be assigned
+        title: Value('${originalChat.title} (Forked)'),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+        contextSummary: const Value(null), // Clear summary on fork
+      );
+      
+      final newChatId = await into(chats).insert(forkedChatCompanion);
+
+      // 3. Get messages from the original chat up to the specified message ID
+      final messagesToCopy = await (select(messages)
+        ..where((t) => t.chatId.equals(originalChatId))
+        ..where((t) => t.id.isSmallerOrEqualValue(fromMessageId))
+        ..orderBy([(t) => OrderingTerm(expression: t.timestamp)])
+      ).get();
+
+      // 4. Create new message companions for the new chat
+      final List<MessagesCompanion> newMessages = [];
+      for (final msg in messagesToCopy) {
+        newMessages.add(msg.toCompanion(true).copyWith(
+          id: const Value.absent(), // New ID
+          chatId: Value(newChatId), // Link to the new chat
+        ));
+      }
+
+      // 5. Batch insert the copied messages
+      if (newMessages.isNotEmpty) {
+        await batch((batch) {
+          batch.insertAll(messages, newMessages);
+        });
+      }
+
+      return newChatId;
+    });
   }
 }

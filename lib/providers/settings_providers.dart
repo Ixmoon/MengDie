@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/enums.dart'; // 导入主题设置枚举
@@ -63,5 +64,152 @@ class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
   final notifier = ThemeModeNotifier();
   notifier.init(); // 调用异步初始化
+  return notifier;
+});
+
+// --- 全局应用设置 ---
+
+// SharedPreferences Keys
+const String _enableAutoTitleGenerationKey = 'global_enable_auto_title_generation';
+const String _titleGenerationPromptKey = 'global_title_generation_prompt';
+const String _titleGenerationApiConfigIdKey = 'global_title_generation_api_config_id';
+const String _enableResumeKey = 'global_enable_resume';
+const String _resumePromptKey = 'global_resume_prompt';
+const String _resumeApiConfigIdKey = 'global_resume_api_config_id';
+const String _enableHelpMeReplyKey = 'global_enable_help_me_reply';
+const String _helpMeReplyPromptKey = 'global_help_me_reply_prompt';
+const String _helpMeReplyApiConfigIdKey = 'global_help_me_reply_api_config_id';
+const String _helpMeReplyTriggerModeKey = 'global_help_me_reply_trigger_mode';
+
+
+const String defaultTitleGenerationPrompt = '根据以下对话，为本次聊天生成一个简洁的、不超过10个字的标题。';
+const String defaultResumePrompt = '继续生成被中断的回复，请直接继续，不要包含任何其他内容。';
+const String defaultHelpMeReplyPrompt = '请根据以上对话，为我设想三个不同的回复，并以序号（1. 2. 3.）分开。';
+
+
+@immutable
+class GlobalSettings {
+  final bool enableAutoTitleGeneration;
+  final String titleGenerationPrompt;
+  final String? titleGenerationApiConfigId;
+
+  final bool enableResume;
+  final String resumePrompt;
+  final String? resumeApiConfigId;
+
+  final bool enableHelpMeReply;
+  final String helpMeReplyPrompt;
+  final String? helpMeReplyApiConfigId;
+  final String helpMeReplyTriggerMode; // 'manual' or 'auto'
+
+  const GlobalSettings({
+    this.enableAutoTitleGeneration = false,
+    this.titleGenerationPrompt = defaultTitleGenerationPrompt,
+    this.titleGenerationApiConfigId,
+    this.enableResume = false,
+    this.resumePrompt = defaultResumePrompt,
+    this.resumeApiConfigId,
+    this.enableHelpMeReply = false,
+    this.helpMeReplyPrompt = defaultHelpMeReplyPrompt,
+    this.helpMeReplyApiConfigId,
+    this.helpMeReplyTriggerMode = 'manual',
+  });
+
+  GlobalSettings copyWith({
+    bool? enableAutoTitleGeneration,
+    String? titleGenerationPrompt,
+    String? titleGenerationApiConfigId,
+    bool clearTitleGenerationApiConfigId = false,
+    bool? enableResume,
+    String? resumePrompt,
+    String? resumeApiConfigId,
+    bool clearResumeApiConfigId = false,
+    bool? enableHelpMeReply,
+    String? helpMeReplyPrompt,
+    String? helpMeReplyApiConfigId,
+    bool clearHelpMeReplyApiConfigId = false,
+    String? helpMeReplyTriggerMode,
+  }) {
+    return GlobalSettings(
+      enableAutoTitleGeneration: enableAutoTitleGeneration ?? this.enableAutoTitleGeneration,
+      titleGenerationPrompt: titleGenerationPrompt ?? this.titleGenerationPrompt,
+      titleGenerationApiConfigId: clearTitleGenerationApiConfigId ? null : titleGenerationApiConfigId ?? this.titleGenerationApiConfigId,
+      enableResume: enableResume ?? this.enableResume,
+      resumePrompt: resumePrompt ?? this.resumePrompt,
+      resumeApiConfigId: clearResumeApiConfigId ? null : resumeApiConfigId ?? this.resumeApiConfigId,
+      enableHelpMeReply: enableHelpMeReply ?? this.enableHelpMeReply,
+      helpMeReplyPrompt: helpMeReplyPrompt ?? this.helpMeReplyPrompt,
+      helpMeReplyApiConfigId: clearHelpMeReplyApiConfigId ? null : helpMeReplyApiConfigId ?? this.helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
+    );
+  }
+}
+
+class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
+  late final SharedPreferences? _prefs;
+
+  GlobalSettingsNotifier() : super(const GlobalSettings());
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    _loadSettings();
+  }
+
+  void _loadSettings() {
+    final prefs = _prefs;
+    if (prefs == null) return;
+
+    state = GlobalSettings(
+      enableAutoTitleGeneration: prefs.getBool(_enableAutoTitleGenerationKey) ?? false,
+      titleGenerationPrompt: prefs.getString(_titleGenerationPromptKey) ?? defaultTitleGenerationPrompt,
+      titleGenerationApiConfigId: prefs.getString(_titleGenerationApiConfigIdKey),
+      enableResume: prefs.getBool(_enableResumeKey) ?? false,
+      resumePrompt: prefs.getString(_resumePromptKey) ?? defaultResumePrompt,
+      resumeApiConfigId: prefs.getString(_resumeApiConfigIdKey),
+      enableHelpMeReply: prefs.getBool(_enableHelpMeReplyKey) ?? false,
+      helpMeReplyPrompt: prefs.getString(_helpMeReplyPromptKey) ?? defaultHelpMeReplyPrompt,
+      helpMeReplyApiConfigId: prefs.getString(_helpMeReplyApiConfigIdKey),
+      helpMeReplyTriggerMode: prefs.getString(_helpMeReplyTriggerModeKey) ?? 'manual',
+    );
+  }
+
+  Future<void> updateSettings(GlobalSettings newSettings) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    
+    // Only update state if it has changed to avoid unnecessary rebuilds
+    if (state != newSettings) {
+      state = newSettings;
+      await prefs.setBool(_enableAutoTitleGenerationKey, newSettings.enableAutoTitleGeneration);
+      await prefs.setString(_titleGenerationPromptKey, newSettings.titleGenerationPrompt);
+      if (newSettings.titleGenerationApiConfigId != null) {
+        await prefs.setString(_titleGenerationApiConfigIdKey, newSettings.titleGenerationApiConfigId!);
+      } else {
+        await prefs.remove(_titleGenerationApiConfigIdKey);
+      }
+
+      await prefs.setBool(_enableResumeKey, newSettings.enableResume);
+      await prefs.setString(_resumePromptKey, newSettings.resumePrompt);
+      if (newSettings.resumeApiConfigId != null) {
+        await prefs.setString(_resumeApiConfigIdKey, newSettings.resumeApiConfigId!);
+      } else {
+        await prefs.remove(_resumeApiConfigIdKey);
+      }
+
+      await prefs.setBool(_enableHelpMeReplyKey, newSettings.enableHelpMeReply);
+      await prefs.setString(_helpMeReplyPromptKey, newSettings.helpMeReplyPrompt);
+      if (newSettings.helpMeReplyApiConfigId != null) {
+        await prefs.setString(_helpMeReplyApiConfigIdKey, newSettings.helpMeReplyApiConfigId!);
+      } else {
+        await prefs.remove(_helpMeReplyApiConfigIdKey);
+      }
+      await prefs.setString(_helpMeReplyTriggerModeKey, newSettings.helpMeReplyTriggerMode);
+    }
+  }
+}
+
+final globalSettingsProvider = StateNotifierProvider<GlobalSettingsNotifier, GlobalSettings>((ref) {
+  final notifier = GlobalSettingsNotifier();
+  notifier.init();
   return notifier;
 });

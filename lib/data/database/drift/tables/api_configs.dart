@@ -1,24 +1,29 @@
 import 'package:drift/drift.dart';
+import '../type_converters.dart';
 
-// Gemini API 密钥表
-@DataClassName('GeminiApiKey')
-class GeminiApiKeys extends Table {
-  IntColumn get id => integer().autoIncrement()();
-  TextColumn get apiKey => text().unique()(); // 密钥应该是唯一的
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-}
+// 统一的 API 配置表
+// 该表合并了 Gemini 和 OpenAI 的配置，并包含了各自的高级生成设置
+@DataClassName('ApiConfig')
+class ApiConfigs extends Table {
+  // --- 通用字段 ---
+  TextColumn get id => text().clientDefault(() => 'temp_id')();
+  TextColumn get name => text()(); // 配置名称，对用户可见
+  TextColumn get apiType => text().map(const LlmTypeConverter())(); // Gemini or OpenAI
+  TextColumn get model => text()(); // 模型名称, e.g., 'gemini-1.5-pro', 'gpt-4'
+  TextColumn get apiKey => text().nullable()(); // API Key (对于 Gemini, 这是全局的, 此处可为空)
+  TextColumn get baseUrl => text().nullable()(); // Base URL (主要用于 OpenAI 兼容 API)
 
-// OpenAI API 配置表
-// 这个表的设计反映了 DriftOpenAIAPIConfig 模型
-@DataClassName('OpenAIConfig')
-class OpenAIConfigs extends Table {
-  TextColumn get id => text().clientDefault(() => 'temp_id')(); // 保持与模型一致
-  TextColumn get name => text()();
-  TextColumn get baseUrl => text()();
-  TextColumn get apiKey => text()();
-  TextColumn get model => text()();
+  // --- 高级生成设置 (从 DriftGenerationConfig 迁移) ---
+  BoolColumn get useCustomTemperature => boolean().withDefault(const Constant(false))();
   RealColumn get temperature => real().nullable()();
-  IntColumn get maxTokens => integer().nullable()();
+  BoolColumn get useCustomTopP => boolean().withDefault(const Constant(false))();
+  RealColumn get topP => real().nullable()();
+  BoolColumn get useCustomTopK => boolean().withDefault(const Constant(false))();
+  IntColumn get topK => integer().nullable()();
+  IntColumn get maxOutputTokens => integer().nullable()();
+  TextColumn get stopSequences => text().map(const StringListConverter()).nullable()();
+
+  // --- 时间戳 ---
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 

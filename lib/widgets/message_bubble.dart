@@ -74,9 +74,15 @@ class MessageBubble extends StatelessWidget {
           // 设置圆角以匹配 Card 的形状，使水波纹效果更自然
           borderRadius: BorderRadius.circular(12.0),
           child: Card( // 使用 Card 实现气泡的基本外观
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)), // 确保 Card 本身有圆角
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              side: BorderSide(
+                color: Theme.of(context).colorScheme.outline.withAlpha((255 * 0.2).round()),
+                width: 0.8,
+              ),
+            ),
             color: color, // 设置气泡背景色
-            elevation: 1.0, // 设置轻微阴影
+            elevation: 0, // 移除阴影以提高滚动性能
             // 设置外边距，用于控制气泡之间的间距
             margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0), // const
             child: Padding(
@@ -150,6 +156,7 @@ Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor
           child: CachedImageFromBase64(
             base64String: part.base64Data!,
             fit: BoxFit.contain,
+            cacheHeight: (300 * MediaQuery.of(context).devicePixelRatio).round(),
           ),
         );
       }

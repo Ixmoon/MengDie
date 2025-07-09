@@ -17,5 +17,8 @@ class Messages extends Table {
   // Stores the original XML content if it was overwritten by post-processing
   TextColumn get originalXmlContent => text().nullable()();
 
+  // Stores the XML content from secondary generation
+  TextColumn get secondaryXmlContent => text().nullable()();
+
   // autoIncrement() on id column automatically makes it the primary key.
 }

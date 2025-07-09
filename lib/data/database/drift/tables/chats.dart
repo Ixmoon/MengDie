@@ -19,20 +19,23 @@ class Chats extends Table {
 
   // For embedded objects, we'll store them as JSON strings initially
   // and use TypeConverters later.
-  TextColumn get generationConfig => text().map(const GenerationConfigConverter())();
   TextColumn get contextConfig => text().map(const ContextConfigConverter())();
   TextColumn get xmlRules => text().map(const XmlRuleListConverter())();
 
-  TextColumn get apiType => text().map(const LlmTypeConverter())();
-  TextColumn get selectedOpenAIConfigId => text().nullable()();
+  // 移除了 generationConfig, apiType, selectedOpenAIConfigId
+  // 新增 apiConfigId 作为外键
+  TextColumn get apiConfigId => text().nullable()();
 
   // --- Pre-processing and Post-processing ---
-  BoolColumn get enablePreprocessing => boolean().withDefault(const Constant(false))();
+  BoolColumn get enablePreprocessing => boolean().nullable()();
   TextColumn get preprocessingPrompt => text().nullable()();
   TextColumn get contextSummary => text().nullable()(); // Stores the last summary from pre-processing
-  
-  BoolColumn get enablePostprocessing => boolean().withDefault(const Constant(false))();
-  TextColumn get postprocessingPrompt => text().nullable()();
+  TextColumn get preprocessingApiConfigId => text().nullable()();
+
+  BoolColumn get enableSecondaryXml => boolean().nullable()();
+  TextColumn get secondaryXmlPrompt => text().nullable()();
+  TextColumn get secondaryXmlApiConfigId => text().nullable()();
+  TextColumn get continuePrompt => text().nullable()(); // 新增：续写提示词
   // --- End ---
 
   // autoIncrement() on id column automatically makes it the primary key.

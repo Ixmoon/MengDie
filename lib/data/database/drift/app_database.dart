@@ -1,9 +1,6 @@
-// Remove platform specific imports from here, they are in connection files now
-// import 'dart:io'; 
 
 import 'package:drift/drift.dart';
-// import 'package:drift/wasm.dart'; // No longer needed here
-// import 'package:flutter/foundation.dart'; // No longer needed here
+import 'package:logging/logging.dart';
 
 // Conditional import for connection logic
 import 'connections/native.dart' if (dart.library.html) 'connections/web.dart';
@@ -20,7 +17,6 @@ import 'daos/api_config_dao.dart'; // Import new DAO
 
 // Import type converters and models for them
 import 'type_converters.dart';
-import 'models/drift_generation_config.dart';
 import 'models/drift_context_config.dart';
 import 'models/drift_xml_rule.dart';
 import 'common_enums.dart';
@@ -29,14 +25,16 @@ import 'common_enums.dart';
 
 part 'app_database.g.dart'; // Drift will generate this file
 
-@DriftDatabase(tables: [Chats, Messages, GeminiApiKeys, OpenAIConfigs], daos: [ChatDao, MessageDao, ApiConfigDao])
+final _log = Logger('AppDatabase');
+
+@DriftDatabase(tables: [Chats, Messages, ApiConfigs], daos: [ChatDao, MessageDao, ApiConfigDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(connect()); // Use the conditionally imported connect()
 
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 4; // Bump version to 4
+  int get schemaVersion => 12; // Bump version to 12 for new automation API config fields
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,21 +43,45 @@ class AppDatabase extends _$AppDatabase {
     },
     onUpgrade: (m, from, to) async {
       // Each migration builds on the last.
+      // We wrap calls in try-catch to make them idempotent, preventing crashes
+      // if a previous, failed migration partially completed a step.
       if (from < 2) {
-         await m.addColumn(chats, chats.coverImageBase64);
-      }
-      if (from < 3) {
-        await m.createTable(geminiApiKeys);
-        await m.createTable(openAIConfigs);
+        try { await m.addColumn(chats, chats.coverImageBase64); } catch (e) { _log.warning("Migration warning (from < 2): ${e.toString()}"); }
       }
       if (from < 4) {
-        // Add all new columns for version 4
-        await m.addColumn(chats, chats.enablePreprocessing);
-        await m.addColumn(chats, chats.preprocessingPrompt);
-        await m.addColumn(chats, chats.contextSummary);
-        await m.addColumn(chats, chats.enablePostprocessing);
-        await m.addColumn(chats, chats.postprocessingPrompt);
-        await m.addColumn(messages, messages.originalXmlContent);
+        try { await m.addColumn(chats, chats.enablePreprocessing); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.preprocessingPrompt); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.contextSummary); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.enableSecondaryXml); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.secondaryXmlPrompt); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+        try { await m.addColumn(messages, messages.originalXmlContent); } catch (e) { _log.warning("Migration warning (from < 4): ${e.toString()}"); }
+      }
+      if (from < 5) {
+        try { await m.addColumn(chats, chats.continuePrompt); } catch (e) { _log.warning("Migration warning (from < 5): ${e.toString()}"); }
+      }
+      if (from < 6) {
+        try { await m.addColumn(messages, messages.secondaryXmlContent); } catch (e) { _log.warning("Migration warning (from < 6): ${e.toString()}"); }
+      }
+      if (from < 9) {
+        try { await m.createTable(apiConfigs); } catch (e) { _log.warning("Migration warning (from < 9): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.apiConfigId); } catch (e) { _log.warning("Migration warning (from < 9): ${e.toString()}"); }
+      }
+      if (from < 10) {
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTemperature); } catch (e) { _log.warning("Migration warning (from < 10): ${e.toString()}"); }
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTopP); } catch (e) { _log.warning("Migration warning (from < 10): ${e.toString()}"); }
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTopK); } catch (e) { _log.warning("Migration warning (from < 10): ${e.toString()}"); }
+      }
+      if (from < 11) {
+        // This version is just to ensure the idempotent logic from v10 runs correctly
+        // for users who might be stuck in a broken state. No new schema changes.
+        // We can re-add the try-catch blocks here defensively.
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTemperature); } catch (e) { _log.warning("Migration warning (from < 11): ${e.toString()}"); }
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTopP); } catch (e) { _log.warning("Migration warning (from < 11): ${e.toString()}"); }
+        try { await m.addColumn(apiConfigs, apiConfigs.useCustomTopK); } catch (e) { _log.warning("Migration warning (from < 11): ${e.toString()}"); }
+      }
+      if (from < 12) {
+        try { await m.addColumn(chats, chats.preprocessingApiConfigId); } catch (e) { _log.warning("Migration warning (from < 12): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.secondaryXmlApiConfigId); } catch (e) { _log.warning("Migration warning (from < 12): ${e.toString()}"); }
       }
     },
   );

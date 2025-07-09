@@ -1,38 +1,50 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/openai_api_service.dart';
 
-// 用于传递参数给 Provider 的不可变类
-class OpenAIModelsProviderParams {
-	final String baseUrl;
-	final String apiKey;
+// --- State ---
+class OpenAIModelsState {
+  final AsyncValue<List<OpenAIModel>> models;
+  final String? lastError;
 
-	OpenAIModelsProviderParams({required this.baseUrl, required this.apiKey});
+  OpenAIModelsState({
+    this.models = const AsyncValue.loading(),
+    this.lastError,
+  });
 
-	@override
-	bool operator ==(Object other) =>
-		identical(this, other) ||
-		other is OpenAIModelsProviderParams &&
-			runtimeType == other.runtimeType &&
-			baseUrl == other.baseUrl &&
-			apiKey == other.apiKey;
-
-	@override
-	int get hashCode => baseUrl.hashCode ^ apiKey.hashCode;
+  OpenAIModelsState copyWith({
+    AsyncValue<List<OpenAIModel>>? models,
+    String? lastError,
+  }) {
+    return OpenAIModelsState(
+      models: models ?? this.models,
+      lastError: lastError ?? this.lastError,
+    );
+  }
 }
 
-// Service Provider，提供 OpenaiApiService 的单例
-final openaiApiServiceProvider = Provider<OpenaiApiService>((ref) {
-	return OpenaiApiService();
-});
+// --- Notifier ---
+class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
+  final OpenaiApiService _apiService;
 
-// FutureProvider，用于异步获取模型列表
-// 使用 .autoDispose 来自动管理状态，当不再被监听时销毁
-// 使用 .family 来传递参数
-final openAIModelsProvider = FutureProvider.autoDispose.family<List<OpenAIModel>, OpenAIModelsProviderParams>(
-	(ref, params) async {
-		// 监视 service provider
-		final apiService = ref.watch(openaiApiServiceProvider);
-		// 调用 service 的方法来获取数据
-		return apiService.fetchModels(baseUrl: params.baseUrl, apiKey: params.apiKey);
-	},
-);
+  OpenAIModelsNotifier(this._apiService) : super(OpenAIModelsState());
+
+  Future<void> fetchModels({required String baseUrl, required String apiKey}) async {
+    state = state.copyWith(models: const AsyncValue.loading());
+    try {
+      final models = await _apiService.fetchModels(baseUrl: baseUrl, apiKey: apiKey);
+      state = state.copyWith(models: AsyncValue.data(models));
+    } catch (e) {
+      state = state.copyWith(models: AsyncValue.error(e, StackTrace.current), lastError: e.toString());
+    }
+  }
+
+  void resetState() {
+    state = OpenAIModelsState();
+  }
+}
+
+// --- Provider ---
+final openaiModelsProvider = StateNotifierProvider<OpenAIModelsNotifier, OpenAIModelsState>((ref) {
+  // We create the ApiService here, it has no dependencies.
+  return OpenAIModelsNotifier(OpenaiApiService());
+});

@@ -3,7 +3,6 @@ import 'enums.dart';
 import '../services/xml_processor.dart'; // Import for text processing
 
 // Import the new Drift-specific models and enums
-import '../data/database/drift/models/drift_generation_config.dart';
 import '../data/database/drift/models/drift_context_config.dart';
 import '../data/database/drift/models/drift_xml_rule.dart';
 import '../data/database/drift/common_enums.dart' as drift_enums;
@@ -18,27 +17,27 @@ class Chat {
   String? systemPrompt;
   DateTime createdAt = DateTime.now();
   DateTime updatedAt = DateTime.now();
-  // String? coverImagePath; // 移除或注释掉旧的 coverImagePath
-  String? coverImageBase64; // 新增：用于存储封面图片的 Base64 字符串
+  String? coverImageBase64;
   String? backgroundImagePath;
 
   int? orderIndex;
   bool isFolder = false;
   int? parentFolderId;
 
-  DriftGenerationConfig generationConfig = DriftGenerationConfig();
+  // --- Refactored Fields ---
+  String? apiConfigId; // Replaces apiType, selectedOpenAIConfigId, and generationConfig
   DriftContextConfig contextConfig = DriftContextConfig();
   List<DriftXmlRule> xmlRules = [];
-
-  drift_enums.LlmType apiType = drift_enums.LlmType.gemini;
-  String? selectedOpenAIConfigId;
 
   // --- 新增字段 ---
   bool enablePreprocessing = false;
   String? preprocessingPrompt;
   String? contextSummary;
-  bool enablePostprocessing = false;
-  String? postprocessingPrompt;
+  String? preprocessingApiConfigId;
+  bool enableSecondaryXml = false;
+  String? secondaryXmlPrompt;
+  String? secondaryXmlApiConfigId;
+  String? continuePrompt;
   // --- 结束 ---
 
   Chat();
@@ -56,16 +55,17 @@ class Chat {
       ..orderIndex = data.orderIndex
       ..isFolder = data.isFolder
       ..parentFolderId = data.parentFolderId
-      ..generationConfig = data.generationConfig
+      ..apiConfigId = data.apiConfigId
       ..contextConfig = data.contextConfig
       ..xmlRules = data.xmlRules
-      ..apiType = data.apiType
-      ..selectedOpenAIConfigId = data.selectedOpenAIConfigId
-      ..enablePreprocessing = data.enablePreprocessing
+      ..enablePreprocessing = data.enablePreprocessing ?? false
       ..preprocessingPrompt = data.preprocessingPrompt
       ..contextSummary = data.contextSummary
-      ..enablePostprocessing = data.enablePostprocessing
-      ..postprocessingPrompt = data.postprocessingPrompt;
+      ..preprocessingApiConfigId = data.preprocessingApiConfigId
+      ..enableSecondaryXml = data.enableSecondaryXml ?? false
+      ..secondaryXmlPrompt = data.secondaryXmlPrompt
+      ..secondaryXmlApiConfigId = data.secondaryXmlApiConfigId
+      ..continuePrompt = data.continuePrompt;
   }
 
   // 将业务模型转换为 Drift Companion Class 的方法
@@ -83,16 +83,17 @@ class Chat {
       orderIndex: Value(orderIndex),
       isFolder: Value(isFolder),
       parentFolderId: Value(parentFolderId),
-      generationConfig: Value(generationConfig),
+      apiConfigId: Value(apiConfigId),
       contextConfig: Value(contextConfig),
       xmlRules: Value(xmlRules),
-      apiType: Value(apiType),
-      selectedOpenAIConfigId: Value(selectedOpenAIConfigId),
       enablePreprocessing: Value(enablePreprocessing),
       preprocessingPrompt: Value(preprocessingPrompt),
       contextSummary: Value(contextSummary),
-      enablePostprocessing: Value(enablePostprocessing),
-      postprocessingPrompt: Value(postprocessingPrompt),
+      preprocessingApiConfigId: Value(preprocessingApiConfigId),
+      enableSecondaryXml: Value(enableSecondaryXml),
+      secondaryXmlPrompt: Value(secondaryXmlPrompt),
+      secondaryXmlApiConfigId: Value(secondaryXmlApiConfigId),
+      continuePrompt: Value(continuePrompt),
     );
   }
 
@@ -108,16 +109,17 @@ class Chat {
     Value<int?>? orderIndex,
     bool? isFolder,
     Value<int?>? parentFolderId,
-    DriftGenerationConfig? generationConfig,
+    Value<String?>? apiConfigId,
     DriftContextConfig? contextConfig,
     List<DriftXmlRule>? xmlRules,
-    drift_enums.LlmType? apiType,
-    Value<String?>? selectedOpenAIConfigId,
     bool? enablePreprocessing,
     Value<String?>? preprocessingPrompt,
     Value<String?>? contextSummary,
-    bool? enablePostprocessing,
-    Value<String?>? postprocessingPrompt,
+    Value<String?>? preprocessingApiConfigId,
+    bool? enableSecondaryXml,
+    Value<String?>? secondaryXmlPrompt,
+    Value<String?>? secondaryXmlApiConfigId,
+    Value<String?>? continuePrompt,
   }) {
     final newChat = Chat()
       ..id = id ?? this.id
@@ -130,16 +132,17 @@ class Chat {
       ..orderIndex = orderIndex != null ? orderIndex.value : this.orderIndex
       ..isFolder = isFolder ?? this.isFolder
       ..parentFolderId = parentFolderId != null ? parentFolderId.value : this.parentFolderId
-      ..generationConfig = generationConfig ?? this.generationConfig.copyWith() // Assuming Drift models also have copyWith
+      ..apiConfigId = apiConfigId != null ? apiConfigId.value : this.apiConfigId
       ..contextConfig = contextConfig ?? this.contextConfig.copyWith()
       ..xmlRules = xmlRules ?? List<DriftXmlRule>.from(this.xmlRules)
-      ..apiType = apiType ?? this.apiType
-      ..selectedOpenAIConfigId = selectedOpenAIConfigId != null ? selectedOpenAIConfigId.value : this.selectedOpenAIConfigId
       ..enablePreprocessing = enablePreprocessing ?? this.enablePreprocessing
       ..preprocessingPrompt = preprocessingPrompt != null ? preprocessingPrompt.value : this.preprocessingPrompt
       ..contextSummary = contextSummary != null ? contextSummary.value : this.contextSummary
-      ..enablePostprocessing = enablePostprocessing ?? this.enablePostprocessing
-      ..postprocessingPrompt = postprocessingPrompt != null ? postprocessingPrompt.value : this.postprocessingPrompt;
+      ..preprocessingApiConfigId = preprocessingApiConfigId != null ? preprocessingApiConfigId.value : this.preprocessingApiConfigId
+      ..enableSecondaryXml = enableSecondaryXml ?? this.enableSecondaryXml
+      ..secondaryXmlPrompt = secondaryXmlPrompt != null ? secondaryXmlPrompt.value : this.secondaryXmlPrompt
+      ..secondaryXmlApiConfigId = secondaryXmlApiConfigId != null ? secondaryXmlApiConfigId.value : this.secondaryXmlApiConfigId
+      ..continuePrompt = continuePrompt != null ? continuePrompt.value : this.continuePrompt;
     return newChat;
   }
 
@@ -153,25 +156,20 @@ class Chat {
     this.isFolder = false,
     this.parentFolderId,
     this.orderIndex,
-    this.apiType = drift_enums.LlmType.gemini, // Use Drift enum
-    this.selectedOpenAIConfigId,
-    DriftGenerationConfig? generationConfig, // Allow passing custom configs
+    this.apiConfigId,
     DriftContextConfig? contextConfig,
     List<DriftXmlRule>? xmlRules,
     this.enablePreprocessing = false,
     this.preprocessingPrompt,
     this.contextSummary,
-    this.enablePostprocessing = false,
-    this.postprocessingPrompt,
+    this.preprocessingApiConfigId,
+    this.enableSecondaryXml = false,
+    this.secondaryXmlPrompt,
+    this.secondaryXmlApiConfigId,
+    this.continuePrompt,
   }) {
     createdAt = DateTime.now();
     updatedAt = DateTime.now();
-    this.generationConfig = generationConfig ?? DriftGenerationConfig();
-    // DriftGenerationConfig() will now correctly initialize with:
-    // - useCustomParameters = false (by its own default in its constructor)
-    // - temperature = null (as no default is provided in its constructor)
-    // - topP = null (as no default is provided in its constructor)
-    // - topK = null (as no default is provided in its constructor)
     this.contextConfig = contextConfig ?? DriftContextConfig();
     this.xmlRules = xmlRules ?? [];
   }
@@ -260,6 +258,7 @@ class Message {
   drift_enums.MessageRole role; // Use Drift enum
   final DateTime timestamp;
   String? originalXmlContent;
+  String? secondaryXmlContent;
   final String displayText; // New field for pre-processed display text
 
   Message({
@@ -269,6 +268,7 @@ class Message {
     required this.role,
     DateTime? timestamp,
     this.originalXmlContent,
+    this.secondaryXmlContent,
   })  : timestamp = timestamp ?? DateTime.now(),
         // Calculate displayText upon creation from all text parts
         displayText = XmlProcessor.stripXmlContent(
@@ -285,9 +285,11 @@ class Message {
     int? chatId,
     List<MessagePart>? parts,
     String? rawText, // Keep for easy text-only updates
+    String? appendToRawText,
     drift_enums.MessageRole? role,
     DateTime? timestamp,
     String? originalXmlContent,
+    String? secondaryXmlContent,
   }) {
     List<MessagePart> newParts;
     if (parts != null) {
@@ -296,6 +298,11 @@ class Message {
       // If only rawText is provided, replace all text parts with the new one
       newParts = this.parts.where((p) => p.type != MessagePartType.text).toList();
       newParts.insert(0, MessagePart.text(rawText));
+    } else if (appendToRawText != null) {
+      // If appendToRawText is provided, append it to the existing text part
+      final existingText = this.parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('');
+      newParts = this.parts.where((p) => p.type != MessagePartType.text).toList();
+      newParts.insert(0, MessagePart.text(existingText + appendToRawText));
     } else {
       newParts = this.parts;
     }
@@ -308,6 +315,7 @@ class Message {
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       originalXmlContent: originalXmlContent ?? this.originalXmlContent,
+      secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
     );
   }
 
@@ -318,6 +326,7 @@ class Message {
     List<MessagePart>? parts,
     String? rawText, // Allow creating from simple text
     String? originalXmlContent,
+    String? secondaryXmlContent,
     DateTime? timestamp,
   }) {
     final finalParts = (parts != null && parts.isNotEmpty)
@@ -334,6 +343,7 @@ class Message {
       role: role,
       parts: finalParts,
       originalXmlContent: originalXmlContent,
+      secondaryXmlContent: secondaryXmlContent,
       timestamp: timestamp,
     );
   }
