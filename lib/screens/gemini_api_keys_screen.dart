@@ -14,7 +14,21 @@ class GeminiApiKeysScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gemini API Keys'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          'Gemini API Keys',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),

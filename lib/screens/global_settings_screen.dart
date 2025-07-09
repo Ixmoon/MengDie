@@ -15,7 +15,23 @@ class GlobalSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('全局设置')),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          '全局设置',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
+      ),
       body: GestureDetector(
          onTap: () => FocusScope.of(context).unfocus(),
          child: Padding(
@@ -223,7 +239,7 @@ class GlobalSettingsScreen extends ConsumerWidget {
          TextFormField(
            initialValue: prompt,
            // Use a key to force rebuild when switching between features
-           key: ValueKey('prompt_$title'),
+           key: ValueKey('prompt_${title}_$prompt'),
            decoration: InputDecoration(
              labelText: '提示词',
              border: const OutlineInputBorder(),
@@ -237,6 +253,13 @@ class GlobalSettingsScreen extends ConsumerWidget {
                      builder: (context) => FullScreenTextEditorScreen(
                        initialText: prompt,
                        title: '编辑 $title 的提示词',
+                       defaultValue: title == '自动生成聊天标题'
+                           ? defaultTitleGenerationPrompt
+                           : title == '中断恢复'
+                               ? defaultResumePrompt
+                               : title == '帮我回复'
+                                   ? defaultHelpMeReplyPrompt
+                                   : null,
                      ),
                    ),
                  );

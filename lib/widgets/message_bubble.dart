@@ -32,108 +32,102 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 判断消息是否由用户发送
     bool isUser = message.role == MessageRole.user;
-    // 根据发送者和宽度模式设置对齐方式
     var alignment = isUser
-        ? (isHalfWidth ? Alignment.topRight : Alignment.centerRight) // 半宽时靠上右，全宽时居中右
-        : (isHalfWidth ? Alignment.topLeft : Alignment.centerLeft); // 半宽时靠上左，全宽时居中左
+        ? (isHalfWidth ? Alignment.topRight : Alignment.centerRight)
+        : (isHalfWidth ? Alignment.topLeft : Alignment.centerLeft);
 
-    // 根据发送者选择基础气泡颜色
     var baseColor = isUser
         ? Theme.of(context).colorScheme.primaryContainer
         : Theme.of(context).colorScheme.secondaryContainer;
 
-    // 如果需要透明，则调整颜色透明度
-    var color = isTransparent ? baseColor.withAlpha(180) : baseColor; // 约 70% 不透明度
+    var color = isTransparent ? baseColor.withAlpha(180) : baseColor;
 
-    // 根据发送者选择文本颜色，确保对比度
     var textColor = isUser
         ? Theme.of(context).colorScheme.onPrimaryContainer
         : Theme.of(context).colorScheme.onSecondaryContainer;
 
-    // 获取屏幕宽度，用于计算半宽
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 使用 Align 控制气泡在聊天列表中的水平位置
+    // Card 本身是气泡。我们将其包装在 Container 中以应用约束和边距。
+    // InkWell 放置在 Card 内部，使整个可见区域都可点击。
     return Align(
       alignment: alignment,
-      // 使用 Container 约束宽度
       child: Container(
         constraints: BoxConstraints(
-          // 如果是半宽模式，最大宽度为屏幕宽度的 2/3，否则不限制
           maxWidth: isHalfWidth ? screenWidth * 2 / 3 : double.infinity,
         ),
-        // 使用 InkWell 包裹 Card，以提供点击效果和处理 onTap 回调
-        child: InkWell(
-          onTap: onTap, // 绑定 onTap 回调
-          hoverColor: Colors.transparent, // 禁用悬停颜色效果
-          focusColor: Colors.transparent, // 禁用聚焦颜色效果
-          highlightColor: Colors.transparent, // 可选：禁用按下时的高亮颜色
-          splashColor: Theme.of(context).splashColor.withAlpha(25), // 使用 withAlpha 替代 withOpacity(0.1)
-          // 设置圆角以匹配 Card 的形状，使水波纹效果更自然
-          borderRadius: BorderRadius.circular(12.0),
-          child: Card( // 使用 Card 实现气泡的基本外观
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12.0),
-              side: BorderSide(
-                color: Theme.of(context).colorScheme.outline.withAlpha((255 * 0.2).round()),
-                width: 0.8,
-              ),
+        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+        child: Card(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12.0),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outline.withAlpha((255 * 0.2).round()),
+              width: 0.8,
             ),
-            color: color, // 设置气泡背景色
-            elevation: 0, // 移除阴影以提高滚动性能
-            // 设置外边距，用于控制气泡之间的间距
-            margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0), // const
-            child: Padding(
-              padding: const EdgeInsets.all(10.0), // const: 设置气泡内部边距
-              // 使用 Column 垂直排列消息内容和（未来可能的）时间戳等信息
-              child: _buildMessageContent(context, textColor, isUser, isStreaming),
-            ),
-          ), // 结束 Card
-        ), // 结束 InkWell
-      ), // 结束 Container
-    ); // 结束 Align
-  }
-
-Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-  final hasText = message.displayText.isNotEmpty;
-  final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
-
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if (hasText)
-        _buildTextPart(context, textColor, isUser, isStreaming),
-      ...nonTextParts.map((part) {
-        return Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: _buildNonTextPart(context, part, textColor),
-        );
-      }),
-      // Display token count if available
-      if (totalTokens != null && totalTokens! > 0)
-        Padding(
-          padding: const EdgeInsets.only(top: 8.0),
-          child: Text(
-            "上下文 Tokens: $totalTokens",
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: textColor.withAlpha(179),
-                ),
+          ),
+          color: color,
+          elevation: 0,
+          margin: EdgeInsets.zero, // 边距现在位于外部容器上
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: _buildMessageContent(context, textColor, isUser, isStreaming),
           ),
         ),
-    ],
-  );
-}
+      ),
+    );
+  }
 
-Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-  if (isUser) {
-    return SelectableText(message.displayText, style: TextStyle(color: textColor));
-  } else {
+  Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+    final hasText = message.displayText.isNotEmpty;
+    final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
+
+    // 使用 SelectionArea 包装所有内容以实现统一选择。
+    // 在其内部使用 GestureDetector 来处理点击事件，避免与 SelectionArea 冲突。
+    return SelectionArea(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque, // 确保整个内容区域都可点击
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasText)
+              _buildTextPart(context, textColor, isUser, isStreaming),
+            ...nonTextParts.map((part) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: _buildNonTextPart(context, part, textColor),
+              );
+            }),
+            // Display token count if available
+            if (totalTokens != null && totalTokens! > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  "上下文 Tokens: $totalTokens",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: textColor.withAlpha(179),
+                      ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+    // 将用户和模型消息统一为使用 MarkdownBody，以实现一致的渲染、
+    // 多行选择，并解决手势冲突。
+    final textContent = message.displayText.isEmpty && isStreaming && !isUser
+        ? "..." // 仅为流式模型响应显示省略号
+        : message.displayText;
+
     return MarkdownBody(
-      data: message.displayText.isEmpty && isStreaming ? "..." : message.displayText,
-      selectable: true,
+      data: textContent,
+      selectable: false, // 由父级的 SelectionArea 处理选择
       styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
         p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
         code: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -143,7 +137,6 @@ Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool i
       ),
     );
   }
-}
 
 Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
   switch (part.type) {

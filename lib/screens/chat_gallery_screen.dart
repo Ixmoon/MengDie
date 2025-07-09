@@ -63,7 +63,23 @@ class ChatGalleryScreen extends ConsumerWidget {
     final chatAsync = ref.watch(currentChatProvider(chatId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('封面图片管理')),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          '封面图片管理',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
+      ),
       body: chatAsync.when(
         data: (chat) {
           if (chat == null) return const Center(child: Text('聊天未找到'));

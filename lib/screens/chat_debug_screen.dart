@@ -36,11 +36,6 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         _loadDebugContext();
       }
     });
-    ref.listen<int?>(activeChatIdProvider, (_, __) {
-      if (mounted) {
-        _loadDebugContext();
-      }
-    });
   }
 
   Future<void> _loadDebugContext() async {
@@ -111,6 +106,13 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int?>(activeChatIdProvider, (_, __) {
+      // 当活动的聊天发生变化时，重新加载上下文。
+      // 根据 Riverpod 的要求，监听器被放置在 build() 方法中。
+      if (mounted) {
+        _loadDebugContext();
+      }
+    });
     final chatId = ref.watch(activeChatIdProvider);
     if (chatId == null) {
       return Scaffold(
@@ -123,7 +125,21 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('调试信息'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          '调试信息',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
         // Refresh IconButton removed
       ),
       body: Builder(builder: (context) {

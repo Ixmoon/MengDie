@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb; // Import for kIsWeb
 import 'package:flutter/services.dart'; // 导入键盘服务
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/rendering.dart'; // For ScrollDirection
 
 import 'package:go_router/go_router.dart'; // For navigation
 // import 'package:isar/isar.dart'; // Removed Isar import
@@ -24,8 +25,8 @@ import '../providers/settings_providers.dart'; // 导入全局设置
  
 // --- 聊天屏幕 ---
 // 使用 ConsumerStatefulWidget 以便访问 Ref 并管理本地状态（控制器、滚动等）。
+// 聊天屏幕，现在作为 PageView 的宿主
 class ChatScreen extends ConsumerStatefulWidget {
-  // const ChatScreen({super.key, required this.chatId}); // chatId 不再通过构造函数传递
   const ChatScreen({super.key});
 
   @override
@@ -33,33 +34,169 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final ScrollController _scrollController = ScrollController(); // 消息列表滚动控制器
+  PageController? _pageController;
+
+  @override
+  void dispose() {
+    _pageController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final activeChatId = ref.watch(activeChatIdProvider);
+
+    if (activeChatId == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(
+          child: Text("没有选择聊天。\n请从列表中选择一个。"),
+        ),
+      );
+    }
+
+    final chatAsync = ref.watch(currentChatProvider(activeChatId));
+
+    return chatAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(
+            leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.go('/list'))),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        appBar: AppBar(
+            leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.go('/list'))),
+        body: Center(child: Text('无法加载聊天数据: $error')),
+      ),
+      data: (chat) {
+        if (chat == null) {
+          return Scaffold(
+            appBar: AppBar(
+                leading: IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      ref.read(activeChatIdProvider.notifier).state = null;
+                      context.go('/list');
+                    })),
+            body: const Center(child: Text('聊天未找到或已被删除')),
+          );
+        }
+
+        final siblingChatsAsync = ref.watch(chatListProvider(chat.parentFolderId));
+
+        return siblingChatsAsync.when(
+          loading: () => Scaffold(
+            appBar: AppBar(),
+            body: const Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, stack) => Scaffold(
+            appBar: AppBar(),
+            body: Center(child: Text('无法加载聊天列表: $error')),
+          ),
+          data: (siblingChats) {
+            final chats = siblingChats.where((c) => !c.isFolder).toList();
+            final currentIndex = chats.indexWhere((c) => c.id == activeChatId);
+
+            // 如果只有一个聊天或当前聊天不在列表中，则不使用 PageView
+            if (chats.length <= 1 || currentIndex == -1) {
+              return ChatPageContent(chatId: activeChatId);
+            }
+
+            // 创建或更新 PageController
+            if (_pageController == null) {
+              _pageController = PageController(initialPage: currentIndex);
+            } else {
+              final controllerPage = _pageController!.hasClients ? _pageController!.page?.round() : -1;
+              if (controllerPage != currentIndex) {
+                 WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_pageController!.hasClients) {
+                      _pageController!.jumpToPage(currentIndex);
+                    }
+                 });
+              }
+            }
+
+            return PageView.builder(
+              controller: _pageController,
+              itemCount: chats.length,
+              onPageChanged: (index) {
+                final newChatId = chats[index].id;
+                if (ref.read(activeChatIdProvider) != newChatId) {
+                  ref.read(activeChatIdProvider.notifier).state = newChatId;
+                }
+              },
+              itemBuilder: (context, index) {
+                return ChatPageContent(key: ValueKey(chats[index].id), chatId: chats[index].id);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// 承载单个聊天页面内容的 Widget
+class ChatPageContent extends ConsumerStatefulWidget {
+  const ChatPageContent({super.key, required this.chatId});
+  final int chatId;
+
+  @override
+  ConsumerState<ChatPageContent> createState() => _ChatPageContentState();
+}
+
+class _ChatPageContentState extends ConsumerState<ChatPageContent> {
+  final ScrollController _scrollController = ScrollController();
   late final TextEditingController _messageController;
 
   @override
   void initState() {
-  	super.initState();
+    super.initState();
     _messageController = TextEditingController();
-  	// 新增：页面加载完成后滚动到底部
-  	WidgetsBinding.instance.addPostFrameCallback((_) {
-  		_scrollToBottom(animate: false); // 初始加载时不使用动画, 即使是 reverse list, 确保在 0.0
-  	});
+    _scrollController.addListener(_scrollListener);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom(animate: false);
+    });
   }
- 
-  // 新增方法：保存当前 chatId
+
+  void _scrollListener() {
+    final chatState = ref.read(chatStateNotifierProvider(widget.chatId));
+    // 仅当用户通过菜单启用了此功能时，才执行滚动逻辑
+    if (!chatState.isAutoHeightEnabled) return;
+
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+    final isHalfHeight = chatState.isMessageListHalfHeight;
+
+    // 用户手指向上滑动（内容向下滚动，朝向最新消息）-> ScrollDirection.forward -> 显示半高
+    if (_scrollController.position.userScrollDirection == ScrollDirection.forward) {
+      if (!isHalfHeight) {
+        notifier.setMessageListHeightMode(true);
+      }
+    // 用户手指向下滑动（内容向上滚动，朝向历史消息）-> ScrollDirection.reverse -> 显示全高
+    } else if (_scrollController.position.userScrollDirection == ScrollDirection.reverse) {
+      if (isHalfHeight) {
+        notifier.setMessageListHeightMode(false);
+      }
+    }
+  }
+
   Future<void> _saveCurrentChatId(int chatId) async {
-  	 final prefs = await SharedPreferences.getInstance();
-  	 await prefs.setInt('last_open_chat_id', chatId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('last_open_chat_id', chatId);
   }
 
   @override
   void dispose() {
-    _scrollController.dispose(); // 清理滚动控制器
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
-  // --- Helper for building action ListTiles for bottom sheet ---
   Widget _buildBottomSheetActionItem({
     required IconData icon,
     required String label,
@@ -73,9 +210,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       onTap: onTap,
     );
   }
-  // --- End Helper ---
 
-  // --- Helper for building PopupMenuItems ---
   PopupMenuItem<String> _buildPopupMenuItem({
     required String value,
     required IconData icon,
@@ -93,35 +228,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
     );
   }
-  // --- End Helper ---
 
-  // --- 消息气泡点击处理 ---
-
-  // 主处理函数，当消息气泡被点击时调用
   void _handleMessageTap(Message message, List<Message> allMessages) {
-    // 如果正在加载或流式传输，则忽略点击
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
+    final chatId = widget.chatId;
     if (ref.read(chatStateNotifierProvider(chatId)).isLoading) return;
 
-    // 判断消息角色和位置
     final isUser = message.role == MessageRole.user;
     final messageIndex = allMessages.indexWhere((m) => m.id == message.id);
-    // 判断是否是最后一条 *用户* 消息 (后面可能跟着模型消息)
     final isLastUserMessage = isUser &&
         messageIndex >= 0 &&
         (messageIndex == allMessages.length - 1 ||
             (messageIndex == allMessages.length - 2 &&
                 allMessages.last.role == MessageRole.model));
 
-    // 使用 ModalBottomSheet 显示可用操作选项
     showModalBottomSheet(
-      context: context, // 此处的 context 是 builder 的，是安全的
+      context: context,
       builder: (modalContext) {
-        // 使用 modalContext 区分
         List<Widget> options = [];
-
-        // 1. 编辑/重新上传选项
         final isTextOnly = message.parts.length == 1 && message.parts.first.type == MessagePartType.text;
         
         options.add(_buildBottomSheetActionItem(
@@ -137,7 +260,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           },
         ));
 
-        // 2. Save As... Option (for non-text messages)
         if (!isTextOnly) {
           options.add(_buildBottomSheetActionItem(
             icon: Icons.save_alt_outlined,
@@ -149,65 +271,56 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ));
         }
 
-        // 2. 分叉对话选项 (任何消息都可用)
         options.add(_buildBottomSheetActionItem(
           icon: Icons.fork_right_outlined,
           label: '从此消息分叉对话',
           onTap: () {
             Navigator.pop(modalContext);
-            _forkChatFromMessage(message, allMessages); // 执行分叉逻辑
+            _forkChatFromMessage(message, allMessages);
           },
         ));
 
-        // 3. 重新生成选项 (仅对最后一条用户消息可用)
         if (isLastUserMessage) {
           options.add(_buildBottomSheetActionItem(
             icon: Icons.refresh_outlined,
             label: '重新生成回复',
             onTap: () {
               Navigator.pop(modalContext);
-              _regenerateResponse(message, allMessages); // 执行重新生成逻辑
+              _regenerateResponse(message, allMessages);
             },
           ));
         }
 
-        // 4. 删除选项 (任何消息都可用，建议添加确认)
         options.add(_buildBottomSheetActionItem(
           icon: Icons.delete_outline,
           label: '删除消息',
           iconColor: Colors.red.shade400,
           textStyle: TextStyle(color: Colors.red.shade400),
           onTap: () async {
-            Navigator.pop(modalContext); // 先关闭底部菜单
-            // 显示删除确认对话框
+            Navigator.pop(modalContext);
             final confirm = await showDialog<bool>(
-                  context: context, // 使用 _ChatScreenState 的 context
+                  context: context,
                   builder: (dialogContext) => AlertDialog(
                     title: const Text('确认删除'),
                     content: const Text('确定删除这条消息吗？'),
                     actions: [
                       TextButton(
-                          onPressed: () =>
-                              Navigator.of(dialogContext).pop(false),
+                          onPressed: () => Navigator.of(dialogContext).pop(false),
                           child: const Text('取消')),
                       TextButton(
-                          onPressed: () =>
-                              Navigator.of(dialogContext).pop(true),
-                          child: Text('删除',
-                              style: TextStyle(color: Colors.red.shade700))),
+                          onPressed: () => Navigator.of(dialogContext).pop(true),
+                          child: Text('删除', style: TextStyle(color: Colors.red.shade700))),
                     ],
                   ),
-                ) ??
-                false; // 如果对话框被关闭则默认为 false
+                ) ?? false;
 
             if (!mounted) return;
             if (confirm) {
-              _deleteMessage(message, allMessages); // 执行删除逻辑
+              _deleteMessage(message, allMessages);
             }
           },
         ));
 
-        // 使用 SafeArea 包裹选项，避免被系统 UI 遮挡
         return SafeArea(
           child: Wrap(children: options),
         );
@@ -215,10 +328,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  // 显示编辑消息内容的对话框
   void _showEditMessageDialog(Message message) {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
+    final chatId = widget.chatId;
     final chat = ref.read(currentChatProvider(chatId)).value;
     if (chat == null) return;
 
@@ -241,7 +352,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            // --- 全屏视图 ---
             if (isFullScreen && activeController != null) {
               return Dialog(
                 insetPadding: EdgeInsets.zero,
@@ -252,21 +362,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     leading: IconButton(
                       icon: const Icon(Icons.close),
                       tooltip: '关闭',
-                      onPressed: () {
-                        setDialogState(() {
-                          isFullScreen = false;
-                        });
-                      },
+                      onPressed: () => setDialogState(() => isFullScreen = false),
                     ),
                     actions: [
                       IconButton(
                         icon: const Icon(Icons.check),
                         tooltip: '完成',
-                        onPressed: () {
-                          setDialogState(() {
-                            isFullScreen = false;
-                          });
-                        },
+                        onPressed: () => setDialogState(() => isFullScreen = false),
                       ),
                     ],
                   ),
@@ -285,7 +387,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               );
             }
 
-            // --- 正常对话框视图 ---
             void openFullScreenEditor(TextEditingController controller, String title) {
               setDialogState(() {
                 isFullScreen = true;
@@ -369,14 +470,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
                 TextButton(
                   onPressed: () async {
-                    final chatId = ref.read(activeChatIdProvider);
-                    if (chatId == null) return;
                     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
                     final newDisplayText = textController.text.trim();
                     final newXmlContent = xmlController.text.trim();
 
                     if (newDisplayText.isEmpty && message.parts.any((p) => p.type != MessagePartType.text)) {
-                      // If there are attachments, text can be empty.
                     } else if (newDisplayText.isEmpty) {
                       notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
                       return;
@@ -408,9 +506,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _replaceAttachment(Message messageToReplace) async {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
-    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
@@ -438,7 +534,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
         
         await notifier.editMessage(messageToReplace.id, newParts: [newPart]);
-
       }
     } catch (e) {
       debugPrint("Error replacing attachment: $e");
@@ -449,9 +544,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _saveAttachment(Message message) async {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
-    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
     if (message.parts.isEmpty) return;
 
     final part = message.parts.first;
@@ -482,10 +575,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _forkChatFromMessage(Message message, List<Message> allMessages) async {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
-    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-    
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
     final newChatId = await notifier.forkChat(message);
 
     if (mounted && newChatId != null) {
@@ -495,25 +585,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _regenerateResponse(Message userMessage, List<Message> allMessages) async {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
-    await ref.read(chatStateNotifierProvider(chatId).notifier).regenerateResponse(userMessage);
+    await ref.read(chatStateNotifierProvider(widget.chatId).notifier).regenerateResponse(userMessage);
   }
 
   Future<void> _deleteMessage(Message messageToDelete, List<Message> allMessages) async {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
-    await ref.read(chatStateNotifierProvider(chatId).notifier).deleteMessage(messageToDelete.id);
+    await ref.read(chatStateNotifierProvider(widget.chatId).notifier).deleteMessage(messageToDelete.id);
   }
 
   void _scrollToBottom({bool animate = true}) {
-    if (!_scrollController.hasClients ||
-        !_scrollController.position.hasContentDimensions) {
+    if (!_scrollController.hasClients || !_scrollController.position.hasContentDimensions) {
       return;
     }
-
     const double position = 0.0;
-
     if (animate) {
       _scrollController.animateTo(
         position,
@@ -527,28 +610,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chatId = ref.watch(activeChatIdProvider);
-
-    if (chatId == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(
-          child: Text("没有选择聊天。\n请从列表中选择一个。"),
-        ),
-      );
-    }
-    
+    final chatId = widget.chatId;
     final chatAsync = ref.watch(currentChatProvider(chatId));
     final chatState = ref.watch(chatStateNotifierProvider(chatId));
 
     ref.listen<int?>(activeChatIdProvider, (previous, next) {
-      if (next != null) {
+      if (next != null && next == widget.chatId) {
         _saveCurrentChatId(next);
       }
     });
 
-    ref.listen<ChatScreenState>(chatStateNotifierProvider(chatId),
-        (previous, next) {
+    ref.listen<ChatScreenState>(chatStateNotifierProvider(chatId), (previous, next) {
       if ((next.isLoading && previous?.isLoading == false) ||
           (next.isStreaming && previous?.isStreaming == false)) {
         _scrollToBottom();
@@ -607,14 +679,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     if (chatState.isMessageListHalfHeight) const Spacer(),
                     Flexible(
                       flex: 1,
-                      child: _MessageList(
-                        chatId: chatId,
-                        scrollController: _scrollController,
-                        onMessageTap: _handleMessageTap,
-                        onSuggestionSelected: (suggestion) {
-                          _messageController.text = suggestion;
-                        },
-                      ),
+                      child: chatState.isMessageListHalfHeight
+                          ? ShaderMask(
+                              shaderCallback: (Rect bounds) {
+                                return LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: const [Colors.transparent, Colors.black],
+                                  stops: const [0.0, 0.1], // Fade over top 10%
+                                ).createShader(bounds);
+                              },
+                              blendMode: BlendMode.dstIn,
+                              child: _MessageList(
+                                chatId: chatId,
+                                scrollController: _scrollController,
+                                onMessageTap: _handleMessageTap,
+                                onSuggestionSelected: (suggestion) {
+                                  _messageController.text = suggestion;
+                                },
+                              ),
+                            )
+                          : _MessageList(
+                              chatId: chatId,
+                              scrollController: _scrollController,
+                              onMessageTap: _handleMessageTap,
+                              onSuggestionSelected: (suggestion) {
+                                _messageController.text = suggestion;
+                              },
+                            ),
                     ),
                     if ((chatState.isLoading || chatState.isProcessingInBackground) && !chatState.isStreaming)
                       const Padding(
@@ -641,7 +733,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/list'))),
           body: Center(child: Text('无法加载聊天数据: $error'))),
-   );
+    );
   }
 }
 
@@ -661,12 +753,17 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chatId = ref.watch(activeChatIdProvider);
-    if (chatId == null) return AppBar(); // Should not happen if chat is provided
+    final chatId = chat.id;
     final chatState = ref.watch(chatStateNotifierProvider(chatId));
 
     return AppBar(
-      elevation: Theme.of(context).appBarTheme.elevation,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      iconTheme: IconThemeData(
+        shadows: <Shadow>[
+          Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+        ],
+      ),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
         tooltip: '返回列表',
@@ -675,7 +772,16 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
           context.go('/list');
         },
       ),
-      title: Text(chat.title ?? '聊天', maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(
+        chat.title ?? '聊天',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+      ),
       actions: [
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
@@ -734,7 +840,7 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
             buildPopupMenuItem(value: 'toggleOutputMode', icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble, label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出'),
             buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
             buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
-            buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isMessageListHalfHeight ? Icons.height : Icons.unfold_more, label: chatState.isMessageListHalfHeight ? '切换为全高列表' : '切换为半高列表'),
+            buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
             const PopupMenuDivider(),
             buildPopupMenuItem(value: 'exportChat', icon: Icons.upload_file, label: '导出聊天到文件'),
             buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),

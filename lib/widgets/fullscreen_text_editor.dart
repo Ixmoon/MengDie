@@ -4,12 +4,14 @@ class FullScreenTextEditorScreen extends StatefulWidget {
   final String initialText;
   final String title;
   final String hintText;
+  final String? defaultValue; // 新增：用于恢复的默认值
 
   const FullScreenTextEditorScreen({
     super.key,
     required this.initialText,
     this.title = '编辑文本',
     this.hintText = '请输入内容...',
+    this.defaultValue, // 新增
   });
 
   @override
@@ -37,6 +39,22 @@ class _FullScreenTextEditorScreenState extends State<FullScreenTextEditorScreen>
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          if (widget.defaultValue != null)
+            IconButton(
+              icon: const Icon(Icons.restore),
+              tooltip: '恢复默认值',
+              onPressed: () {
+                setState(() {
+                  _controller.text = widget.defaultValue!;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('已恢复为默认值'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.check),
             tooltip: '保存',

@@ -215,6 +215,7 @@ class ContextXmlService {
     required Chat chat,
     required Message currentUserMessage,
     String? lastMessageOverride,
+    int? messageIdToPreserveXml, // New parameter for resuming generation
   }) async {
     final messageRepo = _ref.read(messageRepositoryProvider);
     final List<Message> fullHistory = await messageRepo.getMessagesForChat(chat.id);
@@ -246,9 +247,16 @@ class ContextXmlService {
     for (final message in limitedHistoryForPrompt) {
       // For model messages, strip XML. For user messages, include all parts.
       if (message.role == MessageRole.model) {
-        final filteredText = XmlProcessor.stripXmlContent(message.rawText);
-        if (filteredText.isNotEmpty) {
-          contextParts.add(LlmContent("model", [LlmTextPart(filteredText)]));
+        // For resume generation, we must not strip the XML from the target message.
+        if (message.id == messageIdToPreserveXml) {
+          if (message.rawText.isNotEmpty) {
+            contextParts.add(LlmContent("model", [LlmTextPart(message.rawText)]));
+          }
+        } else {
+          final filteredText = XmlProcessor.stripXmlContent(message.rawText);
+          if (filteredText.isNotEmpty) {
+            contextParts.add(LlmContent("model", [LlmTextPart(filteredText)]));
+          }
         }
       } else {
         // For user messages, convert the whole message with all its parts

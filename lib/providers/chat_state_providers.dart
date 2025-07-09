@@ -92,6 +92,7 @@ class ChatScreenState {
   final bool isBubbleTransparent;
   final bool isBubbleHalfWidth;
   final bool isMessageListHalfHeight;
+  final bool isAutoHeightEnabled; // New state for the feature toggle
   final int? totalTokens;
   final List<String>? helpMeReplySuggestions;
   final bool isProcessingInBackground; // New state for background tasks
@@ -108,6 +109,7 @@ class ChatScreenState {
     this.isBubbleTransparent = false,
     this.isBubbleHalfWidth = false,
     this.isMessageListHalfHeight = false,
+    this.isAutoHeightEnabled = false, // Default to false
     this.totalTokens,
     this.helpMeReplySuggestions,
     this.isProcessingInBackground = false, // Default to false
@@ -130,6 +132,7 @@ class ChatScreenState {
     bool? isBubbleTransparent,
     bool? isBubbleHalfWidth,
     bool? isMessageListHalfHeight,
+    bool? isAutoHeightEnabled,
     int? totalTokens,
     bool clearTotalTokens = false,
     List<String>? helpMeReplySuggestions,
@@ -148,6 +151,7 @@ class ChatScreenState {
       isBubbleTransparent: isBubbleTransparent ?? this.isBubbleTransparent,
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
       isMessageListHalfHeight: isMessageListHalfHeight ?? this.isMessageListHalfHeight,
+      isAutoHeightEnabled: isAutoHeightEnabled ?? this.isAutoHeightEnabled,
       totalTokens: clearTotalTokens ? null : (totalTokens ?? this.totalTokens),
       helpMeReplySuggestions: clearHelpMeReplySuggestions ? null : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
       isProcessingInBackground: isProcessingInBackground ?? this.isProcessingInBackground,
@@ -220,9 +224,20 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   }
 
   void toggleMessageListHeightMode() {
-    state = state.copyWith(isMessageListHalfHeight: !state.isMessageListHalfHeight);
-    showTopMessage('消息列表高度已切换为: ${state.isMessageListHalfHeight ? "半高" : "全高"}');
-    debugPrint("Chat ($_chatId) 消息列表高度模式切换为: ${state.isMessageListHalfHeight ? "半高" : "全高"}");
+    final newAutoHeightState = !state.isAutoHeightEnabled;
+    state = state.copyWith(
+      isAutoHeightEnabled: newAutoHeightState,
+      // When turning off, force full height. When turning on, force half height.
+      isMessageListHalfHeight: newAutoHeightState,
+    );
+    showTopMessage('智能半高模式已: ${newAutoHeightState ? "开启" : "关闭"}');
+    debugPrint("Chat ($_chatId) 智能半高模式切换为: $newAutoHeightState");
+  }
+
+  void setMessageListHeightMode(bool isHalfHeight) {
+    if (state.isMessageListHalfHeight == isHalfHeight) return; // 避免不必要的状态更新
+    state = state.copyWith(isMessageListHalfHeight: isHalfHeight);
+    debugPrint("Chat ($_chatId) 消息列表高度模式设置为: ${isHalfHeight ? "半高" : "全高"}");
   }
 
   // --- Token Counting ---
@@ -586,7 +601,8 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
       if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
         lastMessageOverride = chat.continuePrompt;
-        chatForContext = chat.copyWith(systemPrompt: ''); // 清空系统提示词
+        // For continuation, we keep the original system prompt.
+        // The line clearing it has been removed.
         debugPrint("续写操作：将续写提示词作为最后的用户消息。");
       }
 
@@ -725,19 +741,27 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
    final summaryPrompt = chat.preprocessingPrompt!;
    final previousSummary = chat.contextSummary;
+   
+   // The summary prompt is used as both the system prompt and the final user message.
+   final chatForSummaryCall = chat.copyWith(systemPrompt: summaryPrompt);
+
+   // Construct the user content to be summarized
+   final previousSummaryText = (previousSummary != null && previousSummary.isNotEmpty)
+       ? "This is the previous summary:\n${XmlProcessor.wrapWithTag('previous_summary', previousSummary)}\n\n"
+       : "";
+   final messagesToSummarizeText = "These are the new messages to be summarized:\n${droppedMessages.map((m) => "${m.role.name}: ${m.rawText}").join('\n---\n')}";
+   final userContentForSummary = "$previousSummaryText$messagesToSummarizeText";
+
+   // Manually construct the context to match the required format.
    List<LlmContent> summaryContext = [
-     LlmContent("system", [LlmTextPart(summaryPrompt)])
+     LlmContent("system", [LlmTextPart(summaryPrompt)]),
+     LlmContent("user", [LlmTextPart(userContentForSummary)]),
+     LlmContent("user", [LlmTextPart(summaryPrompt)]), // Add prompt as last user message
    ];
-   if(previousSummary != null && previousSummary.isNotEmpty) {
-     summaryContext.add(LlmContent("user", [LlmTextPart("This is the previous summary:\n${XmlProcessor.wrapWithTag('previous_summary', previousSummary)}")]));
-   }
-   summaryContext.add(LlmContent("user", [
-     LlmTextPart("These are the messages to be summarized:\n${droppedMessages.map((m) => "${m.role.name}: ${m.rawText}").join('\n---\n')}")
-   ]));
    
    final response = await llmService.sendMessageOnce(
      llmContext: summaryContext,
-     chat: chat,
+     chat: chatForSummaryCall, // Pass chat with overridden system prompt
      apiConfigIdOverride: chat.preprocessingApiConfigId,
    );
 
@@ -896,9 +920,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
    if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
      try {
-       // 1. 创建一个临时的 Chat 对象用于附加 XML 调用，并清空系统提示词。
+       // 1. 创建一个临时的 Chat 对象，使用附加XML提示词作为系统提示词
        final chatForSecondaryXmlCall = chat.copyWith(
-         systemPrompt: '',
+         systemPrompt: chat.secondaryXmlPrompt,
        );
 
        // 2. 使用主构建逻辑构建上下文，并将附加XML提示词作为最后的用户消息传递。
@@ -1117,8 +1141,8 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chat: chatForTitleCall,
-        currentUserMessage: currentModelMessage,
-        lastMessageOverride: globalSettings.titleGenerationPrompt,
+        currentUserMessage: currentModelMessage, // The context is built up to the latest model message
+        lastMessageOverride: globalSettings.titleGenerationPrompt, // The prompt is added as the very last user message
       );
 
       if (_isBackgroundTaskCancelled) return; // Check before API call
@@ -1178,6 +1202,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       apiConfigIdOverride: globalSettings.resumeApiConfigId,
       actionType: _SpecialActionType.resume,
       targetMessage: lastMessage,
+      useChatSystemPrompt: true,
     );
   }
 
@@ -1216,6 +1241,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       actionType: _SpecialActionType.helpMeReply,
       targetMessage: lastMessage,
       onSuggestionsReady: onSuggestionsReady,
+      useChatSystemPrompt: false,
     );
 
     // If called manually (onSuggestionsReady is not null), we need to manage the background state.
@@ -1240,6 +1266,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     required String? apiConfigIdOverride,
     required _SpecialActionType actionType,
     required Message targetMessage,
+    required bool useChatSystemPrompt,
     Function(List<String>)? onSuggestionsReady,
   }) async {
     // This method no longer manages loading state directly.
@@ -1255,12 +1282,14 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     final contextXmlService = _ref.read(contextXmlServiceProvider);
     final llmService = _ref.read(llmServiceProvider);
 
-    final chatForCall = chat.copyWith(systemPrompt: prompt);
+    final chatForCall = useChatSystemPrompt ? chat : chat.copyWith(systemPrompt: prompt);
 
     final apiRequestContext = await contextXmlService.buildApiRequestContext(
       chat: chatForCall,
       currentUserMessage: targetMessage,
       lastMessageOverride: prompt,
+      // For resume actions, we need to preserve the XML of the target message
+      messageIdToPreserveXml: actionType == _SpecialActionType.resume ? targetMessage.id : null,
     );
 
     if (_isBackgroundTaskCancelled) return;
@@ -1277,17 +1306,20 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
       switch (actionType) {
         case _SpecialActionType.resume:
-          final originalXml = XmlProcessor.extractXmlContent(targetMessage.rawText);
-          final newXml = XmlProcessor.extractXmlContent(generatedText);
-          final newText = XmlProcessor.stripXmlContent(generatedText);
-          await editMessage(
-            targetMessage.id,
-            updatedMessage: targetMessage.copyWith(
-              appendToRawText: newText,
-              originalXmlContent: newXml.isNotEmpty ? newXml : originalXml,
-            ),
+          // 1. Construct the fully resumed message in memory using copyWith.
+          final resumedMessage = targetMessage.copyWith(
+            rawText: generatedText, // This will replace the text parts.
+            secondaryXmlContent: null, // Clear the secondary XML for reprocessing.
           );
-          if (mounted) showTopMessage('内容已续写', backgroundColor: Colors.green);
+
+          // 2. Instead of just saving, run the full async processing pipeline.
+          // This ensures secondary XML is regenerated, summarization is triggered if needed, etc.
+          // _runAsyncProcessingTasks will handle saving the updated message to the database.
+          await _runAsyncProcessingTasks(resumedMessage);
+
+          if (mounted && !_isBackgroundTaskCancelled) {
+            showTopMessage('内容已恢复并处理', backgroundColor: Colors.green);
+          }
           break;
         case _SpecialActionType.helpMeReply:
           final suggestions = RegExp(r'^\s*\d+\.\s*(.*)', multiLine: true)

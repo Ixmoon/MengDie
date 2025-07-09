@@ -16,7 +16,21 @@ class ApiConfigsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('API 配置管理'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          'API 配置管理',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),

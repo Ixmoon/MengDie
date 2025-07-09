@@ -82,9 +82,9 @@ const String _helpMeReplyApiConfigIdKey = 'global_help_me_reply_api_config_id';
 const String _helpMeReplyTriggerModeKey = 'global_help_me_reply_trigger_mode';
 
 
-const String defaultTitleGenerationPrompt = '根据以下对话，为本次聊天生成一个简洁的、不超过10个字的标题。';
-const String defaultResumePrompt = '继续生成被中断的回复，请直接继续，不要包含任何其他内容。';
-const String defaultHelpMeReplyPrompt = '请根据以上对话，为我设想三个不同的回复，并以序号（1. 2. 3.）分开。';
+const String defaultTitleGenerationPrompt = '根据对话，为本次聊天生成一个简洁的、不超过10个字的标题。（你的回复内容只能是纯标题，不能包含任何其他内容）';
+const String defaultResumePrompt = '继续生成被中断的回复，请直接从最后一个字甚至是符号后继续，不要包含任何其他内容。';
+const String defaultHelpMeReplyPrompt = '假如你是我，请根据以上对话，为我设想三个不同的回复，并使用序号1. 2. 3.分别标注。（不要包含任何其他非序号的回复内容。）';
 
 
 @immutable

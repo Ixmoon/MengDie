@@ -412,12 +412,21 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       // --- 多选模式 AppBar ---
       final allItems = ref.watch(chatListProvider(currentFolderId)).value ?? [];
       return AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: '取消选择',
           onPressed: () => _toggleMultiSelectMode(enable: false),
         ),
-        title: Text('已选择 ${_selectedItemIds.length} 项'),
+        title: Text(
+          '已选择 ${_selectedItemIds.length} 项',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.select_all),
@@ -462,10 +471,17 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                  },
                )
              : null, // 根目录不显示返回按钮
+         backgroundColor: Colors.transparent,
+         elevation: 0,
          title: Text(
-             currentFolderId != null
-                 ? (currentFolderAsync.whenData((folder) => folder?.title).value ?? '文件夹') // 显示文件夹标题
-                 : '梦蝶' // 根目录标题
+           currentFolderId != null
+               ? (currentFolderAsync.whenData((folder) => folder?.title).value ?? '文件夹') // 显示文件夹标题
+               : '', // 根目录标题
+           style: TextStyle(
+             shadows: <Shadow>[
+               Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+             ],
+           ),
          ),
         actions: [
           // 进入多选模式按钮

@@ -10,9 +10,15 @@ import '../providers/api_key_provider.dart';
 import '../providers/chat_settings_provider.dart';
 import '../providers/chat_state_providers.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
- 
- // 本文件包含用于配置单个聊天会话设置的屏幕界面。
- 
+
+// --- 默认提示词常量 ---
+const String defaultContinuePrompt = '请根据你上一次的回复继续补充或续写。';
+const String defaultPreprocessingPrompt = '根据对话以及之前的总结（如果有）进行详细的总结概括，尤其要分析并保留关键的信息，进行有条理的归纳。';
+const String defaultSecondaryXmlPrompt = '使用<Summary><summary id=“”></summary></Summary>对最新一轮对话进行总结，已有内容无需重复总结，如果新的内容较少，直接回复<Summary>略</Summary>即可。';
+
+
+// 本文件包含用于配置单个聊天会话设置的屏幕界面。
+
 class ChatSettingsScreen extends ConsumerStatefulWidget {
   const ChatSettingsScreen({super.key});
 
@@ -121,7 +127,21 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('聊天设置'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: IconThemeData(
+          shadows: <Shadow>[
+            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+          ],
+        ),
+        title: Text(
+          '聊天设置',
+          style: TextStyle(
+            shadows: <Shadow>[
+              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            ],
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.save_outlined),
@@ -216,7 +236,7 @@ class _BasicInfoSettings extends ConsumerWidget {
         ),
         const SizedBox(height: 15),
         TextFormField(
-          key: ValueKey('systemPrompt_${chat.id}'),
+          key: ValueKey('systemPrompt_${chat.id}_${chat.systemPrompt}'),
           initialValue: chat.systemPrompt,
           decoration: InputDecoration(
             labelText: '系统提示词',
@@ -231,6 +251,7 @@ class _BasicInfoSettings extends ConsumerWidget {
                     builder: (context) => FullScreenTextEditorScreen(
                       initialText: chat.systemPrompt ?? '',
                       title: '编辑系统提示词',
+                      // 注意：系统提示词没有全局默认值，因此不提供 defaultValue
                     ),
                   ),
                 );
@@ -246,7 +267,7 @@ class _BasicInfoSettings extends ConsumerWidget {
         ),
         const SizedBox(height: 15),
         TextFormField(
-          key: ValueKey('continuePrompt_${chat.id}'),
+          key: ValueKey('continuePrompt_${chat.id}_${chat.continuePrompt}'),
           initialValue: chat.continuePrompt,
           decoration: InputDecoration(
             labelText: '续写提示词 (可选)',
@@ -259,8 +280,9 @@ class _BasicInfoSettings extends ConsumerWidget {
                 final newText = await Navigator.of(context).push<String>(
                   MaterialPageRoute(
                     builder: (context) => FullScreenTextEditorScreen(
-                      initialText: chat.continuePrompt ?? '',
+                      initialText: chat.continuePrompt ?? defaultContinuePrompt,
                       title: '编辑续写提示词',
+                      defaultValue: defaultContinuePrompt,
                     ),
                   ),
                 );
@@ -272,7 +294,7 @@ class _BasicInfoSettings extends ConsumerWidget {
           ),
           maxLines: 4,
           minLines: 2,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(value))),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(value.isEmpty ? null : value))),
         ),
       ],
     );
@@ -457,8 +479,8 @@ class _AutomationSettings extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 16.0),
             child: TextFormField(
-              key: ValueKey('preprocessingPrompt_${chat.id}'),
-              initialValue: chat.preprocessingPrompt,
+              key: ValueKey('preprocessingPrompt_${chat.id}_${chat.preprocessingPrompt}'),
+              initialValue: chat.preprocessingPrompt ?? defaultPreprocessingPrompt,
               decoration: InputDecoration(
                 labelText: '前处理提示词',
                 hintText: '例如：请总结以下对话...',
@@ -470,8 +492,9 @@ class _AutomationSettings extends ConsumerWidget {
                     final newText = await Navigator.of(context).push<String>(
                       MaterialPageRoute(
                         builder: (context) => FullScreenTextEditorScreen(
-                          initialText: chat.preprocessingPrompt ?? '',
+                          initialText: chat.preprocessingPrompt ?? defaultPreprocessingPrompt,
                           title: '编辑前处理提示词',
+                          defaultValue: defaultPreprocessingPrompt,
                         ),
                       ),
                     );
@@ -483,7 +506,7 @@ class _AutomationSettings extends ConsumerWidget {
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(value))),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(value.isEmpty ? null : value))),
             ),
           ),
        if (chat.enablePreprocessing)
@@ -507,8 +530,8 @@ class _AutomationSettings extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 8.0),
             child: TextFormField(
-              key: ValueKey('secondaryXmlPrompt_${chat.id}'),
-              initialValue: chat.secondaryXmlPrompt,
+              key: ValueKey('secondaryXmlPrompt_${chat.id}_${chat.secondaryXmlPrompt}'),
+              initialValue: chat.secondaryXmlPrompt ?? defaultSecondaryXmlPrompt,
               decoration: InputDecoration(
                 labelText: '附加XML提示词',
                 hintText: '例如：请根据对话历史，生成tool_code标签...',
@@ -520,8 +543,9 @@ class _AutomationSettings extends ConsumerWidget {
                     final newText = await Navigator.of(context).push<String>(
                       MaterialPageRoute(
                         builder: (context) => FullScreenTextEditorScreen(
-                          initialText: chat.secondaryXmlPrompt ?? '',
+                          initialText: chat.secondaryXmlPrompt ?? defaultSecondaryXmlPrompt,
                           title: '编辑附加XML提示词',
+                          defaultValue: defaultSecondaryXmlPrompt,
                         ),
                       ),
                     );
@@ -533,7 +557,7 @@ class _AutomationSettings extends ConsumerWidget {
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(value))),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(value.isEmpty ? null : value))),
             ),
           ),
        if (chat.enableSecondaryXml)
