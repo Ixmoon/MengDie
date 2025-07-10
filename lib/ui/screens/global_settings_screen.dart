@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../providers/settings_providers.dart';
 import '../../models/enums.dart';
 import '../../providers/api_key_provider.dart';
-import '../../data/app_database.dart';
+import '../../database/app_database.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
  
  

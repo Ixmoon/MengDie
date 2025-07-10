@@ -3,10 +3,10 @@ import 'enums.dart';
 import '../process/xml_processor.dart'; // Import for text processing
 
 // Import the new Drift-specific models and enums
-import '../data/models/drift_context_config.dart';
-import '../data/models/drift_xml_rule.dart';
-import '../data/common_enums.dart' as drift_enums;
-import '../data/app_database.dart'; // For ChatData, ChatsCompanion
+import '../database/models/drift_context_config.dart';
+import '../database/models/drift_xml_rule.dart';
+import '../database/common_enums.dart' as drift_enums;
+import '../database/app_database.dart'; // For ChatData, ChatsCompanion
 
 // These classes now represent the application's domain models.
 

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/app_database.dart'; // Import Drift database
+import '../database/app_database.dart'; // Import Drift database
 
 // 本文件包含应用核心服务的 Riverpod 提供者，例如数据库和本地存储。
 
