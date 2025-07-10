@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
-import '../repositories/chat_repository.dart' hide chatRepositoryProvider;
+import '../../repositories/chat_repository.dart' hide chatRepositoryProvider;
 import 'repository_providers.dart';
 
 

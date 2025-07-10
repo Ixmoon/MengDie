@@ -5,13 +5,13 @@ import 'package:flutter/material.dart'; // Added for Color type
 
 import 'package:drift/drift.dart' show Value;
 import '../models/models.dart';
-import '../repositories/chat_repository.dart';
-import '../repositories/message_repository.dart';
-import '../llmapi/llm_service.dart'; // Import the generic LLM service and types
-import '../process/context_xml_service.dart'; // Import the new service
+import '../../repositories/chat_repository.dart';
+import '../../repositories/message_repository.dart';
+import '../../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
+import '../../service/process/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
-import '../process/xml_processor.dart'; // Added import
-import '../providers/settings_providers.dart';
+import '../../service/process/xml_processor.dart'; // Added import
+import 'settings_providers.dart';
 
 
 // 本文件包含与聊天数据和聊天界面状态相关的 Riverpod 提供者。

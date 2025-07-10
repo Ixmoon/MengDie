@@ -4,7 +4,7 @@ import 'package:flutter_markdown/flutter_markdown.dart'; // 用于渲染 Markdow
 import 'cached_image.dart';
 
 // 导入模型
-import '../../models/models.dart'; // 需要 Message, MessageRole
+import '../../data/models/models.dart'; // 需要 Message, MessageRole
 
 // 本文件包含用于显示单条聊天消息气泡的小部件。
 

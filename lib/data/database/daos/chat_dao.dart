@@ -3,7 +3,7 @@ import '../app_database.dart';
 import '../tables/chats.dart';
 import 'dart:convert';
 import '../tables/messages.dart'; // For deleting related messages
-import '../../../../models/export_import_dtos.dart'; // For DTOs in importChat
+import '../../models/export_import_dtos.dart'; // For DTOs in importChat
 import '../models/drift_context_config.dart';
 import '../models/drift_xml_rule.dart';
 import '../common_enums.dart' as drift_enums;

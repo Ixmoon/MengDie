@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../providers/core_providers.dart';
-import '../../providers/chat_state_providers.dart';
+import '../../data/providers/core_providers.dart';
+import '../../data/providers/chat_state_providers.dart';
 
 /// 一个处理初始化并重定向到相应页面的屏幕。
 class StartupScreen extends ConsumerWidget {

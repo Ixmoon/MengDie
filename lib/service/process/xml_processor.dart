@@ -3,8 +3,8 @@ import 'package:xml/xml.dart';
 
 // Import models
 // import '../models/models.dart'; // No longer needed for XmlRule, XmlAction if directly imported below
-import '../database/models/drift_xml_rule.dart'; // Import DriftXmlRule
-import '../database/common_enums.dart' as drift_enums; // Import Drift enums
+import '../../data/database/models/drift_xml_rule.dart'; // Import DriftXmlRule
+import '../../data/database/common_enums.dart' as drift_enums; // Import Drift enums
 
 // --- XML Processing Result Class ---
 class XmlProcessResult {

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../providers/settings_providers.dart';
-import '../../models/models.dart';
-import '../../providers/api_key_provider.dart';
+import '../../data/providers/settings_providers.dart';
+import '../../data/models/models.dart';
+import '../../data/providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
-import '../../models/enums.dart';
+import '../../data/models/enums.dart';
  
  
 class GlobalSettingsScreen extends ConsumerWidget {

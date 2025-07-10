@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Import local models and services
-import '../models/models.dart';
-import '../database/app_database.dart'; // For ApiConfig
+import '../../data/models/models.dart';
+import '../../data/database/app_database.dart'; // For ApiConfig
 import 'gemini_service.dart';
 import 'openai_service.dart';
-import '../providers/api_key_provider.dart';
+import '../../data/providers/api_key_provider.dart';
 
 // --- Generic LLM Data Structures ---
 // These structures abstract away the specifics of the underlying LLM API (e.g., Gemini)

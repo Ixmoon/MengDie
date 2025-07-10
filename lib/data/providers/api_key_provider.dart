@@ -6,8 +6,8 @@ import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
 import '../database/common_enums.dart';
-import '../repositories/api_config_repository.dart';
-import '../repositories/chat_repository.dart';
+import '../../repositories/api_config_repository.dart';
+import '../../repositories/chat_repository.dart';
 import 'repository_providers.dart' show apiConfigRepositoryProvider;
 
 // --- State ---

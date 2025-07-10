@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 
-import '../../providers/core_providers.dart';
+import '../../data/providers/core_providers.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
   final Widget child;

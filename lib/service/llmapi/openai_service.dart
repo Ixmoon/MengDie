@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart'; // For debugPrint
 import 'package:tiktoken/tiktoken.dart' as tiktoken; // For token counting
 
-import '../models/models.dart';
-import '../database/app_database.dart'; // For ApiConfig
+import '../../data/models/models.dart';
+import '../../data/database/app_database.dart'; // For ApiConfig
 import 'llm_service.dart';
 
 // 本文件包含与 OpenAI 兼容 API 交互的服务类和相关数据结构。

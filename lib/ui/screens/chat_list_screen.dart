@@ -5,12 +5,12 @@ import 'package:intl/intl.dart'; // 用于日期格式化
 import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖放网格视图包
 
 // 导入模型、Provider 和 Widget
-import '../../models/models.dart';
-import '../../providers/chat_state_providers.dart';
+import '../../data/models/models.dart';
+import '../../data/providers/chat_state_providers.dart';
 import '../../repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
-import '../../process/chat_export_import.dart'; // 导入导出/导入服务
+import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
-import '../../providers/core_providers.dart'; // 导入 SharedPreferences Provider
+import '../../data/providers/core_providers.dart'; // 导入 SharedPreferences Provider
 // import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
 
 // 本文件包含显示聊天列表的主屏幕。

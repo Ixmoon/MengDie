@@ -11,9 +11,9 @@ import 'package:file_picker/file_picker.dart'; // 选择文件
 import 'package:exif/exif.dart'; // 读写 EXIF
 
 // 导入模型、DTO 和仓库
-import '../models/export_import_dtos.dart';
-import '../repositories/chat_repository.dart';
-import '../repositories/message_repository.dart';
+import '../../data/models/export_import_dtos.dart';
+import '../../repositories/chat_repository.dart';
+import '../../repositories/message_repository.dart';
 
 // --- Service Provider ---
 final chatExportImportServiceProvider = Provider<ChatExportImportService>((ref) {

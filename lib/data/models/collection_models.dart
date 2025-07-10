@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'enums.dart';
-import '../process/xml_processor.dart'; // Import for text processing
+import '../../service/process/xml_processor.dart'; // Import for text processing
 
 // Import the new Drift-specific models and enums
 import '../database/models/drift_context_config.dart';
