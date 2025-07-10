@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 
 import '../../data/models/models.dart';
-import '../../data/providers/chat_state_providers.dart';
+import '../../providers/chat_state_providers.dart';
 import '../../service/llmapi/llm_service.dart'; // For LlmContent, LlmTextPart
 import '../../service/process/context_xml_service.dart';
 import '../widgets/app_card.dart';

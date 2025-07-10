@@ -9,15 +9,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // Added for Color type
 
 import 'package:drift/drift.dart' show Value;
-import '../models/chat.dart';
-import '../models/message.dart';
-import '../models/enums.dart';
-import '../../service/repositories/chat_repository.dart';
-import '../../service/repositories/message_repository.dart';
-import '../../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
-import '../../service/process/context_xml_service.dart'; // Import the new service
+import '../data/models/chat.dart';
+import '../data/models/message.dart';
+import '../data/models/enums.dart';
+import '../data/repositories/chat_repository.dart';
+import '../data/repositories/message_repository.dart';
+import '../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
+import '../service/process/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
-import '../../service/process/xml_processor.dart'; // Added import
+import '../service/process/xml_processor.dart'; // Added import
 import 'settings_providers.dart';
 
 

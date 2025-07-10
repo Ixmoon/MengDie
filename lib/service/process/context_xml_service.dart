@@ -6,7 +6,7 @@ import '../../data/models/chat.dart';
 import '../../data/models/message.dart';
 import '../../data/models/xml_rule.dart';
 import '../../data/models/enums.dart';
-import '../repositories/message_repository.dart'; // For MessageRepository
+import '../../data/repositories/message_repository.dart'; // For MessageRepository
 import 'xml_processor.dart';
 import '../llmapi/llm_service.dart'; // For LlmContent, LlmTextPart
 import 'package:collection/collection.dart'; // For lastWhereOrNull

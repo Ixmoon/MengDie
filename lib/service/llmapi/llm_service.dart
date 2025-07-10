@@ -8,7 +8,7 @@ import '../../data/models/models.dart';
 import '../../data/models/api_config.dart'; // Import the new domain model
 import 'gemini_service.dart';
 import 'openai_service.dart';
-import '../../data/providers/api_key_provider.dart';
+import '../../providers/api_key_provider.dart';
 
 // --- Generic LLM Data Structures ---
 // These structures abstract away the specifics of the underlying LLM API (e.g., Gemini)

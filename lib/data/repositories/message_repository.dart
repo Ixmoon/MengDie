@@ -2,11 +2,11 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value; // For Value() and absent
 
-import '../../data/models/message.dart';
-import '../../data/providers/core_providers.dart';
-import '../../data/database/app_database.dart';
-import '../../data/database/daos/message_dao.dart';
-import '../../data/mappers/message_mapper.dart';
+import '../models/message.dart';
+import '../../providers/core_providers.dart';
+import '../database/app_database.dart';
+import '../database/daos/message_dao.dart';
+import '../mappers/message_mapper.dart';
 
 // 本文件包含用于管理 Message 数据集合的仓库类和提供者。
 

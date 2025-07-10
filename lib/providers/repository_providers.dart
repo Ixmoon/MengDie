@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../service/repositories/api_config_repository.dart';
-import '../../service/repositories/chat_repository.dart';
+import '../data/repositories/api_config_repository.dart';
+import '../data/repositories/chat_repository.dart';
 import 'core_providers.dart'; // For appDatabaseProvider
 
 // Provider for ApiConfigRepository

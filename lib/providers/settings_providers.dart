@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/enums.dart'; // 导入主题设置枚举
+import '../data/models/enums.dart'; // 导入主题设置枚举
 
 // SharedPreferences 中用于存储主题设置的键
 const String _themeModeKey = 'app_theme_mode';
