@@ -13,8 +13,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 导入应用配置和核心 Provider
-import 'config/theme.dart'; // 导入主题配置
-import 'config/router.dart'; // 导入路由配置
+import 'ui/theme.dart'; // 导入主题配置
+import 'ui/router.dart'; // 导入路由配置
 import 'providers/settings_providers.dart'; // 导入主题设置 Provider
 
 // --- 应用主函数 ---

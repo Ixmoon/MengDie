@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' show Value;
 
 // 导入模型、Provider 和仓库
-import '../models/models.dart';
-import '../data/models/drift_xml_rule.dart';
-import '../data/common_enums.dart' as drift_enums;
-import '../providers/api_key_provider.dart';
-import '../providers/chat_settings_provider.dart';
-import '../providers/chat_state_providers.dart';
+import '../../models/models.dart';
+import '../../data/models/drift_xml_rule.dart';
+import '../../data/common_enums.dart' as drift_enums;
+import '../../providers/api_key_provider.dart';
+import '../../providers/chat_settings_provider.dart';
+import '../../providers/chat_state_providers.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 
 // --- 默认提示词常量 ---

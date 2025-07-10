@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/app_database.dart';
-import '../data/common_enums.dart';
-import '../providers/api_key_provider.dart';
-import '../providers/openai_models_provider.dart';
+import '../../data/app_database.dart';
+import '../../data/common_enums.dart';
+import '../../providers/api_key_provider.dart';
+import '../../providers/openai_models_provider.dart';
 
 class ApiConfigsScreen extends ConsumerWidget {
   const ApiConfigsScreen({super.key});

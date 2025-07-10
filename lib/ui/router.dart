@@ -4,16 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
 // 导入需要导航到的屏幕
-import '../screens/main_screen.dart';
-import '../screens/startup_screen.dart';
-import '../screens/chat_list_screen.dart';
-import '../screens/global_settings_screen.dart';
-import '../screens/api_configs_screen.dart'; // 统一的 API 配置屏幕
-import '../screens/gemini_api_keys_screen.dart'; // 新增
-import '../screens/chat_screen.dart';
-import '../screens/chat_settings_screen.dart';
-import '../screens/chat_gallery_screen.dart';
-import '../screens/chat_debug_screen.dart';
+import 'screens/main_screen.dart';
+import 'screens/startup_screen.dart';
+import 'screens/chat_list_screen.dart';
+import 'screens/global_settings_screen.dart';
+import 'screens/api_configs_screen.dart'; // 统一的 API 配置屏幕
+import 'screens/gemini_api_keys_screen.dart'; // 新增
+import 'screens/chat_screen.dart';
+import 'screens/chat_settings_screen.dart';
+import 'screens/chat_gallery_screen.dart';
+import 'screens/chat_debug_screen.dart';
 
 // 本文件包含应用的路由配置。
 

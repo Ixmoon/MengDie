@@ -7,7 +7,7 @@ import '../data/models/drift_xml_rule.dart'; // Import DriftXmlRule
 import '../data/common_enums.dart' as drift_enums; // For XmlAction during recalculation
 import '../repositories/message_repository.dart'; // For MessageRepository
 import 'xml_processor.dart';
-import '../services/llm_service.dart'; // For LlmContent, LlmTextPart
+import '../llmapi/llm_service.dart'; // For LlmContent, LlmTextPart
 import 'package:collection/collection.dart'; // For lastWhereOrNull
 
 // Define a return type for buildApiRequestContext

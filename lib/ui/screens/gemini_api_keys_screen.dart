@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/api_key_provider.dart';
+import '../../providers/api_key_provider.dart';
 
 class GeminiApiKeysScreen extends ConsumerWidget {
   const GeminiApiKeysScreen({super.key});

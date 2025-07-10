@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/openai_api_service.dart';
+import '../llmapi/openai_api_service.dart';
 
 // --- State ---
 class OpenAIModelsState {
