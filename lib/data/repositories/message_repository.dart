@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value; // For Value() and absent
 
 import '../models/message.dart';
 import '../../providers/core_providers.dart';
-import '../database/app_database.dart';
 import '../database/daos/message_dao.dart';
 import '../mappers/message_mapper.dart';
 

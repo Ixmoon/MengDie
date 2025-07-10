@@ -2,7 +2,6 @@ import 'package:logging/logging.dart';
 import '../database/daos/api_config_dao.dart';
 import '../mappers/api_config_mapper.dart';
 import '../models/api_config.dart';
-import '../database/app_database.dart' as drift;
 
 class ApiConfigRepository {
   final _log = Logger('ApiConfigRepository');

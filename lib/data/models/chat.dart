@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'context_config.dart';
 import 'xml_rule.dart';
-import 'enums.dart';
 
 @immutable
 class Chat {

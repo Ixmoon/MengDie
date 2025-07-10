@@ -428,7 +428,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           '已选择 ${_selectedItemIds.length} 项',
           style: TextStyle(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
             ],
           ),
         ),
@@ -484,7 +484,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                : '', // 根目录标题
            style: TextStyle(
              shadows: <Shadow>[
-               Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+               Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
              ],
            ),
          ),

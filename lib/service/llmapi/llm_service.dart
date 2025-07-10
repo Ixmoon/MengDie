@@ -3,9 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Import local models and services
-import 'package:drift/drift.dart' as drift;
 import '../../data/models/models.dart';
-import '../../data/models/api_config.dart'; // Import the new domain model
 import 'gemini_service.dart';
 import 'openai_service.dart';
 import '../../providers/api_key_provider.dart';

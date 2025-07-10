@@ -1,14 +1,7 @@
 import 'dart:async'; // For StreamSubscription, Timer
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // Added for Color type
 
-import 'dart:async'; // For StreamSubscription, Timer
-
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/material.dart'; // Added for Color type
-
-import 'package:drift/drift.dart' show Value;
 import '../data/models/chat.dart';
 import '../data/models/message.dart';
 import '../data/models/enums.dart';
@@ -344,9 +337,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         }
       }
       
-      if (messageToSave != null) {
-        await messageRepo.saveMessage(messageToSave);
-      }
+      await messageRepo.saveMessage(messageToSave);
 
       if (mounted) {
         showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));

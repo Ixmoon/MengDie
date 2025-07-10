@@ -20,14 +20,14 @@ class GlobalSettingsScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
           ],
         ),
         title: Text(
           '全局设置',
           style: TextStyle(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
             ],
           ),
         ),

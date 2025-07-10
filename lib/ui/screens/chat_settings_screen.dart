@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 导入模型、Provider 和仓库
 import '../../data/models/models.dart';
-import '../../data/models/enums.dart'; // 直接导入以解决类型解析问题
 import '../../providers/api_key_provider.dart';
 import '../../providers/chat_settings_provider.dart';
 import '../../providers/chat_state_providers.dart';
@@ -129,14 +128,14 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         elevation: 0,
         iconTheme: IconThemeData(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
           ],
         ),
         title: Text(
           '聊天设置',
           style: TextStyle(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withOpacity(0.5), blurRadius: 1.0)
+              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
             ],
           ),
         ),
