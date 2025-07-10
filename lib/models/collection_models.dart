@@ -3,10 +3,10 @@ import 'enums.dart';
 import '../services/xml_processor.dart'; // Import for text processing
 
 // Import the new Drift-specific models and enums
-import '../data/database/drift/models/drift_context_config.dart';
-import '../data/database/drift/models/drift_xml_rule.dart';
-import '../data/database/drift/common_enums.dart' as drift_enums;
-import '../data/database/drift/app_database.dart'; // For ChatData, ChatsCompanion
+import '../data/models/drift_context_config.dart';
+import '../data/models/drift_xml_rule.dart';
+import '../data/common_enums.dart' as drift_enums;
+import '../data/app_database.dart'; // For ChatData, ChatsCompanion
 
 // These classes now represent the application's domain models.
 
@@ -25,7 +25,7 @@ class Chat {
   int? parentFolderId;
 
   // --- Refactored Fields ---
-  String? apiConfigId; // Replaces apiType, selectedOpenAIConfigId, and generationConfig
+  String? apiConfigId; // Replaces selectedOpenAIConfigId
   DriftContextConfig contextConfig = DriftContextConfig();
   List<DriftXmlRule> xmlRules = [];
 
@@ -38,6 +38,10 @@ class Chat {
   String? secondaryXmlPrompt;
   String? secondaryXmlApiConfigId;
   String? continuePrompt;
+  
+  // Legacy fields for migration
+  drift_enums.LlmType? apiType;
+  Map<String, dynamic>? generationConfig;
   // --- 结束 ---
 
   Chat();
@@ -65,7 +69,9 @@ class Chat {
       ..enableSecondaryXml = data.enableSecondaryXml ?? false
       ..secondaryXmlPrompt = data.secondaryXmlPrompt
       ..secondaryXmlApiConfigId = data.secondaryXmlApiConfigId
-      ..continuePrompt = data.continuePrompt;
+      ..continuePrompt = data.continuePrompt
+      ..generationConfig = data.generationConfig
+      ..apiType = data.apiType;
   }
 
   // 将业务模型转换为 Drift Companion Class 的方法
@@ -94,6 +100,8 @@ class Chat {
       secondaryXmlPrompt: Value(secondaryXmlPrompt),
       secondaryXmlApiConfigId: Value(secondaryXmlApiConfigId),
       continuePrompt: Value(continuePrompt),
+      generationConfig: Value(generationConfig),
+      apiType: Value(apiType),
     );
   }
 
@@ -120,6 +128,8 @@ class Chat {
     Value<String?>? secondaryXmlPrompt,
     Value<String?>? secondaryXmlApiConfigId,
     Value<String?>? continuePrompt,
+    Value<Map<String, dynamic>?>? generationConfig,
+    drift_enums.LlmType? apiType,
   }) {
     final newChat = Chat()
       ..id = id ?? this.id
@@ -142,7 +152,9 @@ class Chat {
       ..enableSecondaryXml = enableSecondaryXml ?? this.enableSecondaryXml
       ..secondaryXmlPrompt = secondaryXmlPrompt != null ? secondaryXmlPrompt.value : this.secondaryXmlPrompt
       ..secondaryXmlApiConfigId = secondaryXmlApiConfigId != null ? secondaryXmlApiConfigId.value : this.secondaryXmlApiConfigId
-      ..continuePrompt = continuePrompt != null ? continuePrompt.value : this.continuePrompt;
+      ..continuePrompt = continuePrompt != null ? continuePrompt.value : this.continuePrompt
+      ..generationConfig = generationConfig != null ? generationConfig.value : this.generationConfig
+      ..apiType = apiType ?? this.apiType;
     return newChat;
   }
 
@@ -167,6 +179,8 @@ class Chat {
     this.secondaryXmlPrompt,
     this.secondaryXmlApiConfigId,
     this.continuePrompt,
+    this.generationConfig,
+    this.apiType,
   }) {
     createdAt = DateTime.now();
     updatedAt = DateTime.now();

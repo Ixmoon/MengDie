@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Import local models and services
 import '../models/models.dart';
-import '../data/database/drift/app_database.dart'; // For ApiConfig
+import '../data/app_database.dart'; // For ApiConfig
 import 'gemini_service.dart';
 import 'openai_service.dart';
 import '../providers/api_key_provider.dart';

@@ -26,6 +26,10 @@ class Chats extends Table {
   // 新增 apiConfigId 作为外键
   TextColumn get apiConfigId => text().nullable()();
 
+  // Legacy columns, kept for migration purposes.
+  TextColumn get apiType => text().map(const LlmTypeConverter()).nullable()();
+  TextColumn get generationConfig => text().map(const JsonMapConverter()).nullable()();
+
   // --- Pre-processing and Post-processing ---
   BoolColumn get enablePreprocessing => boolean().nullable()();
   TextColumn get preprocessingPrompt => text().nullable()();

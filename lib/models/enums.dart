@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 // Most enums are now re-exported from Drift's common_enums.dart
 // to ensure consistency with the database layer.
 
-export '../data/database/drift/common_enums.dart'
+export '../data/common_enums.dart'
 	show
 		LlmType,
 		MessageRole,

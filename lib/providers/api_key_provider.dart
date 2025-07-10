@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/database/drift/app_database.dart';
-import '../data/database/drift/common_enums.dart';
+import '../data/app_database.dart';
+import '../data/common_enums.dart';
 import '../repositories/api_config_repository.dart';
 import '../repositories/chat_repository.dart';
 import 'repository_providers.dart' show apiConfigRepositoryProvider;

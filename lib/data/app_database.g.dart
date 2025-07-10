@@ -92,6 +92,18 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   late final GeneratedColumn<String> apiConfigId = GeneratedColumn<String>(
       'api_config_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  late final GeneratedColumnWithTypeConverter<LlmType?, String> apiType =
+      GeneratedColumn<String>('api_type', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<LlmType?>($ChatsTable.$converterapiTypen);
+  @override
+  late final GeneratedColumnWithTypeConverter<Map<String, dynamic>?, String>
+      generationConfig = GeneratedColumn<String>(
+              'generation_config', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<Map<String, dynamic>?>(
+              $ChatsTable.$convertergenerationConfig);
   static const VerificationMeta _enablePreprocessingMeta =
       const VerificationMeta('enablePreprocessing');
   @override
@@ -161,6 +173,8 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         contextConfig,
         xmlRules,
         apiConfigId,
+        apiType,
+        generationConfig,
         enablePreprocessing,
         preprocessingPrompt,
         contextSummary,
@@ -326,6 +340,12 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           .read(DriftSqlType.string, data['${effectivePrefix}xml_rules'])!),
       apiConfigId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}api_config_id']),
+      apiType: $ChatsTable.$converterapiTypen.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}api_type'])),
+      generationConfig: $ChatsTable.$convertergenerationConfig.fromSql(
+          attachedDatabase.typeMapping.read(DriftSqlType.string,
+              data['${effectivePrefix}generation_config'])),
       enablePreprocessing: attachedDatabase.typeMapping.read(
           DriftSqlType.bool, data['${effectivePrefix}enable_preprocessing']),
       preprocessingPrompt: attachedDatabase.typeMapping.read(
@@ -356,6 +376,12 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       const ContextConfigConverter();
   static TypeConverter<List<DriftXmlRule>, String> $converterxmlRules =
       const XmlRuleListConverter();
+  static TypeConverter<LlmType, String> $converterapiType =
+      const LlmTypeConverter();
+  static TypeConverter<LlmType?, String?> $converterapiTypen =
+      NullAwareTypeConverter.wrap($converterapiType);
+  static TypeConverter<Map<String, dynamic>?, String?>
+      $convertergenerationConfig = const JsonMapConverter();
 }
 
 class ChatData extends DataClass implements Insertable<ChatData> {
@@ -372,6 +398,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final DriftContextConfig contextConfig;
   final List<DriftXmlRule> xmlRules;
   final String? apiConfigId;
+  final LlmType? apiType;
+  final Map<String, dynamic>? generationConfig;
   final bool? enablePreprocessing;
   final String? preprocessingPrompt;
   final String? contextSummary;
@@ -394,6 +422,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       required this.contextConfig,
       required this.xmlRules,
       this.apiConfigId,
+      this.apiType,
+      this.generationConfig,
       this.enablePreprocessing,
       this.preprocessingPrompt,
       this.contextSummary,
@@ -437,6 +467,14 @@ class ChatData extends DataClass implements Insertable<ChatData> {
     }
     if (!nullToAbsent || apiConfigId != null) {
       map['api_config_id'] = Variable<String>(apiConfigId);
+    }
+    if (!nullToAbsent || apiType != null) {
+      map['api_type'] =
+          Variable<String>($ChatsTable.$converterapiTypen.toSql(apiType));
+    }
+    if (!nullToAbsent || generationConfig != null) {
+      map['generation_config'] = Variable<String>(
+          $ChatsTable.$convertergenerationConfig.toSql(generationConfig));
     }
     if (!nullToAbsent || enablePreprocessing != null) {
       map['enable_preprocessing'] = Variable<bool>(enablePreprocessing);
@@ -495,6 +533,12 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       apiConfigId: apiConfigId == null && nullToAbsent
           ? const Value.absent()
           : Value(apiConfigId),
+      apiType: apiType == null && nullToAbsent
+          ? const Value.absent()
+          : Value(apiType),
+      generationConfig: generationConfig == null && nullToAbsent
+          ? const Value.absent()
+          : Value(generationConfig),
       enablePreprocessing: enablePreprocessing == null && nullToAbsent
           ? const Value.absent()
           : Value(enablePreprocessing),
@@ -541,6 +585,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           serializer.fromJson<DriftContextConfig>(json['contextConfig']),
       xmlRules: serializer.fromJson<List<DriftXmlRule>>(json['xmlRules']),
       apiConfigId: serializer.fromJson<String?>(json['apiConfigId']),
+      apiType: serializer.fromJson<LlmType?>(json['apiType']),
+      generationConfig:
+          serializer.fromJson<Map<String, dynamic>?>(json['generationConfig']),
       enablePreprocessing:
           serializer.fromJson<bool?>(json['enablePreprocessing']),
       preprocessingPrompt:
@@ -574,6 +621,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'contextConfig': serializer.toJson<DriftContextConfig>(contextConfig),
       'xmlRules': serializer.toJson<List<DriftXmlRule>>(xmlRules),
       'apiConfigId': serializer.toJson<String?>(apiConfigId),
+      'apiType': serializer.toJson<LlmType?>(apiType),
+      'generationConfig':
+          serializer.toJson<Map<String, dynamic>?>(generationConfig),
       'enablePreprocessing': serializer.toJson<bool?>(enablePreprocessing),
       'preprocessingPrompt': serializer.toJson<String?>(preprocessingPrompt),
       'contextSummary': serializer.toJson<String?>(contextSummary),
@@ -601,6 +651,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           DriftContextConfig? contextConfig,
           List<DriftXmlRule>? xmlRules,
           Value<String?> apiConfigId = const Value.absent(),
+          Value<LlmType?> apiType = const Value.absent(),
+          Value<Map<String, dynamic>?> generationConfig = const Value.absent(),
           Value<bool?> enablePreprocessing = const Value.absent(),
           Value<String?> preprocessingPrompt = const Value.absent(),
           Value<String?> contextSummary = const Value.absent(),
@@ -629,6 +681,10 @@ class ChatData extends DataClass implements Insertable<ChatData> {
         contextConfig: contextConfig ?? this.contextConfig,
         xmlRules: xmlRules ?? this.xmlRules,
         apiConfigId: apiConfigId.present ? apiConfigId.value : this.apiConfigId,
+        apiType: apiType.present ? apiType.value : this.apiType,
+        generationConfig: generationConfig.present
+            ? generationConfig.value
+            : this.generationConfig,
         enablePreprocessing: enablePreprocessing.present
             ? enablePreprocessing.value
             : this.enablePreprocessing,
@@ -679,6 +735,10 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       xmlRules: data.xmlRules.present ? data.xmlRules.value : this.xmlRules,
       apiConfigId:
           data.apiConfigId.present ? data.apiConfigId.value : this.apiConfigId,
+      apiType: data.apiType.present ? data.apiType.value : this.apiType,
+      generationConfig: data.generationConfig.present
+          ? data.generationConfig.value
+          : this.generationConfig,
       enablePreprocessing: data.enablePreprocessing.present
           ? data.enablePreprocessing.value
           : this.enablePreprocessing,
@@ -722,6 +782,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           ..write('contextConfig: $contextConfig, ')
           ..write('xmlRules: $xmlRules, ')
           ..write('apiConfigId: $apiConfigId, ')
+          ..write('apiType: $apiType, ')
+          ..write('generationConfig: $generationConfig, ')
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
@@ -749,6 +811,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
         contextConfig,
         xmlRules,
         apiConfigId,
+        apiType,
+        generationConfig,
         enablePreprocessing,
         preprocessingPrompt,
         contextSummary,
@@ -775,6 +839,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           other.contextConfig == this.contextConfig &&
           other.xmlRules == this.xmlRules &&
           other.apiConfigId == this.apiConfigId &&
+          other.apiType == this.apiType &&
+          other.generationConfig == this.generationConfig &&
           other.enablePreprocessing == this.enablePreprocessing &&
           other.preprocessingPrompt == this.preprocessingPrompt &&
           other.contextSummary == this.contextSummary &&
@@ -799,6 +865,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<DriftContextConfig> contextConfig;
   final Value<List<DriftXmlRule>> xmlRules;
   final Value<String?> apiConfigId;
+  final Value<LlmType?> apiType;
+  final Value<Map<String, dynamic>?> generationConfig;
   final Value<bool?> enablePreprocessing;
   final Value<String?> preprocessingPrompt;
   final Value<String?> contextSummary;
@@ -821,6 +889,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.contextConfig = const Value.absent(),
     this.xmlRules = const Value.absent(),
     this.apiConfigId = const Value.absent(),
+    this.apiType = const Value.absent(),
+    this.generationConfig = const Value.absent(),
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
@@ -844,6 +914,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     required DriftContextConfig contextConfig,
     required List<DriftXmlRule> xmlRules,
     this.apiConfigId = const Value.absent(),
+    this.apiType = const Value.absent(),
+    this.generationConfig = const Value.absent(),
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
@@ -870,6 +942,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     Expression<String>? contextConfig,
     Expression<String>? xmlRules,
     Expression<String>? apiConfigId,
+    Expression<String>? apiType,
+    Expression<String>? generationConfig,
     Expression<bool>? enablePreprocessing,
     Expression<String>? preprocessingPrompt,
     Expression<String>? contextSummary,
@@ -894,6 +968,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       if (contextConfig != null) 'context_config': contextConfig,
       if (xmlRules != null) 'xml_rules': xmlRules,
       if (apiConfigId != null) 'api_config_id': apiConfigId,
+      if (apiType != null) 'api_type': apiType,
+      if (generationConfig != null) 'generation_config': generationConfig,
       if (enablePreprocessing != null)
         'enable_preprocessing': enablePreprocessing,
       if (preprocessingPrompt != null)
@@ -925,6 +1001,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<DriftContextConfig>? contextConfig,
       Value<List<DriftXmlRule>>? xmlRules,
       Value<String?>? apiConfigId,
+      Value<LlmType?>? apiType,
+      Value<Map<String, dynamic>?>? generationConfig,
       Value<bool?>? enablePreprocessing,
       Value<String?>? preprocessingPrompt,
       Value<String?>? contextSummary,
@@ -947,6 +1025,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       contextConfig: contextConfig ?? this.contextConfig,
       xmlRules: xmlRules ?? this.xmlRules,
       apiConfigId: apiConfigId ?? this.apiConfigId,
+      apiType: apiType ?? this.apiType,
+      generationConfig: generationConfig ?? this.generationConfig,
       enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
       preprocessingPrompt: preprocessingPrompt ?? this.preprocessingPrompt,
       contextSummary: contextSummary ?? this.contextSummary,
@@ -1005,6 +1085,14 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     if (apiConfigId.present) {
       map['api_config_id'] = Variable<String>(apiConfigId.value);
     }
+    if (apiType.present) {
+      map['api_type'] =
+          Variable<String>($ChatsTable.$converterapiTypen.toSql(apiType.value));
+    }
+    if (generationConfig.present) {
+      map['generation_config'] = Variable<String>(
+          $ChatsTable.$convertergenerationConfig.toSql(generationConfig.value));
+    }
     if (enablePreprocessing.present) {
       map['enable_preprocessing'] = Variable<bool>(enablePreprocessing.value);
     }
@@ -1050,6 +1138,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
           ..write('contextConfig: $contextConfig, ')
           ..write('xmlRules: $xmlRules, ')
           ..write('apiConfigId: $apiConfigId, ')
+          ..write('apiType: $apiType, ')
+          ..write('generationConfig: $generationConfig, ')
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
@@ -2270,6 +2360,8 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   required DriftContextConfig contextConfig,
   required List<DriftXmlRule> xmlRules,
   Value<String?> apiConfigId,
+  Value<LlmType?> apiType,
+  Value<Map<String, dynamic>?> generationConfig,
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
@@ -2293,6 +2385,8 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<DriftContextConfig> contextConfig,
   Value<List<DriftXmlRule>> xmlRules,
   Value<String?> apiConfigId,
+  Value<LlmType?> apiType,
+  Value<Map<String, dynamic>?> generationConfig,
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
@@ -2375,6 +2469,17 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
 
   ColumnFilters<String> get apiConfigId => $composableBuilder(
       column: $table.apiConfigId, builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<LlmType?, LlmType, String> get apiType =>
+      $composableBuilder(
+          column: $table.apiType,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnWithTypeConverterFilters<Map<String, dynamic>?, Map<String, dynamic>,
+          String>
+      get generationConfig => $composableBuilder(
+          column: $table.generationConfig,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing,
@@ -2483,6 +2588,13 @@ class $$ChatsTableOrderingComposer
   ColumnOrderings<String> get apiConfigId => $composableBuilder(
       column: $table.apiConfigId, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get apiType => $composableBuilder(
+      column: $table.apiType, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get generationConfig => $composableBuilder(
+      column: $table.generationConfig,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing,
       builder: (column) => ColumnOrderings(column));
@@ -2564,6 +2676,13 @@ class $$ChatsTableAnnotationComposer
 
   GeneratedColumn<String> get apiConfigId => $composableBuilder(
       column: $table.apiConfigId, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<LlmType?, String> get apiType =>
+      $composableBuilder(column: $table.apiType, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Map<String, dynamic>?, String>
+      get generationConfig => $composableBuilder(
+          column: $table.generationConfig, builder: (column) => column);
 
   GeneratedColumn<bool> get enablePreprocessing => $composableBuilder(
       column: $table.enablePreprocessing, builder: (column) => column);
@@ -2647,6 +2766,9 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<DriftContextConfig> contextConfig = const Value.absent(),
             Value<List<DriftXmlRule>> xmlRules = const Value.absent(),
             Value<String?> apiConfigId = const Value.absent(),
+            Value<LlmType?> apiType = const Value.absent(),
+            Value<Map<String, dynamic>?> generationConfig =
+                const Value.absent(),
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
@@ -2670,6 +2792,8 @@ class $$ChatsTableTableManager extends RootTableManager<
             contextConfig: contextConfig,
             xmlRules: xmlRules,
             apiConfigId: apiConfigId,
+            apiType: apiType,
+            generationConfig: generationConfig,
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,
@@ -2693,6 +2817,9 @@ class $$ChatsTableTableManager extends RootTableManager<
             required DriftContextConfig contextConfig,
             required List<DriftXmlRule> xmlRules,
             Value<String?> apiConfigId = const Value.absent(),
+            Value<LlmType?> apiType = const Value.absent(),
+            Value<Map<String, dynamic>?> generationConfig =
+                const Value.absent(),
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
@@ -2716,6 +2843,8 @@ class $$ChatsTableTableManager extends RootTableManager<
             contextConfig: contextConfig,
             xmlRules: xmlRules,
             apiConfigId: apiConfigId,
+            apiType: apiType,
+            generationConfig: generationConfig,
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,

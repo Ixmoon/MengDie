@@ -4,8 +4,8 @@ import 'package:drift/drift.dart' show Value;
 
 // 导入模型、Provider 和仓库
 import '../models/models.dart';
-import '../data/database/drift/models/drift_xml_rule.dart';
-import '../data/database/drift/common_enums.dart' as drift_enums;
+import '../data/models/drift_xml_rule.dart';
+import '../data/common_enums.dart' as drift_enums;
 import '../providers/api_key_provider.dart';
 import '../providers/chat_settings_provider.dart';
 import '../providers/chat_state_providers.dart';

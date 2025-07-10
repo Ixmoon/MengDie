@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/database/drift/app_database.dart';
-import '../data/database/drift/common_enums.dart';
+import '../data/app_database.dart';
+import '../data/common_enums.dart';
 import '../providers/api_key_provider.dart';
 import '../providers/openai_models_provider.dart';
 

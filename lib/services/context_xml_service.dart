@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart' as xml_pkg; // For XmlDocument, XmlElement, XmlName during recalculation
 
 import '../models/models.dart';
-import '../data/database/drift/models/drift_xml_rule.dart'; // Import DriftXmlRule
-import '../data/database/drift/common_enums.dart' as drift_enums; // For XmlAction during recalculation
+import '../data/models/drift_xml_rule.dart'; // Import DriftXmlRule
+import '../data/common_enums.dart' as drift_enums; // For XmlAction during recalculation
 import '../repositories/message_repository.dart'; // For MessageRepository
 import 'xml_processor.dart';
 import 'llm_service.dart'; // For LlmContent, LlmTextPart

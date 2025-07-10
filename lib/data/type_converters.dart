@@ -95,3 +95,28 @@ class StringListConverter extends TypeConverter<List<String>?, String?> {
     return json.encode(value);
   }
 }
+// For generic Map<String, dynamic> to handle legacy columns gracefully
+class JsonMapConverter extends TypeConverter<Map<String, dynamic>?, String?> {
+  const JsonMapConverter();
+
+  @override
+  Map<String, dynamic>? fromSql(String? fromDb) {
+    if (fromDb == null || fromDb.isEmpty) {
+      return null;
+    }
+    try {
+      return json.decode(fromDb) as Map<String, dynamic>;
+    } catch (e) {
+      // If parsing fails, return null to avoid crashing.
+      return null;
+    }
+  }
+
+  @override
+  String? toSql(Map<String, dynamic>? value) {
+    if (value == null) {
+      return null;
+    }
+    return json.encode(value);
+  }
+}

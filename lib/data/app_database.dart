@@ -34,7 +34,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 13; // Bump version to 13 for migration fix
+  int get schemaVersion => 16; // Bump version to 16 for a comprehensive fix
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -91,6 +91,23 @@ class AppDatabase extends _$AppDatabase {
         try { await m.addColumn(chats, chats.enableSecondaryXml); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
         try { await m.addColumn(chats, chats.secondaryXmlPrompt); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
         try { await m.addColumn(messages, messages.originalXmlContent); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+      }
+      if (from < 16) {
+        // This is a comprehensive "catch-all" migration to fix various states of corruption.
+        // It re-adds columns from multiple previous versions idempotently to ensure consistency.
+        _log.info('Running comprehensive migration for version 16 to ensure all columns exist.');
+        try { await m.addColumn(chats, chats.enablePreprocessing); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.preprocessingPrompt); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.contextSummary); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.enableSecondaryXml); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.secondaryXmlPrompt); } catch (e) { /* ignore */ }
+        try { await m.addColumn(messages, messages.originalXmlContent); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.continuePrompt); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.apiType); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.generationConfig); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.apiConfigId); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.preprocessingApiConfigId); } catch (e) { /* ignore */ }
+        try { await m.addColumn(chats, chats.secondaryXmlApiConfigId); } catch (e) { /* ignore */ }
       }
     },
   );
