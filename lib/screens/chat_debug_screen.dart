@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/chat_state_providers.dart';
 import '../services/llm_service.dart'; // For LlmContent, LlmTextPart
-import '../services/context_xml_service.dart';
+import '../process/context_xml_service.dart';
 import '../widgets/app_card.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
 

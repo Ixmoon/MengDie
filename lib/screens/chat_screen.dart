@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // 导入 shared_pr
 // 导入模型、Provider、仓库、服务和 Widget
 import '../models/models.dart';
 import '../providers/chat_state_providers.dart';
-import '../services/chat_export_import_service.dart'; // 导入导出/导入服务
+import '../process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/message_bubble.dart';
 import '../widgets/top_message_banner.dart'; // 导入顶部消息横幅 Widget
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
