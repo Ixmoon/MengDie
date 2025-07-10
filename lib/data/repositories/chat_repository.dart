@@ -52,6 +52,9 @@ class ChatRepository {
         apiType = apiConfigData.apiType;
       }
     }
+    // Lmmediate Fix: Ensure apiType is not null to prevent crashes on older schemas.
+    // Default to a safe value if no config is found.
+    apiType ??= LlmType.gemini;
 
     final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0, apiType: apiType);
     return await _chatDao.saveChat(companion);

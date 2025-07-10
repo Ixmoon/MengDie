@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // 使用阿里云镜像加速
+        maven { setUrl("https://maven.aliyun.com/repository/public") }
+        maven { setUrl("https://maven.aliyun.com/repository/google") }
         google()
         mavenCentral()
     }
