@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:drift/drift.dart' show Value;
 
 // 导入模型、Provider 和仓库
 import '../../data/models/models.dart';
-import '../../data/models/enums.dart' as drift_enums;
+import '../../data/models/enums.dart'; // 直接导入以解决类型解析问题
 import '../../data/providers/api_key_provider.dart';
 import '../../data/providers/chat_settings_provider.dart';
 import '../../data/providers/chat_state_providers.dart';
@@ -27,12 +26,12 @@ class ChatSettingsScreen extends ConsumerStatefulWidget {
 
 class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
   // --- 显示添加/编辑 XML 规则的对话框 ---
-  void _showXmlRuleDialog(BuildContext context, {DriftXmlRule? existingRule, int? ruleIndex}) {
+  void _showXmlRuleDialog(BuildContext context, {XmlRule? existingRule, int? ruleIndex}) {
     final chatId = ref.read(activeChatIdProvider);
     if (chatId == null) return;
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
-    drift_enums.XmlAction selectedAction = existingRule?.action ?? drift_enums.XmlAction.ignore;
+    var selectedAction = existingRule?.action ?? XmlAction.ignore;
 
     showDialog(
       context: context,
@@ -52,13 +51,13 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-                  DropdownButtonFormField<drift_enums.XmlAction>(
+                  DropdownButtonFormField<XmlAction>(
                     value: selectedAction,
                     decoration: const InputDecoration(
                       labelText: '处理动作',
                       border: OutlineInputBorder(),
                     ),
-                    items: drift_enums.XmlAction.values.map((action) {
+                    items: XmlAction.values.map((action) {
                       return DropdownMenuItem(
                         value: action,
                         child: Text(action.name),
@@ -80,9 +79,9 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
                   onPressed: () {
                     final tagName = tagNameController.text.trim();
                     if (tagName.isNotEmpty) {
-                      final newRule = DriftXmlRule(tagName: tagName, action: selectedAction);
+                      final newRule = XmlRule(tagName: tagName, action: selectedAction);
                       notifier.updateSettings((chat) {
-                        final rules = List<DriftXmlRule>.from(chat.xmlRules);
+                        final rules = List<XmlRule>.from(chat.xmlRules);
                         if (ruleIndex != null) {
                           rules[ruleIndex] = newRule;
                         } else {
@@ -286,14 +285,14 @@ class _BasicInfoSettings extends ConsumerWidget {
                   ),
                 );
                 if (newText != null) {
-                  notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(newText)));
+                  notifier.updateSettings((c) => c.copyWith(continuePrompt: newText));
                 }
               },
             ),
           ),
           maxLines: 4,
           minLines: 2,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: Value(value.isEmpty ? null : value))),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: value.isEmpty ? null : value)),
         ),
       ],
     );
@@ -326,7 +325,7 @@ class _ApiProviderSettings extends ConsumerWidget {
               child: Text(config.name),
             )).toList(),
             onChanged: (value) {
-              notifier.updateSettings((c) => c.copyWith(apiConfigId: Value(value)));
+              notifier.updateSettings((c) => c.copyWith(apiConfigId: value));
             },
             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
           ),
@@ -350,12 +349,12 @@ class _ContextManagementSettings extends ConsumerWidget {
       children: [
         const _SectionTitle('上下文管理'),
         const SizedBox(height: 15),
-        DropdownButtonFormField<drift_enums.ContextManagementMode>(
+        DropdownButtonFormField<ContextManagementMode>(
           value: contextConfig.mode,
           decoration: const InputDecoration(labelText: '上下文模式', border: OutlineInputBorder()),
-          items: drift_enums.ContextManagementMode.values.map((mode) => DropdownMenuItem(
+          items: ContextManagementMode.values.map((mode) => DropdownMenuItem(
             value: mode,
-            child: Text(mode == drift_enums.ContextManagementMode.turns ? '按轮数' : '按 Tokens (实验性)'),
+            child: Text(mode == ContextManagementMode.turns ? '按轮数' : '按 Tokens (实验性)'),
           )).toList(),
           onChanged: (value) {
             if (value != null) {
@@ -364,7 +363,7 @@ class _ContextManagementSettings extends ConsumerWidget {
           },
         ),
         const SizedBox(height: 15),
-        if (contextConfig.mode == drift_enums.ContextManagementMode.turns)
+        if (contextConfig.mode == ContextManagementMode.turns)
           TextFormField(
             key: ValueKey('maxTurns_${chat.id}'),
             initialValue: contextConfig.maxTurns.toString(),
@@ -372,7 +371,7 @@ class _ContextManagementSettings extends ConsumerWidget {
             keyboardType: TextInputType.number,
             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10))),
           ),
-        if (contextConfig.mode == drift_enums.ContextManagementMode.tokens)
+        if (contextConfig.mode == ContextManagementMode.tokens)
           TextFormField(
             key: ValueKey('maxTokens_${chat.id}'),
             initialValue: contextConfig.maxContextTokens?.toString() ?? '',
@@ -387,7 +386,7 @@ class _ContextManagementSettings extends ConsumerWidget {
 
 class _XmlRulesSettings extends ConsumerWidget {
   final int chatId;
-  final Function(DriftXmlRule?, int?) onShowXmlRuleDialog;
+  final Function(XmlRule?, int?) onShowXmlRuleDialog;
 
   const _XmlRulesSettings({required this.chatId, required this.onShowXmlRuleDialog});
 
@@ -437,7 +436,7 @@ class _XmlRulesSettings extends ConsumerWidget {
                       tooltip: '删除规则',
                       onPressed: () {
                         notifier.updateSettings((c) {
-                          final rules = List<DriftXmlRule>.from(c.xmlRules)..removeAt(index);
+                          final rules = List<XmlRule>.from(c.xmlRules)..removeAt(index);
                           return c.copyWith(xmlRules: rules);
                         });
                       },
@@ -498,14 +497,14 @@ class _AutomationSettings extends ConsumerWidget {
                       ),
                     );
                     if (newText != null) {
-                      notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(newText)));
+                      notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: newText));
                     }
                   },
                 ),
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: Value(value.isEmpty ? null : value))),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: value.isEmpty ? null : value)),
             ),
           ),
        if (chat.enablePreprocessing)
@@ -515,7 +514,7 @@ class _AutomationSettings extends ConsumerWidget {
              value: apiConfigs.any((c) => c.id == chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
              decoration: const InputDecoration(labelText: '用于总结的 API 配置', border: OutlineInputBorder()),
              items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: Value(value))),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: value)),
              validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
            ),
          ),
@@ -549,14 +548,14 @@ class _AutomationSettings extends ConsumerWidget {
                       ),
                     );
                     if (newText != null) {
-                      notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(newText)));
+                      notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: newText));
                     }
                   },
                 ),
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: Value(value.isEmpty ? null : value))),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: value.isEmpty ? null : value)),
             ),
           ),
        if (chat.enableSecondaryXml)
@@ -566,7 +565,7 @@ class _AutomationSettings extends ConsumerWidget {
              value: apiConfigs.any((c) => c.id == chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
              decoration: const InputDecoration(labelText: '用于附加XML的 API 配置', border: OutlineInputBorder()),
              items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: Value(value))),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: value)),
              validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
            ),
          ),

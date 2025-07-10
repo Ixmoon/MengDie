@@ -72,10 +72,10 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       final contextXmlService = ref.read(contextXmlServiceProvider);
       // Call the unified buildApiRequestContext
       // Create a placeholder message for debugging purposes
-      final placeholderMessage = Message.create(
+      final placeholderMessage = Message(
         chatId: chat.id,
         role: MessageRole.user,
-        rawText: "[调试占位符]",
+        parts: [MessagePart.text("[调试占位符]")],
       );
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chat: chat,

@@ -3,49 +3,59 @@ import 'package:drift/drift.dart';
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// 导入模型和核心 Provider
-import '../models/models.dart';
-import '../models/export_import_dtos.dart'; // 导入 DTOs
-import '../providers/core_providers.dart'; // Needs appDatabaseProvider
-import '../database/app_database.dart'; 
-import '../database/daos/chat_dao.dart'; // Import ChatDao for type annotation
-// drift_tables alias might not be strictly necessary if AppDatabase.g.dart exports companions correctly.
-// For now, let's assume ChatsCompanion is accessible via AppDatabase or its generated parts.
+import '../../data/models/chat.dart';
+import '../../data/models/export_import_dtos.dart';
+import '../../data/providers/core_providers.dart';
+import '../../data/database/app_database.dart';
+import '../../data/database/common_enums.dart';
+import '../../data/database/daos/api_config_dao.dart';
+import '../../data/database/daos/chat_dao.dart';
+import '../../data/mappers/chat_mapper.dart';
+import '../../data/mappers/api_config_mapper.dart';
 
 // 本文件包含用于管理 Chat 数据集合的仓库类和提供者。
 
 // --- Chat Repository Provider ---
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final appDb = ref.watch(appDatabaseProvider);
-  return ChatRepository(appDb);
+  // Now depends on both chatDao and apiConfigDao
+  return ChatRepository(appDb, appDb.chatDao, appDb.apiConfigDao);
 });
 
 // --- Chat Repository Implementation ---
 class ChatRepository {
   final AppDatabase _db;
-  late final ChatDao _chatDao; // DAO for chat operations
+  final ChatDao _chatDao;
+  final ApiConfigDao _apiConfigDao;
 
-  ChatRepository(this._db) {
-    _chatDao = _db.chatDao; // Initialize DAO from AppDatabase instance
-  }
+  ChatRepository(this._db, this._chatDao, this._apiConfigDao);
 
   // --- 数据库操作 ---
   Future<List<Chat>> getAllChats() async {
     debugPrint("ChatRepository: 获取所有聊天 (Drift)...");
     final chatDataList = await _chatDao.getAllChats();
-    return chatDataList.map(Chat.fromData).toList();
+    return chatDataList.map(ChatMapper.fromData).toList();
   }
 
   Future<Chat?> getChat(int chatId) async {
     debugPrint("ChatRepository: 获取聊天 ID: $chatId (Drift)...");
     final chatData = await _chatDao.getChat(chatId);
-    return chatData != null ? Chat.fromData(chatData) : null;
+    return chatData != null ? ChatMapper.fromData(chatData) : null;
   }
 
   Future<int> saveChat(Chat chat) async {
     debugPrint("ChatRepository: 保存聊天 ID: ${chat.id}, 标题: ${chat.title} (Drift)...");
-    final companion = chat.toCompanion(forInsert: chat.id == 0);
-    return await _chatDao.saveChat(companion); // saveChat in DAO handles insertOrReplace
+
+    LlmType? apiType;
+    if (chat.apiConfigId != null) {
+      final apiConfigData = await _apiConfigDao.getApiConfigById(chat.apiConfigId!);
+      if (apiConfigData != null) {
+        apiType = apiConfigData.apiType;
+      }
+    }
+
+    final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0, apiType: apiType);
+    return await _chatDao.saveChat(companion);
   }
   
   Future<bool> deleteChat(int chatId) async {
@@ -62,7 +72,7 @@ class ChatRepository {
   Future<void> updateChatOrder(List<Chat> chatsToUpdate) async {
     if (chatsToUpdate.isEmpty) return;
     debugPrint("ChatRepository: 批量更新 ${chatsToUpdate.length} 个聊天的 orderIndex (Drift)...");
-    final companions = chatsToUpdate.map((c) => c.toCompanion(updateTime: true)).toList();
+    final companions = chatsToUpdate.map((c) => ChatMapper.toCompanion(c)).toList();
     await _chatDao.updateChatOrder(companions);
     debugPrint("ChatRepository: 批量更新 orderIndex 完成 (Drift)。");
   }
@@ -70,12 +80,16 @@ class ChatRepository {
   // --- 数据库监听流 ---
   Stream<List<Chat>> watchChatsInFolder(int? parentFolderId) {
     debugPrint("ChatRepository: 监听文件夹 ID: $parentFolderId 下的聊天变化 (Drift)...");
-    return _chatDao.watchChatsInFolder(parentFolderId).map((list) => list.map(Chat.fromData).toList());
+    return _chatDao
+        .watchChatsInFolder(parentFolderId)
+        .map((list) => list.map(ChatMapper.fromData).toList());
   }
 
   Stream<Chat?> watchChat(int chatId) {
     debugPrint("ChatRepository: 监听聊天 ID: $chatId 的变化 (Drift)...");
-    return _chatDao.watchChat(chatId).map((data) => data != null ? Chat.fromData(data) : null);
+    return _chatDao
+        .watchChat(chatId)
+        .map((data) => data != null ? ChatMapper.fromData(data) : null);
   }
 
   // --- 导入聊天 ---

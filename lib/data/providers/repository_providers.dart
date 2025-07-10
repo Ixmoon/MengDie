@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../repositories/api_config_repository.dart';
-import '../repositories/chat_repository.dart';
+import '../../service/repositories/api_config_repository.dart';
+import '../../service/repositories/chat_repository.dart';
 import 'core_providers.dart'; // For appDatabaseProvider
 
 // Provider for ApiConfigRepository
@@ -14,5 +14,5 @@ final apiConfigRepositoryProvider = Provider<ApiConfigRepository>((ref) {
 // Provider for ChatRepository
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return ChatRepository(db);
+  return ChatRepository(db, db.chatDao, db.apiConfigDao);
 });

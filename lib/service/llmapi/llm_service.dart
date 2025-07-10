@@ -3,8 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Import local models and services
+import 'package:drift/drift.dart' as drift;
 import '../../data/models/models.dart';
-import '../../data/database/app_database.dart'; // For ApiConfig
+import '../../data/models/api_config.dart'; // Import the new domain model
 import 'gemini_service.dart';
 import 'openai_service.dart';
 import '../../data/providers/api_key_provider.dart';
@@ -221,9 +222,9 @@ class LlmService {
     }
 
     final Map<String, dynamic> params = {
-      if (apiConfig.temperature != null) 'temperature': apiConfig.temperature,
-      if (apiConfig.topP != null) 'topP': apiConfig.topP,
-      if (apiConfig.topK != null) 'topK': apiConfig.topK,
+      if (apiConfig.useCustomTemperature && apiConfig.temperature != null) 'temperature': apiConfig.temperature,
+      if (apiConfig.useCustomTopP && apiConfig.topP != null) 'topP': apiConfig.topP,
+      if (apiConfig.useCustomTopK && apiConfig.topK != null) 'topK': apiConfig.topK,
       if (apiConfig.maxOutputTokens != null) 'maxOutputTokens': apiConfig.maxOutputTokens,
       if (apiConfig.stopSequences != null && apiConfig.stopSequences!.isNotEmpty) 'stopSequences': apiConfig.stopSequences,
     };

@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart'; 
+import 'package:flutter/foundation.dart';
 import 'package:xml/xml.dart' as xml_pkg; // For XmlDocument, XmlElement, XmlName during recalculation
 
-import '../../data/models/models.dart';
-import '../../data/database/models/drift_xml_rule.dart'; // Import DriftXmlRule
-import '../../data/database/common_enums.dart' as drift_enums; // For XmlAction during recalculation
-import '../../data/repositories/message_repository.dart'; // For MessageRepository
+import '../../data/models/chat.dart';
+import '../../data/models/message.dart';
+import '../../data/models/xml_rule.dart';
+import '../../data/models/enums.dart';
+import '../repositories/message_repository.dart'; // For MessageRepository
 import 'xml_processor.dart';
 import '../llmapi/llm_service.dart'; // For LlmContent, LlmTextPart
 import 'package:collection/collection.dart'; // For lastWhereOrNull
@@ -47,9 +48,9 @@ class ContextXmlService {
       return null;
     }
 
-    final tagRuleInfoMap = <String, DriftXmlRule>{};
+    final tagRuleInfoMap = <String, XmlRule>{};
     for (final rule in chat.xmlRules) {
-      if (rule.tagName != null && (rule.action == drift_enums.XmlAction.update || rule.action == drift_enums.XmlAction.save)) {
+      if (rule.tagName != null && (rule.action == XmlAction.update || rule.action == XmlAction.save)) {
         tagRuleInfoMap[rule.tagName!.toLowerCase()] = rule;
       }
     }
@@ -99,13 +100,13 @@ class ContextXmlService {
           final String? existingKeyInCumulativeMap = cumulativeStateMap.keys.firstWhereOrNull((k) => k.toLowerCase() == tagNameLower);
           final String keyToUseForCumulativeMap = existingKeyInCumulativeMap ?? originalTagNameFromElement;
 
-          if (action == drift_enums.XmlAction.save) {
+          if (action == XmlAction.save) {
             if (currentInnerXmlTrimmed.isNotEmpty) {
               cumulativeStateMap[keyToUseForCumulativeMap] = currentInnerXmlTrimmed;
             } else {
               cumulativeStateMap.remove(keyToUseForCumulativeMap);
             }
-          } else if (action == drift_enums.XmlAction.update) {
+          } else if (action == XmlAction.update) {
             final previousInnerXmlFromCumulative = cumulativeStateMap[keyToUseForCumulativeMap];
             if (previousInnerXmlFromCumulative != null && previousInnerXmlFromCumulative.isNotEmpty) {
               if (currentInnerXmlTrimmed.isNotEmpty) {

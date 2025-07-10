@@ -1,14 +1,13 @@
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../database/app_database.dart';
-import '../database/common_enums.dart';
-import '../repositories/api_config_repository.dart';
-import '../repositories/chat_repository.dart';
-import 'repository_providers.dart' show apiConfigRepositoryProvider;
+import '../models/api_config.dart'; // Use the new domain model
+import '../models/enums.dart'; // Use the pure enums
+import '../../service/repositories/api_config_repository.dart';
+import '../../service/repositories/chat_repository.dart' hide chatRepositoryProvider;
+import 'repository_providers.dart' show apiConfigRepositoryProvider, chatRepositoryProvider;
 
 // --- State ---
 @immutable
@@ -76,27 +75,30 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
     int? maxOutputTokens,
     List<String>? stopSequences,
   }) async {
+    final now = DateTime.now();
     final configId = id ?? const Uuid().v4();
-    
-    final companion = ApiConfigsCompanion(
-      id: Value(configId),
-      name: Value(name),
-      apiType: Value(apiType),
-      model: Value(model),
-      apiKey: Value(apiKey),
-      baseUrl: Value(baseUrl),
-      useCustomTemperature: Value(useCustomTemperature),
-      temperature: Value(temperature),
-      useCustomTopP: Value(useCustomTopP),
-      topP: Value(topP),
-      useCustomTopK: Value(useCustomTopK),
-      topK: Value(topK),
-      maxOutputTokens: Value(maxOutputTokens),
-      stopSequences: Value(stopSequences),
-      updatedAt: Value(DateTime.now()),
+
+    // Create the domain model instance directly
+    final config = ApiConfig(
+      id: configId,
+      name: name,
+      apiType: apiType,
+      model: model,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      useCustomTemperature: useCustomTemperature,
+      temperature: temperature,
+      useCustomTopP: useCustomTopP,
+      topP: topP,
+      useCustomTopK: useCustomTopK,
+      topK: topK,
+      maxOutputTokens: maxOutputTokens,
+      stopSequences: stopSequences,
+      createdAt: id == null ? now : (getConfigById(id)?.createdAt ?? now), // Preserve original creation time on update
+      updatedAt: now,
     );
 
-    await _repository.saveConfig(companion);
+    await _repository.saveConfig(config);
     await _loadConfigs();
     debugPrint("Saved API config: $name");
   }

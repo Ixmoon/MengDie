@@ -7,7 +7,7 @@ import 'package:flutter/material.dart'; // Added for debugPrint, consider removi
 import 'package:tiktoken/tiktoken.dart' as tiktoken; // Import tiktoken for fallback
 
 // Import local models, providers, services, and the NEW generic LLM types
-import '../../data/database/app_database.dart'; // For ApiConfig
+import '../../data/models/api_config.dart';
 import 'llm_service.dart'; // Import LlmContent, LlmPart, LlmTextPart
 import '../../data/providers/api_key_provider.dart';
 

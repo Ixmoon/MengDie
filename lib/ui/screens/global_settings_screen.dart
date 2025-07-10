@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/providers/settings_providers.dart';
-import '../../data/models/models.dart';
+import '../../data/models/api_config.dart';
 import '../../data/providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 import '../../data/models/enums.dart';

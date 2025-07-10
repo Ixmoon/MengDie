@@ -484,12 +484,22 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                     if (message.role == MessageRole.model) {
                       final bool useSecondaryXml = chat.enableSecondaryXml;
                       updatedMessage = message.copyWith(
-                        rawText: newDisplayText,
+                        parts: [MessagePart.text(newDisplayText)],
                         secondaryXmlContent: useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
                         originalXmlContent: !useSecondaryXml ? newXmlContent : message.originalXmlContent,
                       );
                     } else {
-                      updatedMessage = message.copyWith(rawText: newDisplayText);
+                      // For user messages, find the first text part and update it, preserving other parts (like images).
+                      final newParts = List<MessagePart>.from(message.parts);
+                      final textPartIndex = newParts.indexWhere((p) => p.type == MessagePartType.text);
+                      if (textPartIndex != -1) {
+                        newParts[textPartIndex] = MessagePart.text(newDisplayText);
+                      } else {
+                        // This case should ideally not happen if we are in _showEditMessageDialog
+                        // which is only for text-only messages, but as a fallback, add a new text part.
+                        newParts.add(MessagePart.text(newDisplayText));
+                      }
+                      updatedMessage = message.copyWith(parts: newParts);
                     }
                     
                     Navigator.pop(dialogContext);

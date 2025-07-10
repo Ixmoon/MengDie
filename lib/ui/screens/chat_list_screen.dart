@@ -7,7 +7,7 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖�
 // 导入模型、Provider 和 Widget
 import '../../data/models/models.dart';
 import '../../data/providers/chat_state_providers.dart';
-import '../../data/repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
+import '../../data/providers/repository_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../../data/providers/core_providers.dart'; // 导入 SharedPreferences Provider
@@ -190,12 +190,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       if (dataOldIndex < 0 || dataOldIndex >= currentChats.length || parentFolder == null) return;
 
       final movedItem = currentChats[dataOldIndex];
-      movedItem.parentFolderId = parentFolder.parentFolderId;
-      movedItem.orderIndex = null; // 重置顺序
-      movedItem.updatedAt = DateTime.now();
+      final updatedItem = movedItem.copyWith(
+        parentFolderId: parentFolder.parentFolderId,
+        orderIndex: null,
+        updatedAt: DateTime.now(),
+      );
       
       try {
-        await repo.saveChat(movedItem);
+        await repo.saveChat(updatedItem);
         if (mounted) {
           scaffoldMessenger.showSnackBar(SnackBar(
             content: Text("'${movedItem.title}' 已移至上一级"),
@@ -224,12 +226,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       
       final movedItem = currentChats[dataOldIndex];
       final targetFolder = currentChats[dataTargetIndex];
-      movedItem.parentFolderId = targetFolder.id;
-      movedItem.orderIndex = null; // 重置顺序
-      movedItem.updatedAt = DateTime.now();
+      final updatedItem = movedItem.copyWith(
+        parentFolderId: targetFolder.id,
+        orderIndex: null,
+        updatedAt: DateTime.now(),
+      );
 
       try {
-        await repo.saveChat(movedItem);
+        await repo.saveChat(updatedItem);
         if (mounted) {
           scaffoldMessenger.showSnackBar(SnackBar(
             content: Text("'${movedItem.title}' 已移至 '${targetFolder.title}'"),
@@ -255,9 +259,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       List<Chat> chatsToUpdate = [];
       for (int i = 0; i < reorderedList.length; i++) {
         if (reorderedList[i].orderIndex != i) {
-          reorderedList[i].orderIndex = i;
-          reorderedList[i].updatedAt = DateTime.now();
-          chatsToUpdate.add(reorderedList[i]);
+          chatsToUpdate.add(reorderedList[i].copyWith(
+            orderIndex: i,
+            updatedAt: DateTime.now(),
+          ));
         }
       }
 
@@ -559,10 +564,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               onTap: () async {
                 Navigator.pop(ctx);
                 // 创建时设置 parentFolderId
-                final newChat = Chat.create(
-                    title: '新聊天 ${DateFormat.Hm().format(DateTime.now())}',
-                    parentFolderId: currentFolderId // 设置父文件夹 ID
-                );
+                final now = DateTime.now();
+                final newChat = Chat(
+                    title: '新聊天 ${DateFormat.Hm().format(now)}',
+                    parentFolderId: currentFolderId, // 设置父文件夹 ID
+                    createdAt: now,
+                    updatedAt: now);
                 try {
                   final repo = ref.read(chatRepositoryProvider);
                   final chatId = await repo.saveChat(newChat);
@@ -631,10 +638,13 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     );
 
     if (folderName != null && folderName.isNotEmpty) {
-      final newFolder = Chat.create(
+      final now = DateTime.now();
+      final newFolder = Chat(
         title: folderName,
         isFolder: true,
         parentFolderId: parentFolderId, // 使用传入的 parentFolderId
+        createdAt: now,
+        updatedAt: now,
       );
       try {
         final repo = ref.read(chatRepositoryProvider);

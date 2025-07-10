@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart'; // For picking images
 
 // 导入模型、Provider 和仓库
 import '../../data/providers/chat_state_providers.dart'; // Needs currentChatProvider
-import '../../data/repositories/chat_repository.dart'; // Needs chatRepositoryProvider
+import '../../service/repositories/chat_repository.dart'; // Needs chatRepositoryProvider
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 
 // 本文件包含用于管理聊天封面和背景图片的屏幕界面。
@@ -33,8 +33,7 @@ class ChatGalleryScreen extends ConsumerWidget {
       if (chatId == null) return;
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat != null) {
-        final chatToUpdate = chat;
-        chatToUpdate.coverImageBase64 = newBase64String;
+        final chatToUpdate = chat.copyWith(coverImageBase64: newBase64String);
         await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
 
         if (context.mounted) {
@@ -109,8 +108,8 @@ class ChatGalleryScreen extends ConsumerWidget {
                     onPressed: () async {
                       final chatToUpdate = ref.read(currentChatProvider(chatId)).value;
                       if (chatToUpdate != null && chatToUpdate.coverImageBase64 != null) {
-                        chatToUpdate.coverImageBase64 = null;
-                        await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
+                        final updatedChat = chatToUpdate.copyWith(coverImageBase64: null);
+                        await ref.read(chatRepositoryProvider).saveChat(updatedChat);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('封面图片已移除')));
                         }
