@@ -34,7 +34,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 12; // Bump version to 12 for new automation API config fields
+  int get schemaVersion => 13; // Bump version to 13 for migration fix
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -82,6 +82,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 12) {
         try { await m.addColumn(chats, chats.preprocessingApiConfigId); } catch (e) { _log.warning("Migration warning (from < 12): ${e.toString()}"); }
         try { await m.addColumn(chats, chats.secondaryXmlApiConfigId); } catch (e) { _log.warning("Migration warning (from < 12): ${e.toString()}"); }
+      }
+      if (from < 13) {
+        // This migration is to fix a bug where columns from schema version 4 were not added correctly for some users.
+        try { await m.addColumn(chats, chats.enablePreprocessing); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.preprocessingPrompt); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.contextSummary); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.enableSecondaryXml); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+        try { await m.addColumn(chats, chats.secondaryXmlPrompt); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
+        try { await m.addColumn(messages, messages.originalXmlContent); } catch (e) { _log.warning("Migration warning (from < 13): ${e.toString()}"); }
       }
     },
   );

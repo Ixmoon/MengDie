@@ -2,7 +2,7 @@ name: gemini_chat_app
 description: A Flutter Gemini Chat Application.
 publish_to: 'none' # Prevent accidental publishing
 
-version: 1.0.0+2
+version: 2.1.0+10
 
 environment:
   sdk: '>=3.0.0 <4.0.0' # Use appropriate SDK constraint
@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  cupertino_icons: ^1.0.8
   google_generative_ai: ^0.4.7 # Check pub.dev for latest version
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
   flutter_secure_storage: ^9.0.0 # Check pub.dev for latest version
