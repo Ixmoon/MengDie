@@ -13,7 +13,7 @@ env:
   # 如果您的项目名称不同，请更改此值。这对于 macOS 打包尤为重要。
   PROJECT_NAME: meng_die 
   # 为确保构建的一致性，请指定一个 Flutter 版本
-  FLUTTER_VERSION: '3.22.2'
+  FLUTTER_VERSION: '3.32.5'
 
 jobs:
   # Android 构建作业
