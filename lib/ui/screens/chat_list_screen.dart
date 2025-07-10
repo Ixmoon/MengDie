@@ -7,7 +7,7 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖�
 // 导入模型、Provider 和 Widget
 import '../../data/models/models.dart';
 import '../../data/providers/chat_state_providers.dart';
-import '../../repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
+import '../../data/repositories/chat_repository.dart'; // 需要 chatRepositoryProvider
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../../data/providers/core_providers.dart'; // 导入 SharedPreferences Provider

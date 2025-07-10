@@ -5,10 +5,10 @@ import 'package:drift/drift.dart' show Value; // For Value() and absent
 // import 'package:isar/isar.dart'; // Removed Isar
 
 // 导入模型和核心 Provider
-import '../data/models/models.dart'; // Still used for Message model class (temporarily)
-import '../data/providers/core_providers.dart'; // Needs appDatabaseProvider
-import '../data/database/app_database.dart'; 
-import '../data/database/daos/message_dao.dart'; // Import MessageDao for type annotation
+import '../models/models.dart'; // Still used for Message model class (temporarily)
+import '../providers/core_providers.dart'; // Needs appDatabaseProvider
+import '../database/app_database.dart'; 
+import '../database/daos/message_dao.dart'; // Import MessageDao for type annotation
 // import '../data/common_enums.dart' as drift_enums; // Already imported by models.dart if Message uses drift_enums
 
 // 本文件包含用于管理 Message 数据集合的仓库类和提供者。

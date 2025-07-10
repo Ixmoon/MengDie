@@ -4,11 +4,11 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 导入模型和核心 Provider
-import '../data/models/models.dart';
-import '../data/models/export_import_dtos.dart'; // 导入 DTOs
-import '../data/providers/core_providers.dart'; // Needs appDatabaseProvider
-import '../data/database/app_database.dart'; 
-import '../data/database/daos/chat_dao.dart'; // Import ChatDao for type annotation
+import '../models/models.dart';
+import '../models/export_import_dtos.dart'; // 导入 DTOs
+import '../providers/core_providers.dart'; // Needs appDatabaseProvider
+import '../database/app_database.dart'; 
+import '../database/daos/chat_dao.dart'; // Import ChatDao for type annotation
 // drift_tables alias might not be strictly necessary if AppDatabase.g.dart exports companions correctly.
 // For now, let's assume ChatsCompanion is accessible via AppDatabase or its generated parts.
 

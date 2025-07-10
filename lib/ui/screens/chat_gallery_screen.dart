@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart'; // For picking images
 
 // 导入模型、Provider 和仓库
 import '../../data/providers/chat_state_providers.dart'; // Needs currentChatProvider
-import '../../repositories/chat_repository.dart'; // Needs chatRepositoryProvider
+import '../../data/repositories/chat_repository.dart'; // Needs chatRepositoryProvider
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 
 // 本文件包含用于管理聊天封面和背景图片的屏幕界面。

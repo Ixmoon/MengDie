@@ -5,8 +5,8 @@ import 'package:flutter/material.dart'; // Added for Color type
 
 import 'package:drift/drift.dart' show Value;
 import '../models/models.dart';
-import '../../repositories/chat_repository.dart';
-import '../../repositories/message_repository.dart';
+import '../repositories/chat_repository.dart';
+import '../repositories/message_repository.dart';
 import '../../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
 import '../../service/process/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
