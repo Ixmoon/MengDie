@@ -1,0 +1,198 @@
+# 此 GitHub Actions 工作流用于在创建新标签时自动构建和发布 Flutter 应用
+# 标签格式应为 v*.*.* (例如 v1.0.0)
+
+name: Build and Release Flutter App
+
+on:
+  push:
+    tags:
+      - 'v*.*.*' # 仅在推送版本标签时触发
+
+# 在多个作业中使用的环境变量
+env:
+  # 如果您的项目名称不同，请更改此值。这对于 macOS 打包尤为重要。
+  PROJECT_NAME: meng_die 
+  # 为确保构建的一致性，请指定一个 Flutter 版本
+  FLUTTER_VERSION: '3.22.2'
+
+jobs:
+  # Android 构建作业
+  build_android:
+    name: Build for Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Java 环境
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # Flutter 需要 Java 11+, 17 是一个安全的选择
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true # 缓存 Flutter 依赖项以加快后续构建速度
+
+      - name: 获取 Flutter 依赖包
+        run: flutter pub get
+
+      - name: 构建 APK (Release)
+        run: flutter build apk --release
+
+      - name: 构建 App Bundle (Release)
+        run: flutter build appbundle --release
+
+      - name: 归档 Android 构建产物
+        run: |
+          mkdir android-artifacts
+          mv build/app/outputs/flutter-apk/*.apk android-artifacts/
+          mv build/app/outputs/bundle/release/*.aab android-artifacts/
+      
+      - name: 上传 Android 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build
+          path: android-artifacts/
+
+  # Linux 构建作业
+  build_linux:
+    name: Build for Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Linux 构建依赖
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 启用 Linux 桌面支持
+        run: flutter config --enable-linux-desktop
+
+      - name: 获取 Flutter 依赖包
+        run: flutter pub get
+
+      - name: 构建 Linux 应用 (Release)
+        run: flutter build linux --release
+
+      - name: 归档 Linux 构建产物
+        run: |
+          cd build/linux/x64/release/bundle
+          tar czvf ../../../../../linux-build.tar.gz .
+          cd ../../../../../
+
+      - name: 上传 Linux 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: linux-build.tar.gz
+
+  # Windows 构建作业
+  build_windows:
+    name: Build for Windows
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 启用 Windows 桌面支持
+        run: flutter config --enable-windows-desktop
+
+      - name: 获取 Flutter 依赖包
+        run: flutter pub get
+
+      - name: 构建 Windows 应用 (Release)
+        run: flutter build windows --release
+
+      - name: 归档 Windows 构建产物
+        run: 7z a -r windows-build.zip ./build/windows/runner/Release/*
+
+      - name: 上传 Windows 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: windows-build.zip
+
+  # macOS 构建作业
+  build_macos:
+    name: Build for macOS
+    runs-on: macos-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Flutter 环境
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: 启用 macOS 桌面支持
+        run: flutter config --enable-macos-desktop
+
+      - name: 获取 Flutter 依赖包
+        run: flutter pub get
+
+      - name: 构建 macOS 应用 (Release)
+        run: flutter build macos --release
+
+      - name: 归档 macOS 构建产物
+        run: |
+          cd build/macos/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent "${{ env.PROJECT_NAME }}.app" macos-build.zip
+          cd -
+      
+      - name: 上传 macOS 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: build/macos/Build/Products/Release/macos-build.zip
+
+  # 创建 Release 并上传所有构建产物的作业
+  create_release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    # 此作业依赖于所有构建作业
+    needs: [build_android, build_linux, build_windows, build_macos]
+    permissions:
+      contents: write # 需要此权限来创建 Release
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          # 将所有产物下载到 artifacts 目录
+          path: artifacts/
+
+      - name: 显示下载的产物以进行调试
+        run: ls -R artifacts/
+
+      - name: 创建 Release 并上传构建产物
+        uses: softprops/action-gh-release@v2
+        with:
+          # 要上传的文件，支持通配符
+          files: |
+            artifacts/android-build/*.apk
+            artifacts/android-build/*.aab
+            artifacts/linux-build/*.tar.gz
+            artifacts/windows-build/*.zip
+            artifacts/macos-build/*.zip
+          # 自动根据提交历史生成 Release notes
+          generate_release_notes: true
