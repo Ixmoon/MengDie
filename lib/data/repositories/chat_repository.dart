@@ -71,6 +71,13 @@ class ChatRepository {
     return await _chatDao.deleteMultipleChatsAndMessages(chatIds);
   }
 
+  // 新增：非响应式地获取文件夹内容
+  Future<List<Chat>> getChatsInFolder(int? parentFolderId) async {
+    debugPrint("ChatRepository: 获取文件夹 ID: $parentFolderId 下的聊天 (Drift)...");
+    final chatDataList = await _chatDao.getChatsInFolder(parentFolderId);
+    return chatDataList.map(ChatMapper.fromData).toList();
+  }
+
   Future<void> updateChatOrder(List<Chat> chatsToUpdate) async {
     if (chatsToUpdate.isEmpty) return;
     debugPrint("ChatRepository: 批量更新 ${chatsToUpdate.length} 个聊天的 orderIndex (Drift)...");
@@ -95,9 +102,9 @@ class ChatRepository {
   }
 
   // --- 导入聊天 ---
-  Future<int> importChat(ChatExportDto chatDto) async {
-    debugPrint("ChatRepository: 开始导入聊天: ${chatDto.title ?? '无标题'} (Drift)...");
-    return await _chatDao.importChatFromDto(chatDto, _db);
+  Future<int> importChat(ChatExportDto chatDto, {int? parentFolderId}) async {
+    debugPrint("ChatRepository: 开始导入聊天: ${chatDto.title ?? '无标题'} 到文件夹 ID: $parentFolderId (Drift)...");
+    return await _chatDao.importChatFromDto(chatDto, _db, parentFolderId: parentFolderId);
   }
 
   Future<int> forkChat(int originalChatId, int fromMessageId) async {

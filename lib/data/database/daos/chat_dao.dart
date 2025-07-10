@@ -84,8 +84,18 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     return (select(chats)..where((t) => t.id.equals(chatId))).watchSingleOrNull();
   }
 
+  Future<List<ChatData>> getChatsInFolder(int? parentFolderId) {
+    final query = select(chats)
+      ..where((t) => parentFolderId == null ? t.parentFolderId.isNull() : t.parentFolderId.equals(parentFolderId))
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.last),
+        (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+      ]);
+    return query.get();
+  }
+
   // --- Import Chat ---
-  Future<int> importChatFromDto(ChatExportDto chatDto, AppDatabase attachedDb) async {
+  Future<int> importChatFromDto(ChatExportDto chatDto, AppDatabase attachedDb, {int? parentFolderId}) async {
     final contextConfigDrift = DriftContextConfig(
         mode: drift_enums.ContextManagementMode.values.firstWhere(
                   (e) => e.name == chatDto.contextConfig.mode.name,
@@ -114,7 +124,7 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       createdAt: now,
       updatedAt: now,
       apiConfigId: Value(chatDto.apiConfigId),
-      parentFolderId: const Value(null),
+      parentFolderId: Value(parentFolderId),
       orderIndex: const Value(0),
       coverImageBase64: Value(chatDto.coverImageBase64),
       backgroundImagePath: const Value(null),

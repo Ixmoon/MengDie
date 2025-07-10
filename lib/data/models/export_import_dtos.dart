@@ -170,6 +170,7 @@ class ChatExportDto {
   final String? secondaryXmlApiConfigId;
   final String? contextSummary;
   final String? continuePrompt;
+  final bool hasRealCoverImage;
 
   const ChatExportDto({
     this.title,
@@ -188,6 +189,7 @@ class ChatExportDto {
     this.secondaryXmlApiConfigId,
     this.contextSummary,
     this.continuePrompt,
+    this.hasRealCoverImage = false,
   });
 
   factory ChatExportDto.fromJson(Map<String, dynamic> json) {
@@ -212,6 +214,57 @@ class ChatExportDto {
       secondaryXmlApiConfigId: json['secondaryXmlApiConfigId'] as String?,
       contextSummary: json['contextSummary'] as String?,
       continuePrompt: json['continuePrompt'] as String?,
+      hasRealCoverImage: json['hasRealCoverImage'] as bool? ?? false,
+    );
+  }
+
+  factory ChatExportDto.createFolder({required String? title}) {
+    return ChatExportDto(
+      title: title,
+      isFolder: true,
+      contextConfig: const ContextConfigDto(),
+      xmlRules: const [],
+      messages: const [],
+    );
+  }
+
+  ChatExportDto copyWith({
+    String? title,
+    String? systemPrompt,
+    bool? isFolder,
+    String? apiConfigId,
+    ContextConfigDto? contextConfig,
+    List<XmlRuleDto>? xmlRules,
+    List<MessageExportDto>? messages,
+    String? coverImageBase64,
+    bool? hasRealCoverImage,
+    bool? enablePreprocessing,
+    String? preprocessingPrompt,
+    String? preprocessingApiConfigId,
+    bool? enableSecondaryXml,
+    String? secondaryXmlPrompt,
+    String? secondaryXmlApiConfigId,
+    String? contextSummary,
+    String? continuePrompt,
+  }) {
+    return ChatExportDto(
+      title: title ?? this.title,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      isFolder: isFolder ?? this.isFolder,
+      apiConfigId: apiConfigId ?? this.apiConfigId,
+      contextConfig: contextConfig ?? this.contextConfig,
+      xmlRules: xmlRules ?? this.xmlRules,
+      messages: messages ?? this.messages,
+      coverImageBase64: coverImageBase64 ?? this.coverImageBase64,
+      hasRealCoverImage: hasRealCoverImage ?? this.hasRealCoverImage,
+      enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
+      preprocessingPrompt: preprocessingPrompt ?? this.preprocessingPrompt,
+      preprocessingApiConfigId: preprocessingApiConfigId ?? this.preprocessingApiConfigId,
+      enableSecondaryXml: enableSecondaryXml ?? this.enableSecondaryXml,
+      secondaryXmlPrompt: secondaryXmlPrompt ?? this.secondaryXmlPrompt,
+      secondaryXmlApiConfigId: secondaryXmlApiConfigId ?? this.secondaryXmlApiConfigId,
+      contextSummary: contextSummary ?? this.contextSummary,
+      continuePrompt: continuePrompt ?? this.continuePrompt,
     );
   }
 
@@ -233,6 +286,7 @@ class ChatExportDto {
       'secondaryXmlApiConfigId': secondaryXmlApiConfigId,
       'contextSummary': contextSummary,
       'continuePrompt': continuePrompt,
+      'hasRealCoverImage': hasRealCoverImage,
     };
   }
 
@@ -249,6 +303,7 @@ class ChatExportDto {
           listEquals(xmlRules, other.xmlRules) &&
           listEquals(messages, other.messages) &&
           coverImageBase64 == other.coverImageBase64 &&
+          hasRealCoverImage == other.hasRealCoverImage &&
           enablePreprocessing == other.enablePreprocessing &&
           preprocessingPrompt == other.preprocessingPrompt &&
           preprocessingApiConfigId == other.preprocessingApiConfigId &&
@@ -268,6 +323,7 @@ class ChatExportDto {
       xmlRules.hashCode ^
       messages.hashCode ^
       coverImageBase64.hashCode ^
+      hasRealCoverImage.hashCode ^
       enablePreprocessing.hashCode ^
       preprocessingPrompt.hashCode ^
       preprocessingApiConfigId.hashCode ^

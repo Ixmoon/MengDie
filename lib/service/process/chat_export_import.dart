@@ -136,34 +136,20 @@ class ChatExportImportService {
     }
   }
 
-  // --- 新增：批量导出到 ZIP ---
+  // --- 更新：批量导出到 ZIP（支持文件夹结构）---
   Future<String?> exportChatsToZip(List<int> chatIds) async {
-    debugPrint("ChatExportImportService: 开始将 ${chatIds.length} 个聊天导出到 ZIP...");
+    debugPrint("ChatExportImportService: 开始将 ${chatIds.length} 个项目导出到 ZIP...");
     await _ensurePermissions();
 
     final archive = Archive();
-    for (final chatId in chatIds) {
-      try {
-        final chat = await _chatRepository.getChat(chatId);
-        final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
-        final fileName = '$sanitizedTitle.jpg';
-        
-        final exportData = await _generateExportData(chatId);
-        if (exportData != null) {
-          archive.addFile(ArchiveFile(fileName, exportData.length, exportData));
-        }
-      } catch (e) {
-        debugPrint("ChatExportImportService: 导出聊天 ID $chatId 到 ZIP 时失败: $e");
-        // 继续处理下一个
-      }
-    }
+    // Start the recursive process from the root of the archive
+    await _addItemsToArchive(archive, chatIds, '');
 
     if (archive.isEmpty) {
-      debugPrint("ChatExportImportService: 没有成功导出的聊天可供压缩。");
-      throw Exception("未能导出任何聊天。");
+      debugPrint("ChatExportImportService: 没有成功导出的项目可供压缩。");
+      throw Exception("未能导出任何项目。");
     }
 
-    // 使用 ZipEncoder 编码
     final zipEncoder = ZipEncoder();
     final zipBytes = zipEncoder.encode(archive);
 
@@ -172,7 +158,7 @@ class ChatExportImportService {
       throw Exception("创建 ZIP 文件失败。");
     }
 
-    final String suggestedFileName = 'mengdie_chats_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
+    final String suggestedFileName = 'mengdie_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
     
     if (kIsWeb) {
       await FilePicker.platform.saveFile(
@@ -194,6 +180,44 @@ class ChatExportImportService {
       } else {
         debugPrint("ChatExportImportService: 用户取消了 ZIP 文件保存操作。");
         return null;
+      }
+    }
+  }
+
+  // --- 新增：递归地将项目（聊天和文件夹）添加到压缩包 ---
+  Future<void> _addItemsToArchive(Archive archive, List<int> itemIds, String currentPath) async {
+    for (final itemId in itemIds) {
+      try {
+        final item = await _chatRepository.getChat(itemId);
+        if (item == null) continue;
+
+        final sanitizedTitle = item.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'item_$itemId';
+
+        if (item.isFolder) {
+          // It's a folder, create a directory and recurse
+          final newPath = '$currentPath$sanitizedTitle/';
+          // Note: The archive library doesn't have an explicit "add directory" concept.
+          // Directories are implicitly created by the paths of the files.
+          // We can add an empty file to ensure the directory exists if it's empty, but it's often not necessary.
+          
+          final children = await _chatRepository.getChatsInFolder(item.id);
+          final childIds = children.map((c) => c.id).toList();
+          if (childIds.isNotEmpty) {
+            await _addItemsToArchive(archive, childIds, newPath);
+          }
+        } else {
+          // It's a chat, generate and add the file
+          final fileName = '$sanitizedTitle.jpg';
+          final filePath = '$currentPath$fileName';
+          
+          final exportData = await _generateExportData(itemId);
+          if (exportData != null) {
+            archive.addFile(ArchiveFile(filePath, exportData.length, exportData));
+          }
+        }
+      } catch (e, s) {
+        debugPrint("ChatExportImportService: [_addItemsToArchive] 导出项目 ID $itemId 时失败: $e\n$s");
+        // Continue with the next item
       }
     }
   }
@@ -236,6 +260,7 @@ class ChatExportImportService {
       ),
       xmlRules: chat.xmlRules.map((r) => XmlRuleDto(tagName: r.tagName, action: r.action)).toList(),
       messages: messageDtos,
+      hasRealCoverImage: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
     );
 
     final jsonString = jsonEncode(chatDto.toJson());
@@ -261,139 +286,186 @@ class ChatExportImportService {
     return img.encodeJpg(image);
   }
 
-  // --- 导入聊天(支持批量) ---
+  // --- 更新：导入聊天（支持批量图片和 ZIP 压缩包）---
   Future<int> importChats() async {
-    debugPrint("ChatExportImportService: 开始批量导入聊天...");
+    debugPrint("ChatExportImportService: 开始导入...");
     await _ensurePermissions();
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: kIsWeb,
-        allowMultiple: true, // 允许多选
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'zip'],
+        withData: true, // Always get bytes for both web and native
+        allowMultiple: true,
       );
 
       if (result == null || result.files.isEmpty) {
-        debugPrint("ChatExportImportService: 用户取消了文件选择或未选择文件。");
+        debugPrint("ChatExportImportService: 用户取消了文件选择。");
         return 0;
       }
 
       int successCount = 0;
       for (final file in result.files) {
+        if (file.bytes == null) {
+          debugPrint("ChatExportImportService: 文件 ${file.name} 的数据为空，跳过。");
+          continue;
+        }
+        
+        final fileName = file.name.toLowerCase();
         try {
-          Uint8List fileBytes;
-          if (kIsWeb) {
-            if (file.bytes == null) {
-              debugPrint("ChatExportImportService: [Batch] Web import - file bytes are null for ${file.name}.");
-              continue;
-            }
-            fileBytes = file.bytes!;
-          } else {
-            if (file.path == null) {
-              debugPrint("ChatExportImportService: [Batch] Native import - file path is null for ${file.name}.");
-              continue;
-            }
-            final f = File(file.path!);
-            fileBytes = await f.readAsBytes();
+          if (fileName.endsWith('.zip')) {
+            final count = await _importFromZip(file.bytes!);
+            successCount += count;
+          } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
+            await _importFromImage(file.bytes!, null); // Import to root
+            successCount++;
           }
-
-          final exifData = await readExifFromBytes(fileBytes);
-          if (exifData.isEmpty) {
-            throw Exception("无法读取图片的元数据，或图片不包含元数据。");
-          }
-
-          String? jsonString;
-          const descriptionKey = _jsonExifJsonKey;
-
-          if (exifData.containsKey(descriptionKey)) {
-            final tag = exifData[descriptionKey];
-            if (tag != null) {
-              dynamic rawValue = tag.values;
-              String? base64String;
-              if (rawValue is IfdBytes) {
-                try {
-                  List<int> bytes = rawValue.toList().cast<int>();
-                  base64String = ascii.decode(bytes, allowInvalid: true);
-                } catch (e) {
-                  base64String = tag.printable;
-                }
-              } else if (rawValue is List<int>) {
-                try {
-                  base64String = ascii.decode(rawValue, allowInvalid: true);
-                } catch (e) {
-                  base64String = tag.printable;
-                }
-              } else if (rawValue is String) {
-                base64String = rawValue;
-              } else {
-                base64String = tag.printable;
-              }
-              base64String = base64String.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
-              if (base64String.startsWith('b"') && base64String.endsWith('"')) {
-                base64String = base64String.substring(2, base64String.length - 1);
-              } else if (base64String.startsWith("b'") && base64String.endsWith("'")) {
-                base64String = base64String.substring(2, base64String.length - 1);
-              }
-              if (base64String.isEmpty) {
-                throw Exception("未能从 EXIF 中提取有效的 Base64 数据。");
-              }
-              try {
-                final decodedBytes = base64Decode(base64String);
-                jsonString = utf8.decode(decodedBytes);
-              } catch (e) {
-                throw Exception("无法解码存储在图片中的聊天数据。数据可能已损坏。");
-              }
-            } else {
-              throw Exception("未找到 ImageDescription 标签对象。");
-            }
-          } else {
-            throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
-          }
-
-          if (jsonString.isEmpty) {
-            throw Exception("未能从图片中恢复有效的聊天数据。");
-          }
-
-          ChatExportDto chatDtoFromJson;
-          try {
-            chatDtoFromJson = ChatExportDto.fromJson(jsonDecode(jsonString));
-          } on FormatException {
-            throw Exception("导入失败：文件中的数据格式无效或已损坏。");
-          }
-
-          String? importedCoverImageBase64String = base64Encode(fileBytes);
-
-          final chatDto = ChatExportDto(
-            title: chatDtoFromJson.title,
-            systemPrompt: chatDtoFromJson.systemPrompt,
-            isFolder: chatDtoFromJson.isFolder,
-            apiConfigId: chatDtoFromJson.apiConfigId,
-            contextConfig: chatDtoFromJson.contextConfig,
-            xmlRules: chatDtoFromJson.xmlRules,
-            messages: chatDtoFromJson.messages,
-            coverImageBase64: importedCoverImageBase64String,
-            enablePreprocessing: chatDtoFromJson.enablePreprocessing,
-            preprocessingPrompt: chatDtoFromJson.preprocessingPrompt,
-            preprocessingApiConfigId: chatDtoFromJson.preprocessingApiConfigId,
-            enableSecondaryXml: chatDtoFromJson.enableSecondaryXml,
-            secondaryXmlPrompt: chatDtoFromJson.secondaryXmlPrompt,
-            secondaryXmlApiConfigId: chatDtoFromJson.secondaryXmlApiConfigId,
-            contextSummary: chatDtoFromJson.contextSummary,
-            continuePrompt: chatDtoFromJson.continuePrompt,
-          );
-
-          await _chatRepository.importChat(chatDto);
-          successCount++;
-        } catch (e) {
-          debugPrint("ChatExportImportService: [Batch] 导入文件 ${file.name} 失败: $e");
-          // Just log and continue with the next file.
+        } catch (e, s) {
+          debugPrint("ChatExportImportService: 导入文件 ${file.name} 失败: $e\n$s");
+          // Log and continue with the next file.
         }
       }
       return successCount;
     } catch (e, s) {
-      debugPrint("ChatExportImportService: 批量导入操作失败 - $e\n$s");
+      debugPrint("ChatExportImportService: 导入操作失败 - $e\n$s");
       rethrow; // Rethrow to be caught by the UI
     }
+  }
+
+  Future<int> _importFromZip(Uint8List zipBytes) async {
+    debugPrint("ChatExportImportService: 正在从 ZIP 文件导入...");
+    final archive = ZipDecoder().decodeBytes(zipBytes);
+    int successCount = 0;
+    
+    // Map to keep track of created folder IDs: 'path/in/zip' -> db_id
+    final Map<String, int?> createdFolderIds = {'': null}; // Root path
+
+    // Create a mutable copy of the files list and sort it to process directories first
+    final sortedFiles = List.of(archive.files);
+    sortedFiles.sort((a, b) => a.name.compareTo(b.name));
+
+    for (final file in sortedFiles) {
+      if (file.isFile) {
+        try {
+          // Determine parent folder path from the file's full path
+          final pathParts = file.name.split('/');
+          final parentPath = pathParts.length > 1 ? pathParts.sublist(0, pathParts.length - 1).join('/') : '';
+          
+          // Get or create the folder ID for the parent path
+          final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds);
+
+          // Import the chat from the image file content
+          await _importFromImage(file.content as Uint8List, parentFolderId);
+          successCount++;
+        } catch (e, s) {
+          debugPrint("ChatExportImportService: 从 ZIP 中的文件 ${file.name} 导入失败: $e\n$s");
+        }
+      }
+    }
+    return successCount;
+  }
+
+  Future<int?> _getOrCreateFolderIdByPath(String path, Map<String, int?> createdFolderIds) async {
+    if (path.isEmpty) return null; // Root folder
+    if (createdFolderIds.containsKey(path)) {
+      return createdFolderIds[path];
+    }
+
+    // Path doesn't exist, we need to create it, and possibly its parents first
+    final pathParts = path.split('/');
+    int? currentParentId = null; // Start from root
+    String currentPath = '';
+
+    for (int i = 0; i < pathParts.length; i++) {
+      final part = pathParts[i];
+      currentPath = (i == 0) ? part : '$currentPath/$part';
+      
+      if (!createdFolderIds.containsKey(currentPath)) {
+        // This folder part doesn't exist, create it
+        debugPrint("ChatExportImportService: 正在创建文件夹: $currentPath");
+        final folderDto = ChatExportDto.createFolder(title: part);
+        final newFolderId = await _chatRepository.importChat(folderDto, parentFolderId: currentParentId);
+        createdFolderIds[currentPath] = newFolderId;
+        currentParentId = newFolderId;
+      } else {
+        currentParentId = createdFolderIds[currentPath];
+      }
+    }
+    return currentParentId;
+  }
+
+  Future<void> _importFromImage(Uint8List imageBytes, int? parentFolderId) async {
+    final exifData = await readExifFromBytes(imageBytes);
+    if (exifData.isEmpty) {
+      throw Exception("无法读取图片的元数据。");
+    }
+
+    String? jsonString;
+    const descriptionKey = _jsonExifJsonKey;
+
+    if (exifData.containsKey(descriptionKey)) {
+      final tag = exifData[descriptionKey];
+      if (tag != null) {
+        // ... [EXIF parsing logic remains the same]
+        dynamic rawValue = tag.values;
+        String? base64String;
+        if (rawValue is IfdBytes) {
+          try {
+            List<int> bytes = rawValue.toList().cast<int>();
+            base64String = ascii.decode(bytes, allowInvalid: true);
+          } catch (e) { base64String = tag.printable; }
+        } else if (rawValue is List<int>) {
+          try {
+            base64String = ascii.decode(rawValue, allowInvalid: true);
+          } catch (e) { base64String = tag.printable; }
+        } else if (rawValue is String) {
+          base64String = rawValue;
+        } else {
+          base64String = tag.printable;
+        }
+        base64String = base64String.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
+        if (base64String.startsWith('b"') && base64String.endsWith('"')) {
+          base64String = base64String.substring(2, base64String.length - 1);
+        } else if (base64String.startsWith("b'") && base64String.endsWith("'")) {
+          base64String = base64String.substring(2, base64String.length - 1);
+        }
+        if (base64String.isEmpty) throw Exception("未能从 EXIF 中提取有效的 Base64 数据。");
+        
+        try {
+          final decodedBytes = base64Decode(base64String);
+          jsonString = utf8.decode(decodedBytes);
+        } catch (e) {
+          throw Exception("无法解码存储在图片中的聊天数据。数据可能已损坏。");
+        }
+      } else {
+        throw Exception("未找到 ImageDescription 标签对象。");
+      }
+    } else {
+      throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
+    }
+
+    if (jsonString == null || jsonString.isEmpty) {
+      throw Exception("未能从图片中恢复有效的聊天数据。");
+    }
+
+    ChatExportDto chatDtoFromJson;
+    try {
+      chatDtoFromJson = ChatExportDto.fromJson(jsonDecode(jsonString));
+    } on FormatException {
+      throw Exception("导入失败：文件中的数据格式无效或已损坏。");
+    }
+
+    // Override the cover image with the importing image itself, only if it's a real one
+    String? importedCoverImageBase64String;
+    if (chatDtoFromJson.hasRealCoverImage) {
+      importedCoverImageBase64String = base64Encode(imageBytes);
+    }
+
+    final finalChatDto = chatDtoFromJson.copyWith(
+      coverImageBase64: importedCoverImageBase64String,
+    );
+    
+    await _chatRepository.importChat(finalChatDto, parentFolderId: parentFolderId);
   }
 
   // --- 辅助函数 (示例，需要具体实现或库支持) ---
