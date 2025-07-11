@@ -2,7 +2,7 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/message.dart';
-import '../../providers/core_providers.dart';
+import '../../ui/providers/core_providers.dart';
 import '../database/daos/message_dao.dart';
 import '../mappers/message_mapper.dart';
 

@@ -6,11 +6,11 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖�
 
 // 导入模型、Provider 和 Widget
 import '../../data/models/models.dart';
-import '../../providers/chat_state_providers.dart';
-import '../../providers/repository_providers.dart';
+import '../providers/chat_state_providers.dart';
+import '../providers/repository_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
-import '../../providers/core_providers.dart'; // 导入 SharedPreferences Provider
+import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
 // import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
 
 // 本文件包含显示聊天列表的主屏幕。
@@ -190,11 +190,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       if (dataOldIndex < 0 || dataOldIndex >= currentChats.length || parentFolder == null) return;
 
       final movedItem = currentChats[dataOldIndex];
-      final updatedItem = movedItem.copyWith(
-        parentFolderId: parentFolder.parentFolderId,
-        orderIndex: null,
-        updatedAt: DateTime.now(),
-      );
+      final updatedItem = movedItem.copyWith({
+        'parentFolderId': parentFolder.parentFolderId,
+        'orderIndex': null,
+        'updatedAt': DateTime.now(),
+      });
       
       try {
         await repo.saveChat(updatedItem);
@@ -226,11 +226,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       
       final movedItem = currentChats[dataOldIndex];
       final targetFolder = currentChats[dataTargetIndex];
-      final updatedItem = movedItem.copyWith(
-        parentFolderId: targetFolder.id,
-        orderIndex: null,
-        updatedAt: DateTime.now(),
-      );
+      final updatedItem = movedItem.copyWith({
+        'parentFolderId': targetFolder.id,
+        'orderIndex': null,
+        'updatedAt': DateTime.now(),
+      });
 
       try {
         await repo.saveChat(updatedItem);
@@ -259,10 +259,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       List<Chat> chatsToUpdate = [];
       for (int i = 0; i < reorderedList.length; i++) {
         if (reorderedList[i].orderIndex != i) {
-          chatsToUpdate.add(reorderedList[i].copyWith(
-            orderIndex: i,
-            updatedAt: DateTime.now(),
-          ));
+          chatsToUpdate.add(reorderedList[i].copyWith({
+            'orderIndex': i,
+            'updatedAt': DateTime.now(),
+          }));
         }
       }
 

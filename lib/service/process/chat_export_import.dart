@@ -467,13 +467,4 @@ class ChatExportImportService {
     
     await _chatRepository.importChat(finalChatDto, parentFolderId: parentFolderId);
   }
-
-  // --- 辅助函数 (示例，需要具体实现或库支持) ---
-  // Future<Uint8List> _addExifData(Uint8List imageData, Map<String, IfdTag> exifData) async {
-  //   // 实现将 exifData 合并到 imageData 的逻辑
-  //   // 这可能需要解析 JPG 结构，找到 APP1 段，然后插入或修改 EXIF 信息
-  //   // 或者使用专门的库来完成
-  //   debugPrint("警告: _addExifData 尚未实现！");
-  //   return imageData; // 返回原始数据
-  // }
 }

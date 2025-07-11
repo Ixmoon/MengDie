@@ -2,15 +2,15 @@ import 'dart:async'; // For StreamSubscription, Timer
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // Added for Color type
 
-import '../data/models/chat.dart';
-import '../data/models/message.dart';
-import '../data/models/enums.dart';
-import '../data/repositories/chat_repository.dart';
-import '../data/repositories/message_repository.dart';
-import '../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
-import '../service/process/context_xml_service.dart'; // Import the new service
+import '../../data/models/chat.dart';
+import '../../data/models/message.dart';
+import '../../data/models/enums.dart';
+import '../../data/repositories/chat_repository.dart';
+import '../../data/repositories/message_repository.dart';
+import '../../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
+import '../../service/process/context_xml_service.dart'; // Import the new service
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
-import '../service/process/xml_processor.dart'; // Added import
+import '../../service/process/xml_processor.dart'; // Added import
 import 'settings_providers.dart';
 
 
@@ -298,7 +298,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
           final chatRepo = _ref.read(chatRepositoryProvider);
           final chat = await chatRepo.getChat(_chatId);
           if (chat != null && chat.contextSummary != null) {
-            await chatRepo.saveChat(chat.copyWith(contextSummary: null));
+            await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
             debugPrint("ChatStateNotifier($_chatId): 因消息删除已清除上下文摘要。");
           }
         } else {
@@ -327,11 +327,11 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
           return;
         }
         if (newParts != null) {
-          messageToSave = message.copyWith(parts: newParts);
+          messageToSave = message.copyWith({'parts': newParts});
         } else if (newText != null) {
           final updatedParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
           updatedParts.insert(0, MessagePart.text(newText));
-          messageToSave = message.copyWith(parts: updatedParts);
+          messageToSave = message.copyWith({'parts': updatedParts});
         } else {
           return; // Nothing to update
         }
@@ -346,7 +346,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         final chatRepo = _ref.read(chatRepositoryProvider);
         final chat = await chatRepo.getChat(_chatId);
         if (chat != null && chat.contextSummary != null) {
-          await chatRepo.saveChat(chat.copyWith(contextSummary: null));
+          await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
           debugPrint("ChatStateNotifier($_chatId): 因消息编辑已清除上下文摘要。");
         }
       }
@@ -523,6 +523,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     Message? userMessage, // Used for regeneration
     bool isRegeneration = false,
     bool isContinuation = false,
+    String? promptOverride,
   }) async {
     if (state.isLoading && !isRegeneration && !isContinuation) {
       debugPrint("sendMessage ($_chatId) 取消：已在加载中。");
@@ -579,7 +580,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         final messageRepo = _ref.read(messageRepositoryProvider);
         await messageRepo.saveMessages(messagesToSave); // Batch save
         final chatRepo = _ref.read(chatRepositoryProvider);
-        await chatRepo.saveChat(chat.copyWith(updatedAt: DateTime.now()));
+        await chatRepo.saveChat(chat.copyWith({'updatedAt': DateTime.now()}));
         debugPrint("用户发送的 ${messagesToSave.length} 条原子消息已保存。");
       } catch (e) {
         debugPrint("保存用户消息时出错: $e");
@@ -601,7 +602,10 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       Chat chatForContext = chat;
       String? lastMessageOverride;
 
-      if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
+      if (promptOverride != null) {
+        lastMessageOverride = promptOverride;
+        debugPrint("sendMessage: 使用了 promptOverride。");
+      } else if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
         lastMessageOverride = chat.continuePrompt;
         // For continuation, we keep the original system prompt.
         // The line clearing it has been removed.
@@ -745,7 +749,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    final previousSummary = chat.contextSummary;
    
    // The summary prompt is used as both the system prompt and the final user message.
-   final chatForSummaryCall = chat.copyWith(systemPrompt: summaryPrompt);
+   final chatForSummaryCall = chat.copyWith({'systemPrompt': summaryPrompt});
 
    // Construct the user content to be summarized
    final previousSummaryText = (previousSummary != null && previousSummary.isNotEmpty)
@@ -771,7 +775,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
    if (response.isSuccess && response.parts.isNotEmpty) {
      final newSummary = response.parts.map((p) => p.text ?? "").join("\n");
-     await chatRepo.saveChat(chat.copyWith(contextSummary: newSummary));
+     await chatRepo.saveChat(chat.copyWith({'contextSummary': newSummary}));
      debugPrint("ChatStateNotifier($_chatId): Summarization successful. New summary saved.");
    } else {
       throw Exception("Summarization failed: ${response.error ?? 'No content'}");
@@ -831,7 +835,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
            
            // Update the placeholder in the database in real-time
            final newParts = [MessagePart.text(newText)];
-           final messageToUpdate = placeholderMessage.copyWith(id: placeholderId, parts: newParts);
+           final messageToUpdate = placeholderMessage.copyWith({'id': placeholderId, 'parts': newParts});
            await messageRepo.saveMessage(messageToUpdate);
            // The UI will react to this change via the chatMessagesProvider stream.
 
@@ -933,9 +937,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
      try {
        // 1. 创建一个临时的 Chat 对象，使用附加XML提示词作为系统提示词
-       final chatForSecondaryXmlCall = chat.copyWith(
-         systemPrompt: chat.secondaryXmlPrompt,
-       );
+       final chatForSecondaryXmlCall = chat.copyWith({
+         'systemPrompt': chat.secondaryXmlPrompt,
+       });
 
        // 2. 使用主构建逻辑构建上下文，并将附加XML提示词作为最后的用户消息传递。
        final secondaryApiRequestContext = await contextXmlService.buildApiRequestContext(
@@ -969,11 +973,11 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    final newParts = [MessagePart.text(displayText)];
  
    // Return a new message object with all final values, ready to be saved.
-   return initialMessage.copyWith(
-     parts: newParts,
-     originalXmlContent: initialXml,
-     secondaryXmlContent: newSecondaryXmlContent,
-   );
+   return initialMessage.copyWith({
+     'parts': newParts,
+     'originalXmlContent': initialXml,
+     'secondaryXmlContent': newSecondaryXmlContent,
+   });
  }
 
   Future<void> cancelGeneration() async {
@@ -1159,9 +1163,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       final llmService = _ref.read(llmServiceProvider);
       final chatRepo = _ref.read(chatRepositoryProvider);
 
-      final chatForTitleCall = chat.copyWith(
-        systemPrompt: globalSettings.titleGenerationPrompt,
-      );
+      final chatForTitleCall = chat.copyWith({
+        'systemPrompt': globalSettings.titleGenerationPrompt,
+      });
 
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chat: chatForTitleCall,
@@ -1184,7 +1188,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         if (newTitle.isNotEmpty) {
           final currentChat = await chatRepo.getChat(_chatId);
           if (currentChat != null && mounted && !_isBackgroundTaskCancelled) {
-            await chatRepo.saveChat(currentChat.copyWith(title: newTitle));
+            await chatRepo.saveChat(currentChat.copyWith({'title': newTitle}));
             debugPrint("ChatStateNotifier($_chatId): Auto title generation successful. New title: $newTitle");
           }
         } else {
@@ -1221,13 +1225,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       return;
     }
 
-    await _sendMessageForSpecialAction(
-      prompt: globalSettings.resumePrompt,
-      apiConfigIdOverride: globalSettings.resumeApiConfigId,
-      actionType: _SpecialActionType.resume,
-      targetMessage: lastMessage,
-      useChatSystemPrompt: true,
-    );
+    await sendMessage(isContinuation: true, promptOverride: globalSettings.resumePrompt);
   }
 
   Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady}) async {
@@ -1306,14 +1304,15 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     final contextXmlService = _ref.read(contextXmlServiceProvider);
     final llmService = _ref.read(llmServiceProvider);
 
-    final chatForCall = useChatSystemPrompt ? chat : chat.copyWith(systemPrompt: prompt);
+    final chatForCall = useChatSystemPrompt ? chat : chat.copyWith({'systemPrompt': prompt});
 
     final apiRequestContext = await contextXmlService.buildApiRequestContext(
       chat: chatForCall,
       currentUserMessage: targetMessage,
       lastMessageOverride: prompt,
       // For resume actions, we need to preserve the XML of the target message
-      messageIdToPreserveXml: actionType == _SpecialActionType.resume ? targetMessage.id : null,
+      // For resume actions, we need to preserve the XML of the target message
+      // messageIdToPreserveXml: actionType == _SpecialActionType.resume ? targetMessage.id : null,
     );
 
     if (_isBackgroundTaskCancelled) return;
@@ -1329,24 +1328,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     if (response.isSuccess && response.parts.isNotEmpty) {
       final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
       switch (actionType) {
-        case _SpecialActionType.resume:
-          // 1. Construct the fully resumed message in memory using copyWith.
-          final newParts = targetMessage.parts.where((p) => p.type != MessagePartType.text).toList();
-          newParts.insert(0, MessagePart.text(generatedText));
-          final resumedMessage = targetMessage.copyWith(
-            parts: newParts,
-            secondaryXmlContent: null, // Clear the secondary XML for reprocessing.
-          );
-
-          // 2. Instead of just saving, run the full async processing pipeline.
-          // This ensures secondary XML is regenerated, summarization is triggered if needed, etc.
-          // _runAsyncProcessingTasks will handle saving the updated message to the database.
-          await _runAsyncProcessingTasks(resumedMessage);
-
-          if (mounted && !_isBackgroundTaskCancelled) {
-            showTopMessage('内容已恢复并处理', backgroundColor: Colors.green);
-          }
-          break;
         case _SpecialActionType.helpMeReply:
           final suggestions = RegExp(r'^\s*\d+\.\s*(.*)', multiLine: true)
               .allMatches(generatedText)
@@ -1383,4 +1364,4 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   }
 }
 
-enum _SpecialActionType { resume, helpMeReply }
+enum _SpecialActionType { helpMeReply }

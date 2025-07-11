@@ -9,7 +9,7 @@ import 'package:tiktoken/tiktoken.dart' as tiktoken; // Import tiktoken for fall
 // Import local models, providers, services, and the NEW generic LLM types
 import '../../data/models/api_config.dart';
 import 'llm_service.dart'; // Import LlmContent, LlmPart, LlmTextPart
-import '../../providers/api_key_provider.dart';
+import '../../ui/providers/api_key_provider.dart';
 
 // 本文件包含与 Google Gemini API 交互的服务类和相关数据结构。
 

@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/models/api_config.dart'; // Use the new domain model
-import '../data/models/enums.dart'; // Use the pure enums
-import '../data/repositories/api_config_repository.dart';
-import '../data/repositories/chat_repository.dart' hide chatRepositoryProvider;
+import '../../data/models/api_config.dart'; // Use the new domain model
+import '../../data/models/enums.dart'; // Use the pure enums
+import '../../data/repositories/api_config_repository.dart';
+import '../../data/repositories/chat_repository.dart' hide chatRepositoryProvider;
 import 'repository_providers.dart' show apiConfigRepositoryProvider, chatRepositoryProvider;
 
 // --- State ---

@@ -14,12 +14,12 @@ import 'package:shared_preferences/shared_preferences.dart'; // 导入 shared_pr
 
 // 导入模型、Provider、仓库、服务和 Widget
 import '../../data/models/models.dart';
-import '../../providers/chat_state_providers.dart';
+import '../providers/chat_state_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/message_bubble.dart';
 import '../widgets/top_message_banner.dart'; // 导入顶部消息横幅 Widget
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
-import '../../providers/settings_providers.dart'; // 导入全局设置
+import '../providers/settings_providers.dart'; // 导入全局设置
  
  // 本文件包含单个聊天会话的屏幕界面。
  
@@ -483,11 +483,11 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                     Message updatedMessage;
                     if (message.role == MessageRole.model) {
                       final bool useSecondaryXml = chat.enableSecondaryXml;
-                      updatedMessage = message.copyWith(
-                        parts: [MessagePart.text(newDisplayText)],
-                        secondaryXmlContent: useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
-                        originalXmlContent: !useSecondaryXml ? newXmlContent : message.originalXmlContent,
-                      );
+                      updatedMessage = message.copyWith({
+                        'parts': [MessagePart.text(newDisplayText)],
+                        'secondaryXmlContent': useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
+                        'originalXmlContent': !useSecondaryXml ? newXmlContent : message.originalXmlContent,
+                      });
                     } else {
                       // For user messages, find the first text part and update it, preserving other parts (like images).
                       final newParts = List<MessagePart>.from(message.parts);
@@ -499,7 +499,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                         // which is only for text-only messages, but as a fallback, add a new text part.
                         newParts.add(MessagePart.text(newDisplayText));
                       }
-                      updatedMessage = message.copyWith(parts: newParts);
+                      updatedMessage = message.copyWith({'parts': newParts});
                     }
                     
                     Navigator.pop(dialogContext);
@@ -1064,21 +1064,16 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
  @override
  void initState() {
    super.initState();
-   widget.messageController.addListener(_onTextChanged);
+   // No longer need to listen to the controller to rebuild the whole widget
+   // widget.messageController.addListener(_onTextChanged);
  }
 
  @override
  void dispose() {
-   widget.messageController.removeListener(_onTextChanged);
+   // widget.messageController.removeListener(_onTextChanged);
    _inputFocusNode.dispose();
    _keyboardListenerFocusNode.dispose();
    super.dispose();
- }
-
- void _onTextChanged() {
-   setState(() {
-     // Rebuild to update the send/attach button
-   });
  }
 
  Future<void> _sendMessage() async {
@@ -1355,52 +1350,55 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                      ),
                    ),
                  if (!chatState.isLoading && !chatState.isProcessingInBackground)
-                   () {
-                     final isSendMode = widget.messageController.text.trim().isNotEmpty;
-                     final canSendMessage = (widget.messageController.text.trim().isNotEmpty || _attachments.isNotEmpty);
+                   ValueListenableBuilder<TextEditingValue>(
+                     valueListenable: widget.messageController,
+                     builder: (context, value, child) {
+                       final isSendMode = value.text.trim().isNotEmpty;
+                       final canSendMessage = (value.text.trim().isNotEmpty || _attachments.isNotEmpty);
 
-                     if (isSendMode) {
-                       // Send Button
-                       return GestureDetector(
-                         onLongPress: chatState.isLoading ? null : _pickFiles,
-                         child: IconButton(
-                           icon: const Icon(Icons.send),
-                           tooltip: '发送 (长按添加文件)',
-                           onPressed: canSendMessage ? _sendMessage : null,
-                           style: IconButton.styleFrom(
-                             padding: const EdgeInsets.all(12),
-                           ).copyWith(
-                             backgroundColor: WidgetStateProperty.resolveWith<Color?>(
-                               (Set<WidgetState> states) {
-                                 if (states.contains(WidgetState.disabled)) {
-                                   return Colors.grey.shade300;
-                                 }
-                                 return Theme.of(context).colorScheme.primary;
-                               },
-                             ),
-                             foregroundColor: WidgetStateProperty.resolveWith<Color?>(
-                               (Set<WidgetState> states) {
-                                 if (states.contains(WidgetState.disabled)) {
-                                   return Colors.grey.shade700;
-                                 }
-                                 return Theme.of(context).colorScheme.onPrimary;
-                               },
+                       if (isSendMode) {
+                         // Send Button
+                         return GestureDetector(
+                           onLongPress: chatState.isLoading ? null : _pickFiles,
+                           child: IconButton(
+                             icon: const Icon(Icons.send),
+                             tooltip: '发送 (长按添加文件)',
+                             onPressed: canSendMessage ? _sendMessage : null,
+                             style: IconButton.styleFrom(
+                               padding: const EdgeInsets.all(12),
+                             ).copyWith(
+                               backgroundColor: WidgetStateProperty.resolveWith<Color?>(
+                                 (Set<WidgetState> states) {
+                                   if (states.contains(WidgetState.disabled)) {
+                                     return Colors.grey.shade300;
+                                   }
+                                   return Theme.of(context).colorScheme.primary;
+                                 },
+                               ),
+                               foregroundColor: WidgetStateProperty.resolveWith<Color?>(
+                                 (Set<WidgetState> states) {
+                                   if (states.contains(WidgetState.disabled)) {
+                                     return Colors.grey.shade700;
+                                   }
+                                   return Theme.of(context).colorScheme.onPrimary;
+                                 },
+                               ),
                              ),
                            ),
-                         ),
-                       );
-                     } else {
-                       // Add File Button
-                       return IconButton(
-                         icon: const Icon(Icons.add_circle_outline),
-                         tooltip: '添加文件',
-                         onPressed: chatState.isLoading ? null : _pickFiles,
-                         style: IconButton.styleFrom(
-                           padding: const EdgeInsets.all(12),
-                         ),
-                       );
-                     }
-                   }(),
+                         );
+                       } else {
+                         // Add File Button
+                         return IconButton(
+                           icon: const Icon(Icons.add_circle_outline),
+                           tooltip: '添加文件',
+                           onPressed: chatState.isLoading ? null : _pickFiles,
+                           style: IconButton.styleFrom(
+                             padding: const EdgeInsets.all(12),
+                           ),
+                         );
+                       }
+                     },
+                   ),
                ],
              ),
            ),

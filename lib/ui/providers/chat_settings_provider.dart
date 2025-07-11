@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/models/chat.dart';
-import '../data/repositories/chat_repository.dart' hide chatRepositoryProvider;
+import '../../data/models/chat.dart';
+import '../../data/repositories/chat_repository.dart' hide chatRepositoryProvider;
 import 'repository_providers.dart';
 
 
@@ -47,7 +47,7 @@ class ChatSettingsNotifier extends StateNotifier<ChatSettingsState> {
       }
       state = state.copyWith(
         initialChat: AsyncValue.data(chat),
-        updatedChat: chat.copyWith(), // Create a mutable copy for editing
+        updatedChat: chat.copyWith({}), // Create a mutable copy for editing
       );
     } catch (e, st) {
       state = state.copyWith(initialChat: AsyncValue.error(e, st));

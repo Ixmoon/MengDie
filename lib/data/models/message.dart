@@ -97,23 +97,15 @@ class Message {
     return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text).join('\n');
   }
 
-  Message copyWith({
-    int? id,
-    int? chatId,
-    List<MessagePart>? parts,
-    MessageRole? role,
-    DateTime? timestamp,
-    String? originalXmlContent,
-    String? secondaryXmlContent,
-  }) {
+  Message copyWith(Map<String, dynamic> updates) {
     return Message(
-      id: id ?? this.id,
-      chatId: chatId ?? this.chatId,
-      parts: parts ?? this.parts,
-      role: role ?? this.role,
-      timestamp: timestamp ?? this.timestamp,
-      originalXmlContent: originalXmlContent ?? this.originalXmlContent,
-      secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
+      id: updates.containsKey('id') ? updates['id'] : id,
+      chatId: updates.containsKey('chatId') ? updates['chatId'] : chatId,
+      parts: updates.containsKey('parts') ? updates['parts'] : parts,
+      role: updates.containsKey('role') ? updates['role'] : role,
+      timestamp: updates.containsKey('timestamp') ? updates['timestamp'] : timestamp,
+      originalXmlContent: updates.containsKey('originalXmlContent') ? updates['originalXmlContent'] : originalXmlContent,
+      secondaryXmlContent: updates.containsKey('secondaryXmlContent') ? updates['secondaryXmlContent'] : secondaryXmlContent,
     );
   }
 }

@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 导入模型、Provider 和仓库
 import '../../data/models/models.dart';
-import '../../providers/api_key_provider.dart';
-import '../../providers/chat_settings_provider.dart';
-import '../../providers/chat_state_providers.dart';
+import '../providers/api_key_provider.dart';
+import '../providers/chat_settings_provider.dart';
+import '../providers/chat_state_providers.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 
 // --- 默认提示词常量 ---
@@ -92,7 +92,7 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
                             return chat; // No change
                           }
                         }
-                        return chat.copyWith(xmlRules: rules);
+                        return chat.copyWith({'xmlRules': rules});
                       });
                       Navigator.pop(context);
                     } else {
@@ -211,14 +211,46 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _BasicInfoSettings extends ConsumerWidget {
+class _BasicInfoSettings extends ConsumerStatefulWidget {
   final int chatId;
   const _BasicInfoSettings({required this.chatId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
-    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
+  ConsumerState<_BasicInfoSettings> createState() => _BasicInfoSettingsState();
+}
+
+class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _systemPromptController;
+  late final TextEditingController _continuePromptController;
+
+  @override
+  void initState() {
+    super.initState();
+    final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
+    _titleController = TextEditingController(text: chat.title ?? '');
+    _systemPromptController = TextEditingController(text: chat.systemPrompt ?? '');
+    _continuePromptController = TextEditingController(text: chat.continuePrompt ?? '');
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _systemPromptController.dispose();
+    _continuePromptController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
+
+    // 监听来自 Provider 的外部变化（例如从全屏编辑器返回）
+    // 并更新 controller 的文本，同时避免不必要的重建
+    // NOTE: This was causing a bug where the last character could not be deleted.
+    // The logic to update from full screen is handled directly in the `onPressed` callback.
+    // The controller is the source of truth for user input.
+    ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,15 +258,17 @@ class _BasicInfoSettings extends ConsumerWidget {
         const _SectionTitle('基本信息'),
         const SizedBox(height: 15),
         TextFormField(
-          key: ValueKey('title_${chat.id}'),
-          initialValue: chat.title,
+          controller: _titleController,
           decoration: const InputDecoration(labelText: '聊天标题', border: OutlineInputBorder()),
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(title: value)),
+          onChanged: (value) {
+            notifier.updateSettings((c) => c.copyWith({
+              'title': value.isEmpty ? null : value
+            }));
+          },
         ),
         const SizedBox(height: 15),
         TextFormField(
-          key: ValueKey('systemPrompt_${chat.id}_${chat.systemPrompt}'),
-          initialValue: chat.systemPrompt,
+          controller: _systemPromptController,
           decoration: InputDecoration(
             labelText: '系统提示词',
             hintText: '定义 AI 的角色或行为...',
@@ -246,26 +280,32 @@ class _BasicInfoSettings extends ConsumerWidget {
                 final newText = await Navigator.of(context).push<String>(
                   MaterialPageRoute(
                     builder: (context) => FullScreenTextEditorScreen(
-                      initialText: chat.systemPrompt ?? '',
+                      initialText: _systemPromptController.text,
                       title: '编辑系统提示词',
-                      // 注意：系统提示词没有全局默认值，因此不提供 defaultValue
                     ),
                   ),
                 );
                 if (newText != null) {
-                  notifier.updateSettings((c) => c.copyWith(systemPrompt: newText));
+                  // 直接更新 controller 和 provider 状态
+                  _systemPromptController.text = newText;
+                  notifier.updateSettings((c) => c.copyWith({
+                    'systemPrompt': newText.isEmpty ? null : newText
+                  }));
                 }
               },
             ),
           ),
           maxLines: 4,
           minLines: 2,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(systemPrompt: value)),
+          onChanged: (value) {
+            notifier.updateSettings((c) => c.copyWith({
+              'systemPrompt': value.isEmpty ? null : value
+            }));
+          },
         ),
         const SizedBox(height: 15),
         TextFormField(
-          key: ValueKey('continuePrompt_${chat.id}_${chat.continuePrompt}'),
-          initialValue: chat.continuePrompt,
+          controller: _continuePromptController,
           decoration: InputDecoration(
             labelText: '续写提示词 (可选)',
             hintText: '为空时，续写功能将使用系统提示词',
@@ -277,21 +317,28 @@ class _BasicInfoSettings extends ConsumerWidget {
                 final newText = await Navigator.of(context).push<String>(
                   MaterialPageRoute(
                     builder: (context) => FullScreenTextEditorScreen(
-                      initialText: chat.continuePrompt ?? defaultContinuePrompt,
+                      initialText: _continuePromptController.text,
                       title: '编辑续写提示词',
                       defaultValue: defaultContinuePrompt,
                     ),
                   ),
                 );
                 if (newText != null) {
-                  notifier.updateSettings((c) => c.copyWith(continuePrompt: newText));
+                  _continuePromptController.text = newText;
+                  notifier.updateSettings((c) => c.copyWith({
+                    'continuePrompt': newText.isEmpty ? null : newText
+                  }));
                 }
               },
             ),
           ),
           maxLines: 4,
           minLines: 2,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(continuePrompt: value.isEmpty ? null : value)),
+          onChanged: (value) {
+            notifier.updateSettings((c) => c.copyWith({
+              'continuePrompt': value.isEmpty ? null : value
+            }));
+          },
         ),
       ],
     );
@@ -324,7 +371,7 @@ class _ApiProviderSettings extends ConsumerWidget {
               child: Text(config.name),
             )).toList(),
             onChanged: (value) {
-              notifier.updateSettings((c) => c.copyWith(apiConfigId: value));
+              notifier.updateSettings((c) => c.copyWith({'apiConfigId': value}));
             },
             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
           ),
@@ -357,7 +404,7 @@ class _ContextManagementSettings extends ConsumerWidget {
           )).toList(),
           onChanged: (value) {
             if (value != null) {
-              notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(mode: value)));
+              notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(mode: value)}));
             }
           },
         ),
@@ -368,7 +415,7 @@ class _ContextManagementSettings extends ConsumerWidget {
             initialValue: contextConfig.maxTurns.toString(),
             decoration: const InputDecoration(labelText: '最大对话轮数', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10))),
+            onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10)})),
           ),
         if (contextConfig.mode == ContextManagementMode.tokens)
           TextFormField(
@@ -376,7 +423,7 @@ class _ContextManagementSettings extends ConsumerWidget {
             initialValue: contextConfig.maxContextTokens?.toString() ?? '',
             decoration: const InputDecoration(labelText: '最大 Tokens (可选)', hintText: '留空则不限制', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxContextTokens: int.tryParse(value)))),
+            onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(maxContextTokens: int.tryParse(value))})),
           ),
       ],
     );
@@ -436,7 +483,7 @@ class _XmlRulesSettings extends ConsumerWidget {
                       onPressed: () {
                         notifier.updateSettings((c) {
                           final rules = List<XmlRule>.from(c.xmlRules)..removeAt(index);
-                          return c.copyWith(xmlRules: rules);
+                          return c.copyWith({'xmlRules': rules});
                         });
                       },
                     ),
@@ -451,15 +498,41 @@ class _XmlRulesSettings extends ConsumerWidget {
   }
 }
 
-class _AutomationSettings extends ConsumerWidget {
+class _AutomationSettings extends ConsumerStatefulWidget {
   final int chatId;
   const _AutomationSettings({required this.chatId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
-    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
+  ConsumerState<_AutomationSettings> createState() => _AutomationSettingsState();
+}
+
+class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
+  late final TextEditingController _preprocessingPromptController;
+  late final TextEditingController _secondaryXmlPromptController;
+
+  @override
+  void initState() {
+    super.initState();
+    final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
+    _preprocessingPromptController = TextEditingController(text: chat.preprocessingPrompt ?? '');
+    _secondaryXmlPromptController = TextEditingController(text: chat.secondaryXmlPrompt ?? '');
+  }
+
+  @override
+  void dispose() {
+    _preprocessingPromptController.dispose();
+    _secondaryXmlPromptController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
+    final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
     final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+
+    // The controller is the source of truth during user input.
+    // The previous ref.listen was causing a bug where the last character could not be deleted.
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,17 +543,16 @@ class _AutomationSettings extends ConsumerWidget {
           title: const Text('启用上下文总结 (前处理)'),
           subtitle: const Text('在回复后，对被遗忘的旧消息进行总结'),
           value: chat.enablePreprocessing,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enablePreprocessing: value)),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enablePreprocessing': value})),
         ),
         if (chat.enablePreprocessing)
           Padding(
             padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 16.0),
             child: TextFormField(
-              key: ValueKey('preprocessingPrompt_${chat.id}_${chat.preprocessingPrompt}'),
-              initialValue: chat.preprocessingPrompt ?? defaultPreprocessingPrompt,
+              controller: _preprocessingPromptController,
               decoration: InputDecoration(
                 labelText: '前处理提示词',
-                hintText: '例如：请总结以下对话...',
+                hintText: defaultPreprocessingPrompt,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.fullscreen),
@@ -489,21 +561,28 @@ class _AutomationSettings extends ConsumerWidget {
                     final newText = await Navigator.of(context).push<String>(
                       MaterialPageRoute(
                         builder: (context) => FullScreenTextEditorScreen(
-                          initialText: chat.preprocessingPrompt ?? defaultPreprocessingPrompt,
+                          initialText: _preprocessingPromptController.text,
                           title: '编辑前处理提示词',
                           defaultValue: defaultPreprocessingPrompt,
                         ),
                       ),
                     );
                     if (newText != null) {
-                      notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: newText));
+                      _preprocessingPromptController.text = newText;
+                      notifier.updateSettings((c) => c.copyWith({
+                        'preprocessingPrompt': newText.isEmpty ? null : newText
+                      }));
                     }
                   },
                 ),
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingPrompt: value.isEmpty ? null : value)),
+              onChanged: (value) {
+                notifier.updateSettings((c) => c.copyWith({
+                  'preprocessingPrompt': value.isEmpty ? null : value
+                }));
+              },
             ),
           ),
        if (chat.enablePreprocessing)
@@ -513,7 +592,7 @@ class _AutomationSettings extends ConsumerWidget {
              value: apiConfigs.any((c) => c.id == chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
              decoration: const InputDecoration(labelText: '用于总结的 API 配置', border: OutlineInputBorder()),
              items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: value)),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'preprocessingApiConfigId': value})),
              validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
            ),
          ),
@@ -521,17 +600,16 @@ class _AutomationSettings extends ConsumerWidget {
           title: const Text('启用附加XML生成'),
           subtitle: const Text('在回复后，使用附加提示词生成额外XML内容'),
           value: chat.enableSecondaryXml,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enableSecondaryXml': value})),
         ),
         if (chat.enableSecondaryXml)
           Padding(
             padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 8.0),
             child: TextFormField(
-              key: ValueKey('secondaryXmlPrompt_${chat.id}_${chat.secondaryXmlPrompt}'),
-              initialValue: chat.secondaryXmlPrompt ?? defaultSecondaryXmlPrompt,
+              controller: _secondaryXmlPromptController,
               decoration: InputDecoration(
                 labelText: '附加XML提示词',
-                hintText: '例如：请根据对话历史，生成tool_code标签...',
+                hintText: defaultSecondaryXmlPrompt,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.fullscreen),
@@ -540,21 +618,28 @@ class _AutomationSettings extends ConsumerWidget {
                     final newText = await Navigator.of(context).push<String>(
                       MaterialPageRoute(
                         builder: (context) => FullScreenTextEditorScreen(
-                          initialText: chat.secondaryXmlPrompt ?? defaultSecondaryXmlPrompt,
+                          initialText: _secondaryXmlPromptController.text,
                           title: '编辑附加XML提示词',
                           defaultValue: defaultSecondaryXmlPrompt,
                         ),
                       ),
                     );
                     if (newText != null) {
-                      notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: newText));
+                      _secondaryXmlPromptController.text = newText;
+                      notifier.updateSettings((c) => c.copyWith({
+                        'secondaryXmlPrompt': newText.isEmpty ? null : newText
+                      }));
                     }
                   },
                 ),
               ),
               maxLines: 3,
               minLines: 1,
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlPrompt: value.isEmpty ? null : value)),
+              onChanged: (value) {
+                notifier.updateSettings((c) => c.copyWith({
+                  'secondaryXmlPrompt': value.isEmpty ? null : value
+                }));
+              },
             ),
           ),
        if (chat.enableSecondaryXml)
@@ -564,7 +649,7 @@ class _AutomationSettings extends ConsumerWidget {
              value: apiConfigs.any((c) => c.id == chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
              decoration: const InputDecoration(labelText: '用于附加XML的 API 配置', border: OutlineInputBorder()),
              items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: value)),
+             onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'secondaryXmlApiConfigId': value})),
              validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
            ),
          ),

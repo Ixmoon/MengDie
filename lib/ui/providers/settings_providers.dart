@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../data/models/enums.dart'; // 导入主题设置枚举
+import '../../data/models/enums.dart'; // 导入主题设置枚举
 
 // SharedPreferences 中用于存储主题设置的键
 const String _themeModeKey = 'app_theme_mode';
@@ -115,32 +115,18 @@ class GlobalSettings {
     this.helpMeReplyTriggerMode = 'manual',
   });
 
-  GlobalSettings copyWith({
-    bool? enableAutoTitleGeneration,
-    String? titleGenerationPrompt,
-    String? titleGenerationApiConfigId,
-    bool clearTitleGenerationApiConfigId = false,
-    bool? enableResume,
-    String? resumePrompt,
-    String? resumeApiConfigId,
-    bool clearResumeApiConfigId = false,
-    bool? enableHelpMeReply,
-    String? helpMeReplyPrompt,
-    String? helpMeReplyApiConfigId,
-    bool clearHelpMeReplyApiConfigId = false,
-    String? helpMeReplyTriggerMode,
-  }) {
+  GlobalSettings copyWith(Map<String, dynamic> updates) {
     return GlobalSettings(
-      enableAutoTitleGeneration: enableAutoTitleGeneration ?? this.enableAutoTitleGeneration,
-      titleGenerationPrompt: titleGenerationPrompt ?? this.titleGenerationPrompt,
-      titleGenerationApiConfigId: clearTitleGenerationApiConfigId ? null : titleGenerationApiConfigId ?? this.titleGenerationApiConfigId,
-      enableResume: enableResume ?? this.enableResume,
-      resumePrompt: resumePrompt ?? this.resumePrompt,
-      resumeApiConfigId: clearResumeApiConfigId ? null : resumeApiConfigId ?? this.resumeApiConfigId,
-      enableHelpMeReply: enableHelpMeReply ?? this.enableHelpMeReply,
-      helpMeReplyPrompt: helpMeReplyPrompt ?? this.helpMeReplyPrompt,
-      helpMeReplyApiConfigId: clearHelpMeReplyApiConfigId ? null : helpMeReplyApiConfigId ?? this.helpMeReplyApiConfigId,
-      helpMeReplyTriggerMode: helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
+      enableAutoTitleGeneration: updates.containsKey('enableAutoTitleGeneration') ? updates['enableAutoTitleGeneration'] : enableAutoTitleGeneration,
+      titleGenerationPrompt: updates.containsKey('titleGenerationPrompt') ? updates['titleGenerationPrompt'] : titleGenerationPrompt,
+      titleGenerationApiConfigId: updates.containsKey('titleGenerationApiConfigId') ? updates['titleGenerationApiConfigId'] : titleGenerationApiConfigId,
+      enableResume: updates.containsKey('enableResume') ? updates['enableResume'] : enableResume,
+      resumePrompt: updates.containsKey('resumePrompt') ? updates['resumePrompt'] : resumePrompt,
+      resumeApiConfigId: updates.containsKey('resumeApiConfigId') ? updates['resumeApiConfigId'] : resumeApiConfigId,
+      enableHelpMeReply: updates.containsKey('enableHelpMeReply') ? updates['enableHelpMeReply'] : enableHelpMeReply,
+      helpMeReplyPrompt: updates.containsKey('helpMeReplyPrompt') ? updates['helpMeReplyPrompt'] : helpMeReplyPrompt,
+      helpMeReplyApiConfigId: updates.containsKey('helpMeReplyApiConfigId') ? updates['helpMeReplyApiConfigId'] : helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: updates.containsKey('helpMeReplyTriggerMode') ? updates['helpMeReplyTriggerMode'] : helpMeReplyTriggerMode,
     );
   }
 }
