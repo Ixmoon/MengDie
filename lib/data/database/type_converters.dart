@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'models/drift_context_config.dart';
 import 'models/drift_xml_rule.dart';
 import 'common_enums.dart';
+import '../../data/models/enums.dart';
 
 // Note: GenerationConfigConverter is removed as its fields are now part of the ApiConfigs table.
 // Note: OpenAIAPIConfigConverter is removed for the same reason.
@@ -118,5 +119,22 @@ class JsonMapConverter extends TypeConverter<Map<String, dynamic>?, String?> {
       return null;
     }
     return json.encode(value);
+  }
+}
+
+// For OpenAIReasoningEffort enum
+class OpenAIReasoningEffortConverter extends TypeConverter<OpenAIReasoningEffort?, String?> {
+  const OpenAIReasoningEffortConverter();
+
+  @override
+  OpenAIReasoningEffort? fromSql(String? fromDb) {
+    if (fromDb == null) return null;
+    // Safely find the enum by name, defaulting to 'none' if not found.
+    return OpenAIReasoningEffort.values.firstWhere((e) => e.name == fromDb, orElse: () => OpenAIReasoningEffort.auto);
+  }
+
+  @override
+  String? toSql(OpenAIReasoningEffort? value) {
+    return value?.name;
   }
 }

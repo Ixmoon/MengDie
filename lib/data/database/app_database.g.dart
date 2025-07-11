@@ -1652,6 +1652,22 @@ class $ApiConfigsTable extends ApiConfigs
               type: DriftSqlType.string, requiredDuringInsert: false)
           .withConverter<List<String>?>(
               $ApiConfigsTable.$converterstopSequences);
+  static const VerificationMeta _enableReasoningEffortMeta =
+      const VerificationMeta('enableReasoningEffort');
+  @override
+  late final GeneratedColumn<bool> enableReasoningEffort =
+      GeneratedColumn<bool>('enable_reasoning_effort', aliasedName, true,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("enable_reasoning_effort" IN (0, 1))'));
+  @override
+  late final GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
+      reasoningEffort = GeneratedColumn<String>(
+              'reasoning_effort', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<OpenAIReasoningEffort?>(
+              $ApiConfigsTable.$converterreasoningEffort);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -1684,6 +1700,8 @@ class $ApiConfigsTable extends ApiConfigs
         topK,
         maxOutputTokens,
         stopSequences,
+        enableReasoningEffort,
+        reasoningEffort,
         createdAt,
         updatedAt
       ];
@@ -1758,6 +1776,12 @@ class $ApiConfigsTable extends ApiConfigs
           maxOutputTokens.isAcceptableOrUnknown(
               data['max_output_tokens']!, _maxOutputTokensMeta));
     }
+    if (data.containsKey('enable_reasoning_effort')) {
+      context.handle(
+          _enableReasoningEffortMeta,
+          enableReasoningEffort.isAcceptableOrUnknown(
+              data['enable_reasoning_effort']!, _enableReasoningEffortMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -1805,6 +1829,11 @@ class $ApiConfigsTable extends ApiConfigs
       stopSequences: $ApiConfigsTable.$converterstopSequences.fromSql(
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}stop_sequences'])),
+      enableReasoningEffort: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}enable_reasoning_effort']),
+      reasoningEffort: $ApiConfigsTable.$converterreasoningEffort.fromSql(
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}reasoning_effort'])),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -1821,6 +1850,8 @@ class $ApiConfigsTable extends ApiConfigs
       const LlmTypeConverter();
   static TypeConverter<List<String>?, String?> $converterstopSequences =
       const StringListConverter();
+  static TypeConverter<OpenAIReasoningEffort?, String?>
+      $converterreasoningEffort = const OpenAIReasoningEffortConverter();
 }
 
 class ApiConfig extends DataClass implements Insertable<ApiConfig> {
@@ -1838,6 +1869,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   final int? topK;
   final int? maxOutputTokens;
   final List<String>? stopSequences;
+  final bool? enableReasoningEffort;
+  final OpenAIReasoningEffort? reasoningEffort;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ApiConfig(
@@ -1855,6 +1888,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       this.topK,
       this.maxOutputTokens,
       this.stopSequences,
+      this.enableReasoningEffort,
+      this.reasoningEffort,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -1892,6 +1927,13 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       map['stop_sequences'] = Variable<String>(
           $ApiConfigsTable.$converterstopSequences.toSql(stopSequences));
     }
+    if (!nullToAbsent || enableReasoningEffort != null) {
+      map['enable_reasoning_effort'] = Variable<bool>(enableReasoningEffort);
+    }
+    if (!nullToAbsent || reasoningEffort != null) {
+      map['reasoning_effort'] = Variable<String>(
+          $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort));
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1922,6 +1964,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       stopSequences: stopSequences == null && nullToAbsent
           ? const Value.absent()
           : Value(stopSequences),
+      enableReasoningEffort: enableReasoningEffort == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enableReasoningEffort),
+      reasoningEffort: reasoningEffort == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reasoningEffort),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -1946,6 +1994,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       topK: serializer.fromJson<int?>(json['topK']),
       maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
       stopSequences: serializer.fromJson<List<String>?>(json['stopSequences']),
+      enableReasoningEffort:
+          serializer.fromJson<bool?>(json['enableReasoningEffort']),
+      reasoningEffort:
+          serializer.fromJson<OpenAIReasoningEffort?>(json['reasoningEffort']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1968,6 +2020,9 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       'topK': serializer.toJson<int?>(topK),
       'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
       'stopSequences': serializer.toJson<List<String>?>(stopSequences),
+      'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
+      'reasoningEffort':
+          serializer.toJson<OpenAIReasoningEffort?>(reasoningEffort),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1988,6 +2043,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           Value<int?> topK = const Value.absent(),
           Value<int?> maxOutputTokens = const Value.absent(),
           Value<List<String>?> stopSequences = const Value.absent(),
+          Value<bool?> enableReasoningEffort = const Value.absent(),
+          Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt}) =>
       ApiConfig(
@@ -2008,6 +2065,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
             : this.maxOutputTokens,
         stopSequences:
             stopSequences.present ? stopSequences.value : this.stopSequences,
+        enableReasoningEffort: enableReasoningEffort.present
+            ? enableReasoningEffort.value
+            : this.enableReasoningEffort,
+        reasoningEffort: reasoningEffort.present
+            ? reasoningEffort.value
+            : this.reasoningEffort,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -2038,6 +2101,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       stopSequences: data.stopSequences.present
           ? data.stopSequences.value
           : this.stopSequences,
+      enableReasoningEffort: data.enableReasoningEffort.present
+          ? data.enableReasoningEffort.value
+          : this.enableReasoningEffort,
+      reasoningEffort: data.reasoningEffort.present
+          ? data.reasoningEffort.value
+          : this.reasoningEffort,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2060,6 +2129,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           ..write('topK: $topK, ')
           ..write('maxOutputTokens: $maxOutputTokens, ')
           ..write('stopSequences: $stopSequences, ')
+          ..write('enableReasoningEffort: $enableReasoningEffort, ')
+          ..write('reasoningEffort: $reasoningEffort, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2082,6 +2153,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       topK,
       maxOutputTokens,
       stopSequences,
+      enableReasoningEffort,
+      reasoningEffort,
       createdAt,
       updatedAt);
   @override
@@ -2102,6 +2175,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           other.topK == this.topK &&
           other.maxOutputTokens == this.maxOutputTokens &&
           other.stopSequences == this.stopSequences &&
+          other.enableReasoningEffort == this.enableReasoningEffort &&
+          other.reasoningEffort == this.reasoningEffort &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2121,6 +2196,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   final Value<int?> topK;
   final Value<int?> maxOutputTokens;
   final Value<List<String>?> stopSequences;
+  final Value<bool?> enableReasoningEffort;
+  final Value<OpenAIReasoningEffort?> reasoningEffort;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -2139,6 +2216,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.topK = const Value.absent(),
     this.maxOutputTokens = const Value.absent(),
     this.stopSequences = const Value.absent(),
+    this.enableReasoningEffort = const Value.absent(),
+    this.reasoningEffort = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2158,6 +2237,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.topK = const Value.absent(),
     this.maxOutputTokens = const Value.absent(),
     this.stopSequences = const Value.absent(),
+    this.enableReasoningEffort = const Value.absent(),
+    this.reasoningEffort = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2179,6 +2260,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     Expression<int>? topK,
     Expression<int>? maxOutputTokens,
     Expression<String>? stopSequences,
+    Expression<bool>? enableReasoningEffort,
+    Expression<String>? reasoningEffort,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -2199,6 +2282,9 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       if (topK != null) 'top_k': topK,
       if (maxOutputTokens != null) 'max_output_tokens': maxOutputTokens,
       if (stopSequences != null) 'stop_sequences': stopSequences,
+      if (enableReasoningEffort != null)
+        'enable_reasoning_effort': enableReasoningEffort,
+      if (reasoningEffort != null) 'reasoning_effort': reasoningEffort,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2220,6 +2306,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       Value<int?>? topK,
       Value<int?>? maxOutputTokens,
       Value<List<String>?>? stopSequences,
+      Value<bool?>? enableReasoningEffort,
+      Value<OpenAIReasoningEffort?>? reasoningEffort,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -2238,6 +2326,9 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       topK: topK ?? this.topK,
       maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
       stopSequences: stopSequences ?? this.stopSequences,
+      enableReasoningEffort:
+          enableReasoningEffort ?? this.enableReasoningEffort,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2292,6 +2383,15 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       map['stop_sequences'] = Variable<String>(
           $ApiConfigsTable.$converterstopSequences.toSql(stopSequences.value));
     }
+    if (enableReasoningEffort.present) {
+      map['enable_reasoning_effort'] =
+          Variable<bool>(enableReasoningEffort.value);
+    }
+    if (reasoningEffort.present) {
+      map['reasoning_effort'] = Variable<String>($ApiConfigsTable
+          .$converterreasoningEffort
+          .toSql(reasoningEffort.value));
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2321,6 +2421,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
           ..write('topK: $topK, ')
           ..write('maxOutputTokens: $maxOutputTokens, ')
           ..write('stopSequences: $stopSequences, ')
+          ..write('enableReasoningEffort: $enableReasoningEffort, ')
+          ..write('reasoningEffort: $reasoningEffort, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -3210,6 +3312,8 @@ typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
   Value<int?> topK,
   Value<int?> maxOutputTokens,
   Value<List<String>?> stopSequences,
+  Value<bool?> enableReasoningEffort,
+  Value<OpenAIReasoningEffort?> reasoningEffort,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -3229,6 +3333,8 @@ typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
   Value<int?> topK,
   Value<int?> maxOutputTokens,
   Value<List<String>?> stopSequences,
+  Value<bool?> enableReasoningEffort,
+  Value<OpenAIReasoningEffort?> reasoningEffort,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -3289,6 +3395,16 @@ class $$ApiConfigsTableFilterComposer
   ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
       get stopSequences => $composableBuilder(
           column: $table.stopSequences,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<bool> get enableReasoningEffort => $composableBuilder(
+      column: $table.enableReasoningEffort,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<OpenAIReasoningEffort?, OpenAIReasoningEffort,
+          String>
+      get reasoningEffort => $composableBuilder(
+          column: $table.reasoningEffort,
           builder: (column) => ColumnWithTypeConverterFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
@@ -3354,6 +3470,14 @@ class $$ApiConfigsTableOrderingComposer
       column: $table.stopSequences,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get enableReasoningEffort => $composableBuilder(
+      column: $table.enableReasoningEffort,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get reasoningEffort => $composableBuilder(
+      column: $table.reasoningEffort,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -3413,6 +3537,13 @@ class $$ApiConfigsTableAnnotationComposer
       $composableBuilder(
           column: $table.stopSequences, builder: (column) => column);
 
+  GeneratedColumn<bool> get enableReasoningEffort => $composableBuilder(
+      column: $table.enableReasoningEffort, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
+      get reasoningEffort => $composableBuilder(
+          column: $table.reasoningEffort, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -3457,6 +3588,9 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<int?> topK = const Value.absent(),
             Value<int?> maxOutputTokens = const Value.absent(),
             Value<List<String>?> stopSequences = const Value.absent(),
+            Value<bool?> enableReasoningEffort = const Value.absent(),
+            Value<OpenAIReasoningEffort?> reasoningEffort =
+                const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -3476,6 +3610,8 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             topK: topK,
             maxOutputTokens: maxOutputTokens,
             stopSequences: stopSequences,
+            enableReasoningEffort: enableReasoningEffort,
+            reasoningEffort: reasoningEffort,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -3495,6 +3631,9 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<int?> topK = const Value.absent(),
             Value<int?> maxOutputTokens = const Value.absent(),
             Value<List<String>?> stopSequences = const Value.absent(),
+            Value<bool?> enableReasoningEffort = const Value.absent(),
+            Value<OpenAIReasoningEffort?> reasoningEffort =
+                const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -3514,6 +3653,8 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             topK: topK,
             maxOutputTokens: maxOutputTokens,
             stopSequences: stopSequences,
+            enableReasoningEffort: enableReasoningEffort,
+            reasoningEffort: reasoningEffort,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,

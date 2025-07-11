@@ -105,6 +105,8 @@ class ApiConfigsScreen extends ConsumerWidget {
     var topP = existingConfig?.topP ?? 0.95;
     var useCustomTopK = existingConfig?.useCustomTopK ?? false;
     var topK = existingConfig?.topK?.toDouble() ?? 40.0;
+    var enableReasoningEffort = existingConfig?.enableReasoningEffort ?? false;
+    var reasoningEffort = existingConfig?.reasoningEffort ?? OpenAIReasoningEffort.auto;
 
     // Reset the state of the models provider when opening the dialog
     Future.microtask(() => ref.read(openaiModelsProvider.notifier).resetState());
@@ -248,6 +250,31 @@ class ApiConfigsScreen extends ConsumerWidget {
                         label: topK.round().toString(),
                         onChanged: useCustomTopK ? (val) => setDialogState(() => topK = val) : null,
                       ),
+                      if (selectedApiType == LlmType.openai) ...[
+                        const SizedBox(height: 16),
+                        SwitchListTile(
+                          title: const Text('启用推理强度'),
+                          subtitle: Text(enableReasoningEffort ? '已启用' : '已关闭'),
+                          value: enableReasoningEffort,
+                          onChanged: (val) => setDialogState(() => enableReasoningEffort = val),
+                        ),
+                        if (enableReasoningEffort)
+                          DropdownButtonFormField<OpenAIReasoningEffort>(
+                            value: reasoningEffort,
+                            items: OpenAIReasoningEffort.values.map((level) {
+                              return DropdownMenuItem(
+                                value: level,
+                                child: Text(level.name),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() => reasoningEffort = value);
+                              }
+                            },
+                            decoration: const InputDecoration(labelText: '推理强度 (Reasoning Effort)'),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -294,6 +321,8 @@ class ApiConfigsScreen extends ConsumerWidget {
                         topK: useCustomTopK ? topK.round() : null,
                         maxOutputTokens: int.tryParse(maxTokensController.text),
                         stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+                        enableReasoningEffort: enableReasoningEffort,
+                        reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
                       );
                       Navigator.pop(context);
                     },
@@ -333,6 +362,8 @@ class ApiConfigsScreen extends ConsumerWidget {
                       topK: useCustomTopK ? topK.round() : null,
                       maxOutputTokens: int.tryParse(maxTokensController.text),
                       stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+                      enableReasoningEffort: enableReasoningEffort,
+                      reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
                     );
                     Navigator.pop(context);
                   },

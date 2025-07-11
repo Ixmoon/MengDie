@@ -23,6 +23,10 @@ class ApiConfigs extends Table {
   IntColumn get maxOutputTokens => integer().nullable()();
   TextColumn get stopSequences => text().map(const StringListConverter()).nullable()();
 
+  // --- OpenAI 专属设置 ---
+  BoolColumn get enableReasoningEffort => boolean().nullable()();
+  TextColumn get reasoningEffort => text().map(const OpenAIReasoningEffortConverter()).nullable()();
+
   // --- 时间戳 ---
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

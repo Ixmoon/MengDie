@@ -19,6 +19,9 @@ class ApiConfig {
   final List<String>? stopSequences;
   final DateTime createdAt;
   final DateTime updatedAt;
+  // OpenAI specific settings
+  final bool? enableReasoningEffort;
+  final OpenAIReasoningEffort? reasoningEffort;
 
   const ApiConfig({
     required this.id,
@@ -37,5 +40,7 @@ class ApiConfig {
     this.stopSequences,
     required this.createdAt,
     required this.updatedAt,
+    this.enableReasoningEffort,
+    this.reasoningEffort = OpenAIReasoningEffort.auto,
   });
 }

@@ -7,7 +7,8 @@ import 'package:flutter/foundation.dart'; // For debugPrint
 import 'package:tiktoken/tiktoken.dart' as tiktoken; // For token counting
 
 import '../../data/models/models.dart';
-import 'llm_service.dart';
+import 'llm_models.dart';
+import 'base_llm_service.dart'; // 导入抽象基类
 
 // 本文件包含与 OpenAI 兼容 API 交互的服务类和相关数据结构。
 
@@ -18,7 +19,7 @@ final openaiServiceProvider = Provider<OpenAIService>((ref) {
 });
 
 // --- OpenAI Service Implementation ---
-class OpenAIService {
+class OpenAIService implements BaseLlmService {
   // ignore: unused_field
   final Ref _ref;
   final Dio _dio;
@@ -29,6 +30,7 @@ class OpenAIService {
   OpenAIService(this._ref, this._dio);
 
   /// Sends messages and gets a streaming response from an OpenAI-compatible API.
+  @override
   Stream<LlmStreamChunk> sendMessageStream({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
@@ -126,6 +128,11 @@ class OpenAIService {
 
     if (generationParams['stopSequences'] != null && (generationParams['stopSequences'] as List).isNotEmpty) {
       requestBody["stop"] = generationParams['stopSequences'];
+    }
+
+    // Handle reasoning_effort (passed directly from LlmService)
+    if (generationParams['reasoning_effort'] != null) {
+      requestBody["reasoning_effort"] = generationParams['reasoning_effort'];
     }
 
     final String apiUrl;
@@ -270,6 +277,7 @@ class OpenAIService {
   }
 
   /// Sends messages and gets a single, complete response from an OpenAI-compatible API.
+  @override
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
@@ -363,6 +371,11 @@ class OpenAIService {
       requestBody["stop"] = generationParams['stopSequences'];
     }
 
+    // Handle reasoning_effort (passed directly from LlmService)
+    if (generationParams['reasoning_effort'] != null) {
+      requestBody["reasoning_effort"] = generationParams['reasoning_effort'];
+    }
+
     final String apiUrl;
     try {
       final baseUrl = apiConfig.baseUrl;
@@ -445,46 +458,43 @@ class OpenAIService {
     }
   }
 
-  /// Counts tokens for a given context using a client-side library (tiktoken).
+  /// 使用客户端库 (tiktoken) 计算给定上下文的 Token 数量。
+  /// 这是一个纯本地的、高性能的异步操作，用于精确的上下文窗口管理。
+  /// 如果计算失败（例如，模型名称无效），它将抛出异常。
+  @override
   Future<int> countTokens({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
   }) async {
-    debugPrint("OpenAIService.countTokens called for model ${apiConfig.model}");
-    try {
-      // ignore: prefer_typing_uninitialized_variables
-      var encoding;
+    // 使用立即调用函数表达式 (IIFE) 来确定编码器，允许 `encoding` 保持 final。
+    final encoding = (() {
       try {
-        // First, try to get the encoding for the specific model.
-        encoding = tiktoken.encodingForModel(apiConfig.model);
+        // 优先尝试获取特定模型的编码器。
+        return tiktoken.encodingForModel(apiConfig.model);
       } catch (_) {
-        // If the model is not found (which throws an error), fall back to a generic but good encoder.
+        // 如果失败，则回退到通用编码器。
         debugPrint("Model '${apiConfig.model}' not found in tiktoken, falling back to 'cl100k_base' for token counting.");
-        encoding = tiktoken.getEncoding('cl100k_base');
+        return tiktoken.getEncoding('cl100k_base');
       }
+    })();
 
-      int totalTokens = 0;
-      for (final message in llmContext) {
-        // A simple token counting logic: concatenate text parts and encode.
-        // This provides a close estimate. For perfect accuracy, the message
-        // structure (roles, separators) would need to be replicated.
-        final textContent = message.parts
-            .whereType<LlmTextPart>()
-            .map((part) => part.text)
-            .join("\n");
+    int totalTokens = 0;
+    for (final message in llmContext) {
+      // 简单的 Token 计算逻辑：连接文本部分并编码。
+      // 这提供了一个紧密的估算。要达到完美精度，需要复制消息的
+      // 确切结构（角色、分隔符等），但这对于窗口管理而言过于复杂。
+      final textContent = message.parts
+          .whereType<LlmTextPart>()
+          .map((part) => part.text)
+          .join("\n");
 
-        if (textContent.isNotEmpty) {
-          totalTokens += (encoding.encode(textContent).length as num).toInt();
-        }
+      if (textContent.isNotEmpty) {
+        totalTokens += encoding.encode(textContent).length;
       }
-      debugPrint("Calculated total tokens: $totalTokens for model ${apiConfig.model}");
-      return totalTokens;
-    } catch (e) {
-      debugPrint("Unexpected error during token counting for model '${apiConfig.model}': $e. Returning -1.");
-      // Fallback to -1 for any other unexpected errors.
-      return -1;
     }
+    return totalTokens;
   }
+  @override
   Future<void> cancelRequest() async {
     if (_cancelToken != null && !_cancelToken!.isCancelled) {
       debugPrint("OpenAIService: Cancelling active Dio request...");

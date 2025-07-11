@@ -935,6 +935,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
             }
             
             Widget buildActionButtons() {
+              final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
               final canPerformAction = isLastMessage &&
                                     messages.isNotEmpty &&
                                     messages.last.role == MessageRole.model &&
@@ -982,28 +983,22 @@ class _MessageListState extends ConsumerState<_MessageList> {
                  buttons.add(const SizedBox(width: 8));
                  buttons.add(
                   FilledButton.tonalIcon(
-                    icon: const Icon(Icons.quickreply_rounded, size: 16),
-                    label: const Text('帮我回复'),
-                    onPressed: () {
+                    icon: chatState.isGeneratingSuggestions
+                          ? const SizedBox.shrink() // Hide icon when loading
+                          : const Icon(Icons.quickreply_rounded, size: 16),
+                    label: chatState.isGeneratingSuggestions
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('帮我回复'),
+                    onPressed: chatState.isGeneratingSuggestions ? null : () {
                       notifier.generateHelpMeReply(
                         onSuggestionsReady: (suggestions) {
                           if (!mounted) return;
                           showDialog(
                             context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              title: const Text('选择一个回复'),
-                              content: SingleChildScrollView(
-                                child: ListBody(
-                                  children: suggestions.map((s) => ListTile(
-                                    title: Text(s),
-                                    onTap: () {
-                                      widget.onSuggestionSelected(s);
-                                      Navigator.of(dialogContext).pop();
-                                    },
-                                  )).toList(),
-                                ),
-                              ),
-                              actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('取消'))],
+                            builder: (dialogContext) => _HelpMeReplyDialog(
+                              chatId: widget.chatId,
+                              initialSuggestions: suggestions,
+                              onSuggestionSelected: widget.onSuggestionSelected,
                             ),
                           );
                         },
@@ -1043,6 +1038,134 @@ class _MessageListState extends ConsumerState<_MessageList> {
       },
       loading: () => const SizedBox.shrink(),
       error: (err, stack) => Center(child: Text("无法加载消息: $err")),
+    );
+  }
+}
+
+
+class _HelpMeReplyDialog extends ConsumerStatefulWidget {
+  final int chatId;
+  final List<String> initialSuggestions;
+  final Function(String) onSuggestionSelected;
+
+  const _HelpMeReplyDialog({
+    required this.chatId,
+    required this.initialSuggestions,
+    required this.onSuggestionSelected,
+  });
+
+  @override
+  ConsumerState<_HelpMeReplyDialog> createState() => _HelpMeReplyDialogState();
+}
+
+class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with SingleTickerProviderStateMixin {
+  late final AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 1),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+    final allSuggestionPages = chatState.helpMeReplySuggestions ?? [];
+    final pageIndex = chatState.helpMeReplyPageIndex;
+    final currentSuggestions = (allSuggestionPages.isNotEmpty && pageIndex < allSuggestionPages.length)
+        ? allSuggestionPages[pageIndex]
+        : <String>[];
+    final totalPages = allSuggestionPages.length;
+    final isGenerating = chatState.isGeneratingSuggestions;
+
+    // Control animation based on state
+    if (isGenerating && !_animationController.isAnimating) {
+      _animationController.repeat();
+    } else if (!isGenerating && _animationController.isAnimating) {
+      _animationController.stop();
+    }
+
+    Widget contentWidget;
+    if (isGenerating && allSuggestionPages.isEmpty) {
+      contentWidget = const Center(child: CircularProgressIndicator());
+    } else if (allSuggestionPages.isEmpty) {
+      contentWidget = const Center(child: Text('没有可用的建议。'));
+    } else {
+      contentWidget = Column(
+        mainAxisSize: MainAxisSize.min, // Crucial for AlertDialog content sizing
+        children: currentSuggestions.map((s) => ListTile(
+          title: Text(s),
+          onTap: () {
+            widget.onSuggestionSelected(s);
+            Navigator.of(context).pop();
+          },
+        )).toList(),
+      );
+    }
+
+    return AlertDialog(
+      contentPadding: const EdgeInsets.fromLTRB(24.0, 20.0, 24.0, 0),
+      content: contentWidget,
+      actionsPadding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 12.0),
+      actions: <Widget>[
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Left-aligned pagination controls
+            if (totalPages > 0)
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: (isGenerating || pageIndex <= 0) ? null : () => notifier.changeHelpMeReplyPage(-1),
+                  ),
+                  Text('${pageIndex + 1}/$totalPages'),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: (isGenerating || pageIndex >= totalPages - 1) ? null : () => notifier.changeHelpMeReplyPage(1),
+                  ),
+                ],
+              )
+            else
+              const SizedBox(), // Placeholder to keep space
+            
+            // Right-aligned action buttons
+            Row(
+              children: [
+                RotationTransition(
+                  turns: _animationController,
+                  child: IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: '获取新选项',
+                    onPressed: isGenerating ? null : () {
+                      notifier.generateHelpMeReply(
+                        forceRefresh: true,
+                        onSuggestionsReady: (suggestions) {
+                          // The dialog will rebuild automatically via the provider
+                        },
+                      );
+                    },
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('关闭'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

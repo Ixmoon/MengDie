@@ -24,6 +24,8 @@ class ChatSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
+  // Notifier 实例，用于在 dispose 中安全地调用
+  ChatSettingsNotifier? _notifier;
   // --- 显示添加/编辑 XML 规则的对话框 ---
   void _showXmlRuleDialog(BuildContext context, {XmlRule? existingRule, int? ruleIndex}) {
     final chatId = ref.read(activeChatIdProvider);
@@ -111,6 +113,16 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
   }
 
   @override
+  void dispose() {
+    // 自动保存设置
+    _notifier?.saveSettings().catchError((e) {
+      // 在后台静默处理错误，或者使用日志库记录
+      debugPrint('自动保存聊天设置失败: $e');
+    });
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final chatId = ref.watch(activeChatIdProvider);
     if (chatId == null) {
@@ -120,7 +132,7 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
       );
     }
     final settingsState = ref.watch(chatSettingsProvider(chatId));
-    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
+    _notifier = ref.read(chatSettingsProvider(chatId).notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -139,25 +151,6 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
             ],
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.save_outlined),
-            tooltip: '保存设置',
-            onPressed: () async {
-              try {
-                await notifier.saveSettings();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('设置已保存')));
-                  Navigator.pop(context);
-                }
-              } catch (e) {
-                 if (context.mounted) {
-                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red));
-                 }
-              }
-            },
-          ),
-        ],
       ),
       body: settingsState.initialChat.when(
         data: (_) {

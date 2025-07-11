@@ -41,4 +41,18 @@ enum MessagePartType {
   file, // For generic file attachments
 }
 
+// --- OpenAI 'reasoning_effort' setting ---
+enum OpenAIReasoningEffort {
+  auto,   // "自动" - 默认值, 发送 "auto" 值，由 API 决定。
+  none,   // "关闭" - 对于支持的模型，此设置将禁用思考功能
+  low,    // "低"
+  medium, // "中"
+  high;   // "高"
+
+  /// 获取对应于API请求的字符串值
+  String get toApiValue {
+    return name; // The enum member names (e.g., "auto", "none", "low") match the API values
+  }
+}
+
 

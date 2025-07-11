@@ -19,7 +19,7 @@ import 'daos/api_config_dao.dart'; // Import new DAO
 import 'type_converters.dart';
 import 'models/drift_context_config.dart';
 import 'models/drift_xml_rule.dart';
-import 'common_enums.dart';
+import '../models/enums.dart';
 // path_provider and path are only needed in native.dart now.
 
 
@@ -34,7 +34,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 16; // Bump version to 16 for a comprehensive fix
+  int get schemaVersion => 19; // Bump version to 19 for reasoning_effort columns
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -108,6 +108,16 @@ class AppDatabase extends _$AppDatabase {
         try { await m.addColumn(chats, chats.apiConfigId); } catch (e) { /* ignore */ }
         try { await m.addColumn(chats, chats.preprocessingApiConfigId); } catch (e) { /* ignore */ }
         try { await m.addColumn(chats, chats.secondaryXmlApiConfigId); } catch (e) { /* ignore */ }
+      }
+      if (from < 17) {
+        _log.info('Running migration for version 17 to add reasoning_effort fields.');
+        try { await m.addColumn(apiConfigs, apiConfigs.enableReasoningEffort); } catch (e) { /* ignore */ }
+        try { await m.addColumn(apiConfigs, apiConfigs.reasoningEffort); } catch (e) { /* ignore */ }
+      }
+      if (from < 19) {
+        _log.info('Running migration for version 19 to ensure reasoning_effort columns are correctly added with defaults.');
+        try { await m.addColumn(apiConfigs, apiConfigs.enableReasoningEffort); } catch (e) { /* ignore */ }
+        try { await m.addColumn(apiConfigs, apiConfigs.reasoningEffort); } catch (e) { /* ignore */ }
       }
     },
   );

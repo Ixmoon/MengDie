@@ -7,60 +7,14 @@ import 'package:flutter/material.dart'; // Added for debugPrint, consider removi
 import 'package:tiktoken/tiktoken.dart' as tiktoken; // Import tiktoken for fallback
 
 // Import local models, providers, services, and the NEW generic LLM types
+import '../../data/models/models.dart';
 import '../../data/models/api_config.dart';
-import 'llm_service.dart'; // Import LlmContent, LlmPart, LlmTextPart
+import 'llm_models.dart'; // Import LlmContent, LlmPart, LlmTextPart
 import '../../ui/providers/api_key_provider.dart';
+import 'base_llm_service.dart'; // 导入抽象基类
 
-// 本文件包含与 Google Gemini API 交互的服务类和相关数据结构。
-
-// --- Gemini API 响应结果类 (单次调用) ---
-@immutable
-class GeminiResponse {
-  final String rawText; // API 返回的原始文本
-  final bool isSuccess; // 调用是否成功
-  final String? error; // 如果调用失败，包含错误信息
-
-  const GeminiResponse({
-    required this.rawText,
-    this.isSuccess = true,
-    this.error,
-  });
-
-  // 用于创建错误响应的工厂构造函数
-  const GeminiResponse.error(String message) :
-    rawText = '',
-    isSuccess = false,
-    error = message;
-}
-
-// --- Gemini API 流式响应块数据类 ---
-@immutable
-class GeminiStreamChunk {
-  final String textChunk; // 当前块接收到的文本片段
-  final String accumulatedText; // 到目前为止在此流中接收到的所有原始文本
-  final bool isFinished; // 是否是流的最后一个块
-  final String? error; // 如果流处理中遇到错误，包含错误信息
-  final DateTime timestamp; // 块生成的时间戳
-
-  const GeminiStreamChunk({
-    required this.textChunk,
-    required this.accumulatedText,
-    required this.timestamp,
-    this.isFinished = false,
-    this.error,
-  });
-
-  // 用于创建错误块的工厂构造函数，自动设置时间戳
-  factory GeminiStreamChunk.error(String message, String accumulatedText) {
-    return GeminiStreamChunk(
-      textChunk: '',
-      accumulatedText: accumulatedText,
-      error: message,
-      isFinished: true, // 错误也表示流结束
-      timestamp: DateTime.now(), // 错误发生的时间戳
-    );
-  }
-}
+// 本文件包含 GeminiService 类，该类封装了与 Google Gemini API 交互的所有逻辑。
+// 它实现了 BaseLlmService 接口，提供了一个标准化的方式来发送消息、计算 token 和取消请求。
 
 // --- Gemini Service Provider ---
 // 提供 GeminiService 实例的 Provider。
@@ -73,7 +27,7 @@ final geminiServiceProvider = Provider<GeminiService>((ref) {
 
 // --- Gemini Service Implementation ---
 // 封装与 Gemini API 交互的逻辑。
-class GeminiService {
+class GeminiService implements BaseLlmService {
    final ApiKeyNotifier _apiKeyNotifier; // 用于管理和获取 API Key
    // ignore: unused_field
    final Ref _ref; // Riverpod Ref，用于读取其他 Provider
@@ -140,57 +94,33 @@ class GeminiService {
      }
    }
 
-   // 计算给定上下文的 Token 数量 (Now accepts generic LlmContent)
+   /// 使用客户端库 (tiktoken) 估算给定上下文的 Token 数量。
+   /// 这是一个纯本地的、高性能的异步操作，旨在为所有模型提供一个统一的估算标准。
+   /// 注意: Gemini 有其专有的分词器，使用 tiktoken 会产生估算偏差，但这对于上下文管理已足够。
+   /// 如果计算失败，它将抛出异常。
    Future<int> countTokens({
      required List<LlmContent> llmContext,
      required ApiConfig apiConfig,
    }) async {
-     final apiKey = apiConfig.apiKey;
-     if (apiKey == null || apiKey.isEmpty) {
-       throw Exception("Gemini API key is missing in the provided ApiConfig.");
-     }
-     try {
-       // Convert generic context to API-specific context
-       final (:systemInstructionAsContent, :chatHistory) = _buildApiContextFromLlm(llmContext); // Destructure here
-
-       // Initialize model with provided name, key, and systemInstruction
-       final model = genai.GenerativeModel(
-         model: apiConfig.model,
-         apiKey: apiKey,
-         systemInstruction: systemInstructionAsContent, // Pass systemInstructionAsContent here
-       );
-
-       // Call SDK's countTokens method with the chatHistory and a 3-second timeout
-       final response = await model.countTokens(chatHistory).timeout(const Duration(seconds: 3));
-       debugPrint("countTokens 成功：总计 ${response.totalTokens} Tokens。");
-       return response.totalTokens;
-     } catch (e) {
-       debugPrint("Gemini countTokens API failed: $e. Falling back to local estimation.");
-       // Fallback to local token counting using tiktoken
-       try {
-         final encoding = tiktoken.getEncoding('cl100k_base');
-         int totalTokens = 0;
-         for (final message in llmContext) {
-           final textContent = message.parts
-               .whereType<LlmTextPart>()
-               .map((part) => part.text)
-               .join("\n");
-           if (textContent.isNotEmpty) {
-             totalTokens += encoding.encode(textContent).length;
-           }
-         }
-         debugPrint("Fallback token count successful: $totalTokens");
-         return totalTokens;
-       } catch (localError) {
-         debugPrint("Fallback token count also failed: $localError");
-         return -1;
-       }
-     }
+    // 我们使用 'cl100k_base' 作为通用的编码器，为所有模型提供一致的估算。
+    final encoding = tiktoken.getEncoding('cl100k_base');
+    int totalTokens = 0;
+    for (final message in llmContext) {
+      final textContent = message.parts
+          .whereType<LlmTextPart>()
+          .map((part) => part.text)
+          .join("\n");
+      if (textContent.isNotEmpty) {
+        totalTokens += encoding.encode(textContent).length;
+      }
+    }
+    return totalTokens;
    }
 
 
    // 发送消息并获取响应流 (Now accepts generic LlmContent and generationParams Map)
-   Stream<GeminiStreamChunk> sendMessageStream({
+   @override
+   Stream<LlmStreamChunk> sendMessageStream({
      required List<LlmContent> llmContext,
      required ApiConfig apiConfig,
      required Map<String, dynamic> generationParams,
@@ -207,7 +137,7 @@ class GeminiService {
        final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
        if (apiKey == null || apiKey.isEmpty) {
          debugPrint("sendMessageStream 错误：没有可用的 Gemini API Key。");
-         yield GeminiStreamChunk.error("没有可用的 Gemini API Key。", '');
+         yield LlmStreamChunk.error("没有可用的 Gemini API Key。", '');
          return;
        }
 
@@ -226,7 +156,7 @@ class GeminiService {
          debugPrint("sendMessageStream: Gemini 模型已初始化 (模型: ${apiConfig.model}, Key: ${apiKey.substring(0, 4)}...)。");
        } catch (e) {
          debugPrint("sendMessageStream 错误：初始化 Gemini 模型失败: $e");
-         yield GeminiStreamChunk.error("初始化 Gemini 模型失败: $e", '');
+         yield LlmStreamChunk.error("初始化 Gemini 模型失败: $e", '');
          return;
        }
 
@@ -247,7 +177,7 @@ class GeminiService {
            final textChunk = response.text ?? '';
            accumulatedResponse += textChunk;
            // 发出一个包含当前块文本和累积文本的 chunk
-           yield GeminiStreamChunk(
+           yield LlmStreamChunk(
              textChunk: textChunk,
              accumulatedText: accumulatedResponse,
              timestamp: DateTime.now(), // 记录块时间戳
@@ -264,7 +194,7 @@ class GeminiService {
          // This is now handled by ChatStateNotifier.
 
          debugPrint("sendMessageStream: 发出最终 chunk。");
-         yield GeminiStreamChunk(
+         yield LlmStreamChunk(
            textChunk: '',
            accumulatedText: accumulatedResponse, // Return the full raw text
            timestamp: DateTime.now(),
@@ -294,7 +224,7 @@ class GeminiService {
          if (retryCount > maxRetries) {
            // 达到最大重试次数，发出最终错误
            debugPrint("sendMessageStream 错误：达到最大重试次数。");
-           yield GeminiStreamChunk.error("API 错误 (重试 $maxRetries 次后): $lastError", accumulatedResponse);
+           yield LlmStreamChunk.error("API 错误 (重试 $maxRetries 次后): $lastError", accumulatedResponse);
            return; // 退出
          }
          // 否则，循环将继续，尝试下一个 Key
@@ -312,14 +242,15 @@ class GeminiService {
          // --- END MODIFICATION ---
 
          // 对于非 API 错误，通常不重试，直接发出错误并退出
-         yield GeminiStreamChunk.error("发生意外错误: $e", accumulatedResponse);
+         yield LlmStreamChunk.error("发生意外错误: $e", accumulatedResponse);
          return; // 退出循环
        }
     } // 结束 while 循环
    }
 
    // 发送消息并获取单个完整响应 (Now accepts generic LlmContent and generationParams Map)
-   Future<GeminiResponse> sendMessageOnce({
+   @override
+   Future<LlmResponse> sendMessageOnce({
      required List<LlmContent> llmContext,
      required ApiConfig apiConfig,
      required Map<String, dynamic> generationParams,
@@ -336,7 +267,7 @@ class GeminiService {
        final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
        if (apiKey == null || apiKey.isEmpty) {
          debugPrint("sendMessageOnce 错误：没有可用的 Gemini API Key。");
-         return const GeminiResponse.error("没有可用的 Gemini API Key。");
+         return const LlmResponse.error("没有可用的 Gemini API Key。");
        }
 
        genai.GenerativeModel? model;
@@ -354,7 +285,7 @@ class GeminiService {
          debugPrint("sendMessageOnce: Gemini 模型已初始化。");
        } catch (e) {
          debugPrint("sendMessageOnce 错误：初始化 Gemini 模型失败: $e");
-         return GeminiResponse.error("初始化 Gemini 模型失败: $e");
+         return LlmResponse.error("初始化 Gemini 模型失败: $e");
        }
 
        // 3. 生成内容 (单次调用)
@@ -365,14 +296,14 @@ class GeminiService {
          debugPrint("sendMessageOnce: API 调用成功。响应长度: ${rawResponseText.length}");
          if (_isCancelled) {
            debugPrint("Gemini single request finished, but was cancelled. Discarding results.");
-           return const GeminiResponse.error("Request cancelled by user.");
+           return const LlmResponse.error("Request cancelled by user.");
          }
 
          // REMOVED: Database saving logic from service layer.
          // This is now handled by ChatStateNotifier.
 
-         final successResponse = GeminiResponse(
-           rawText: rawResponseText, // Return the full raw text
+         final successResponse = LlmResponse(
+           parts: [MessagePart.text(rawResponseText)],
            isSuccess: true,
          );
          debugPrint("sendMessageOnce (尝试 ${retryCount + 1}) 成功完成。");
@@ -386,19 +317,19 @@ class GeminiService {
 
          if (retryCount > maxRetries) {
            debugPrint("sendMessageOnce 错误：达到最大重试次数。");
-           return GeminiResponse.error("API 错误 (重试 $maxRetries 次后): ${e.message}");
+           return LlmResponse.error("API 错误 (重试 $maxRetries 次后): ${e.message}");
          }
          // 继续循环
 
        } catch (e, stacktrace) { // 处理意外错误
          debugPrint("sendMessageOnce (尝试 ${retryCount + 1}) 发生通用错误: $e\n$stacktrace");
-         return GeminiResponse.error("发生意外错误: $e"); // 直接返回错误
+         return LlmResponse.error("发生意外错误: $e"); // 直接返回错误
        }
     } // 结束 while 循环
 
      // 理论上不应到达此处，作为回退返回最后记录的错误
      debugPrint("sendMessageOnce 错误：重试后仍失败。");
-     return GeminiResponse.error(lastError ?? "重试后未能获取响应。");
+     return LlmResponse.error(lastError ?? "重试后未能获取响应。");
    }
 
 

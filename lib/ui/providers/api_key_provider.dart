@@ -74,6 +74,9 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
     int? topK,
     int? maxOutputTokens,
     List<String>? stopSequences,
+    // Gemini specific settings
+    bool enableReasoningEffort = false,
+    OpenAIReasoningEffort? reasoningEffort,
   }) async {
     final now = DateTime.now();
     final configId = id ?? const Uuid().v4();
@@ -96,6 +99,8 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       stopSequences: stopSequences,
       createdAt: id == null ? now : (getConfigById(id)?.createdAt ?? now), // Preserve original creation time on update
       updatedAt: now,
+      enableReasoningEffort: enableReasoningEffort,
+      reasoningEffort: reasoningEffort,
     );
 
     await _repository.saveConfig(config);
@@ -200,6 +205,7 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
             topK: oldGenConfig['topK'],
             maxOutputTokens: oldGenConfig['maxOutputTokens'],
             stopSequences: (oldGenConfig['stopSequences'] as List<dynamic>?)?.cast<String>(),
+            // No reasoning effort settings to migrate from old data
           );
           
           await _chatRepository.updateApiConfigId(oldChat['id'] as int, newConfigId);
