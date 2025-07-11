@@ -9,6 +9,32 @@ import 'package:tiktoken/tiktoken.dart' as tiktoken; // For token counting
 import '../../data/models/models.dart';
 import 'llm_models.dart';
 import 'base_llm_service.dart'; // 导入抽象基类
+// --- OpenAI API Specific Data Models ---
+// This could be expanded if more OpenAI-specific models are needed.
+
+/// Represents the data structure for a single model returned by the OpenAI `/models` endpoint.
+class OpenAIModel {
+  final String id;
+  final String object;
+  final int created;
+  final String ownedBy;
+
+  OpenAIModel({
+    required this.id,
+    required this.object,
+    required this.created,
+    required this.ownedBy,
+  });
+
+  factory OpenAIModel.fromJson(Map<String, dynamic> json) {
+    return OpenAIModel(
+      id: json['id'] ?? 'unknown',
+      object: json['object'] ?? 'unknown',
+      created: json['created'] ?? 0,
+      ownedBy: json['owned_by'] ?? 'unknown',
+    );
+  }
+}
 
 // 本文件包含与 OpenAI 兼容 API 交互的服务类和相关数据结构。
 
@@ -471,6 +497,7 @@ class OpenAIService implements BaseLlmService {
       try {
         // 优先尝试获取特定模型的编码器。
         return tiktoken.encodingForModel(apiConfig.model);
+        return tiktoken.encodingForModel(apiConfig.model);
       } catch (_) {
         // 如果失败，则回退到通用编码器。
         debugPrint("Model '${apiConfig.model}' not found in tiktoken, falling back to 'cl100k_base' for token counting.");
@@ -493,6 +520,46 @@ class OpenAIService implements BaseLlmService {
       }
     }
     return totalTokens;
+  }
+  
+  /// Fetches the list of available models from a specified OpenAI-compatible endpoint.
+  Future<List<OpenAIModel>> fetchModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    try {
+      // Ensure the baseUrl has a trailing slash for proper resolution.
+      final correctedBaseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+      final modelsUrl = Uri.parse(correctedBaseUrl).resolve('models').toString();
+      
+      debugPrint("Fetching OpenAI models from: $modelsUrl");
+
+      final response = await _dio.get(
+        modelsUrl,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'] as List;
+        final models = data.map((modelJson) => OpenAIModel.fromJson(modelJson)).toList();
+        // Sort models by their ID for consistent ordering.
+        models.sort((a, b) => a.id.compareTo(b.id));
+        return models;
+      } else {
+        throw Exception('Failed to load models: Status code ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      debugPrint('Error fetching OpenAI models: $e');
+      throw Exception('Failed to fetch models: ${e.message}');
+    } catch (e) {
+      debugPrint('An unexpected error occurred while fetching models: $e');
+      throw Exception('An unexpected error occurred while fetching models.');
+    }
   }
   @override
   Future<void> cancelRequest() async {

@@ -109,7 +109,7 @@ class ApiConfigsScreen extends ConsumerWidget {
     var reasoningEffort = existingConfig?.reasoningEffort ?? OpenAIReasoningEffort.auto;
 
     // Reset the state of the models provider when opening the dialog
-    Future.microtask(() => ref.read(openaiModelsProvider.notifier).resetState());
+    // Future.microtask(() => ref.read(openAIModelsProvider.notifier).resetState()); // No longer needed
 
     showDialog(
       context: context,
@@ -142,7 +142,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                       if (selectedApiType == LlmType.openai) ...[
                         Consumer(
                           builder: (context, ref, child) {
-                            final modelsState = ref.watch(openaiModelsProvider);
+                            final modelsState = ref.watch(openAIModelsProvider);
                             final models = modelsState.models.asData?.value ?? [];
 
                             return TextFormField(
@@ -157,7 +157,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                                           final baseUrl = baseUrlController.text;
                                           final apiKey = apiKeyController.text;
                                           if (baseUrl.isNotEmpty && apiKey.isNotEmpty) {
-                                            ref.read(openaiModelsProvider.notifier).fetchModels(baseUrl: baseUrl, apiKey: apiKey);
+                                            ref.read(openAIModelsProvider.notifier).fetchModels(ApiConfig(id: '-1', name: 'temp', apiType: LlmType.openai, model: '', baseUrl: baseUrl, apiKey: apiKey, createdAt: DateTime.now(), updatedAt: DateTime.now()));
                                           } else {
                                             ScaffoldMessenger.of(context).showSnackBar(
                                               const SnackBar(content: Text('请输入 Base URL 和 API Key 以获取模型列表')),
@@ -176,7 +176,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                                         itemBuilder: (BuildContext context) {
                                           return models.map((model) {
                                             return PopupMenuItem<String>(
-                                              value: model.id,
+                                              value: model!.id,
                                               child: Text(model.id),
                                             );
                                           }).toList();
