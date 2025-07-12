@@ -16,6 +16,29 @@ const String defaultSecondaryXmlPrompt = '使用<Summary><summary id=“”></su
 
 // 本文件包含用于配置单个聊天会话设置的屏幕界面。
 
+// --- 辅助方法：根据优先级解析有效的 API 配置 ---
+ApiConfig? _getEffectiveApiConfig(WidgetRef ref, Chat chat, {String? specificConfigId}) {
+ final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+ if (allConfigs.isEmpty) return null;
+
+ final defaultConfig = allConfigs.first;
+
+ // 检查 specificConfigId 是否有效
+ if (specificConfigId != null) {
+   final foundConfig = allConfigs.firstWhere((c) => c.id == specificConfigId, orElse: () => defaultConfig);
+   return foundConfig;
+ }
+ 
+ // 检查聊天的主要 apiConfigId 是否有效
+ if (chat.apiConfigId != null) {
+   final foundConfig = allConfigs.firstWhere((c) => c.id == chat.apiConfigId, orElse: () => defaultConfig);
+   return foundConfig;
+ }
+ 
+ // 如果都无效，则回退到列表的第一个
+ return defaultConfig;
+}
+
 class ChatSettingsScreen extends ConsumerStatefulWidget {
   const ChatSettingsScreen({super.key});
 
@@ -24,12 +47,10 @@ class ChatSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
-  // Notifier 实例，用于在 dispose 中安全地调用
-  ChatSettingsNotifier? _notifier;
   // --- 显示添加/编辑 XML 规则的对话框 ---
-  void _showXmlRuleDialog(BuildContext context, {XmlRule? existingRule, int? ruleIndex}) {
-    final chatId = ref.read(activeChatIdProvider);
-    if (chatId == null) return;
+   void _showXmlRuleDialog(BuildContext context, {XmlRule? existingRule, int? ruleIndex}) {
+     final chatId = ref.read(activeChatIdProvider);
+     if (chatId == null) return;
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
     var selectedAction = existingRule?.action ?? XmlAction.ignore;
@@ -112,15 +133,6 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    // 自动保存设置
-    _notifier?.saveSettings().catchError((e) {
-      // 在后台静默处理错误，或者使用日志库记录
-      debugPrint('自动保存聊天设置失败: $e');
-    });
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,11 +144,39 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
       );
     }
     final settingsState = ref.watch(chatSettingsProvider(chatId));
-    _notifier = ref.read(chatSettingsProvider(chatId).notifier);
+    final notifier = ref.read(chatSettingsProvider(chatId).notifier);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
+    return PopScope(
+      canPop: false, // 禁止默认的返回行为，由 onPopInvoked 控制
+      onPopInvoked: (didPop) async {
+        if (didPop) return; // 如果已经 pop，则不执行任何操作
+
+        // 显示正在保存的提示
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('正在保存设置...'), duration: Duration(seconds: 1)),
+        );
+
+        try {
+          await notifier.saveSettings();
+        } catch (e) {
+          // 在后台静默处理错误，或者使用日志库记录
+          debugPrint('自动保存聊天设置失败: $e');
+          // 可选：显示一个错误提示
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          // 无论成功或失败，最后都返回上一页
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(
           shadows: <Shadow>[
@@ -167,6 +207,7 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         },
         loading: () => const SizedBox.shrink(),
         error: (err, stack) => Center(child: Text('无法加载聊天设置: $err')),
+      ),
       ),
     );
   }
@@ -347,7 +388,7 @@ class _ApiProviderSettings extends ConsumerWidget {
     final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
-
+ 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -357,8 +398,12 @@ class _ApiProviderSettings extends ConsumerWidget {
           const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
         else
           DropdownButtonFormField<String>(
-            value: apiConfigs.any((c) => c.id == chat.apiConfigId) ? chat.apiConfigId : null,
-            decoration: const InputDecoration(labelText: '选择 API 配置', border: OutlineInputBorder()),
+            value: chat.apiConfigId,
+            decoration: InputDecoration(
+              labelText: '聊天 API 配置',
+              border: const OutlineInputBorder(),
+              hintText: '默认: ${apiConfigs.first.name}',
+            ),
             items: apiConfigs.map((config) => DropdownMenuItem(
               value: config.id,
               child: Text(config.name),
@@ -366,7 +411,6 @@ class _ApiProviderSettings extends ConsumerWidget {
             onChanged: (value) {
               notifier.updateSettings((c) => c.copyWith({'apiConfigId': value}));
             },
-            validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
           ),
       ],
     );
@@ -523,7 +567,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
     final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
     final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
-
+ 
     // The controller is the source of truth during user input.
     // The previous ref.listen was causing a bug where the last character could not be deleted.
 
@@ -581,13 +625,25 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
        if (chat.enablePreprocessing)
          Padding(
            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-           child: DropdownButtonFormField<String>(
-             value: apiConfigs.any((c) => c.id == chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
-             decoration: const InputDecoration(labelText: '用于总结的 API 配置', border: OutlineInputBorder()),
-             items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'preprocessingApiConfigId': value})),
-             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
-           ),
+            child: DropdownButtonFormField<String?>(
+              value: chat.preprocessingApiConfigId,
+              decoration: InputDecoration(
+                labelText: '用于总结的 API 配置',
+                border: const OutlineInputBorder(),
+                hintText: '默认: ${ _getEffectiveApiConfig(ref, chat, specificConfigId: chat.preprocessingApiConfigId)?.name ?? 'N/A'}'
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                ),
+                ...apiConfigs.map((config) => DropdownMenuItem(
+                  value: config.id,
+                  child: Text(config.name),
+                )),
+              ],
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'preprocessingApiConfigId': value})),
+            ),
          ),
         SwitchListTile(
           title: const Text('启用附加XML生成'),
@@ -638,13 +694,25 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
        if (chat.enableSecondaryXml)
          Padding(
            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-           child: DropdownButtonFormField<String>(
-             value: apiConfigs.any((c) => c.id == chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
-             decoration: const InputDecoration(labelText: '用于附加XML的 API 配置', border: OutlineInputBorder()),
-             items: apiConfigs.map((config) => DropdownMenuItem(value: config.id, child: Text(config.name))).toList(),
-             onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'secondaryXmlApiConfigId': value})),
-             validator: (value) => (value == null) ? '请选择一个 API 配置。' : null,
-           ),
+            child: DropdownButtonFormField<String?>(
+              value: chat.secondaryXmlApiConfigId,
+              decoration: InputDecoration(
+                labelText: '用于附加XML的 API 配置',
+                border: const OutlineInputBorder(),
+                hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}'
+              ),
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                ),
+                ...apiConfigs.map((config) => DropdownMenuItem(
+                  value: config.id,
+                  child: Text(config.name),
+                )),
+              ],
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'secondaryXmlApiConfigId': value})),
+            ),
          ),
       ],
     );

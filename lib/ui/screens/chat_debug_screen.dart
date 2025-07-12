@@ -78,7 +78,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         parts: [MessagePart.text("[调试占位符]")],
       );
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
-        chat: chat,
+        chatId: chat.id,
         currentUserMessage: placeholderMessage,
       );
 

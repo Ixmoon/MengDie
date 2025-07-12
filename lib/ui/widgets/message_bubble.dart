@@ -97,16 +97,16 @@ class MessageBubble extends StatelessWidget {
               _buildTextPart(context, textColor, isUser, isStreaming),
             ...nonTextParts.map((part) {
               return Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+                padding: const EdgeInsets.only(top:0),
                 child: _buildNonTextPart(context, part, textColor),
               );
             }),
             // Display token count if available
             if (totalTokens != null && totalTokens! > 0)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0),
+                padding: const EdgeInsets.only(top:0),
                 child: Text(
-                  "上下文 Tokens: $totalTokens",
+                  "Tokens: $totalTokens",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: textColor.withAlpha(179),
                       ),

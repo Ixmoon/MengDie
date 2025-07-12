@@ -327,16 +327,20 @@ class GlobalSettingsScreen extends ConsumerWidget {
            if (apiConfigs.isEmpty)
              const Text('没有可用的 API 配置。请先在 API 配置管理中添加。', style: TextStyle(color: Colors.orange))
            else
-             DropdownButtonFormField<String>(
-               value: apiConfigs.any((c) => c.id == widget.apiConfigId) ? widget.apiConfigId : null,
-               decoration: const InputDecoration(labelText: '使用的 API 配置', border: OutlineInputBorder()),
+             DropdownButtonFormField<String?>(
+               value: widget.apiConfigId,
+               decoration: InputDecoration(
+                 labelText: '使用的 API 配置',
+                 border: const OutlineInputBorder(),
+                 hintText: '默认: ${apiConfigs.first.name}',
+               ),
                items: [
-                 const DropdownMenuItem<String>(
+                 const DropdownMenuItem<String?>(
                    value: null,
-                   child: Text('使用聊天默认配置'),
+                   child: Text('使用全局默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
                  ),
                  ...apiConfigs.map((ApiConfig config) {
-                   return DropdownMenuItem<String>(
+                   return DropdownMenuItem<String?>(
                      value: config.id,
                      child: Text(config.name),
                    );

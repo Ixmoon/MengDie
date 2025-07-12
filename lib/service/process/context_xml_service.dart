@@ -28,8 +28,8 @@ import 'xml_processor.dart';
 import '../llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
-
-// Define a return type for buildApiRequestContext
+import '../../data/repositories/chat_repository.dart';
+import '../../ui/providers/chat_state_providers.dart'; // Import for ChatStateNotifier
 class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;
@@ -163,7 +163,7 @@ class ContextXmlService {
   /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
   /// This new version respects both token and turn limits simultaneously.
   Future<_HistoryLimitResult> _limitHistoryForPrompt({
-    required Chat chat,
+    required int chatId, // 重构：传入 chatId 而不是整个 chat 对象
     required List<Message> fullHistory,
     required int historyTokenBudget, // The exact token budget for the history part
     required int historyTurnBudget,   // The exact turn budget for the history part
@@ -185,45 +185,61 @@ class ContextXmlService {
       turnLimitedHistory = fullHistory;
       droppedByTurns = [];
     }
-
-    // If no budget for tokens or no history left, return early
-    if (historyTokenBudget <= 0 || turnLimitedHistory.isEmpty) {
-      return _HistoryLimitResult([], fullHistory);
+    // If mode is not 'tokens', or no budget for tokens, or no history left, return early.
+    // 从 Notifier 获取最新的 chat 对象以检查配置
+    final chat = _ref.read(currentChatProvider(chatId)).value;
+    if (chat == null || chat.contextConfig.mode != ContextManagementMode.tokens || historyTokenBudget <= 0 || turnLimitedHistory.isEmpty) {
+      debugPrint("ContextXmlService: Skipping token limit. Mode: ${chat?.contextConfig.mode}, Budget: $historyTokenBudget, History empty: ${turnLimitedHistory.isEmpty}");
+      return _HistoryLimitResult(turnLimitedHistory, droppedByTurns);
     }
     
     // 2. Apply token-based limit on the result of the turn-based limit
     final llmService = _ref.read(llmServiceProvider);
     debugPrint("ContextXmlService: Limiting history by tokens. Budget: $historyTokenBudget");
 
-    List<Message> keptHistory = List.from(turnLimitedHistory);
-    List<Message> droppedByTokens = [];
+    try {
+      // Step 2a: Concurrently calculate tokens for each message.
+      // 重构：从 Notifier 获取统一的 ApiConfig
+      final apiConfig = _ref.read(chatStateNotifierProvider(chatId).notifier).getEffectiveApiConfig();
+      final tokenFutures = turnLimitedHistory.map((msg) {
+        return llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
+          .then((count) => {'message': msg, 'tokens': count})
+          .catchError((e) {
+            debugPrint("  - Token counting failed for message ID ${msg.id}: $e. Counting as 0.");
+            return {'message': msg, 'tokens': 0}; // Assign 0 on error to avoid halting process
+          });
+      });
+      final messageTokenPairs = await Future.wait(tokenFutures);
 
-    while (keptHistory.isNotEmpty) {
-      try {
-        final contextParts = keptHistory.map(LlmContent.fromMessage).toList();
-        final currentTokens = await llmService.countTokens(llmContext: contextParts, chat: chat);
-        debugPrint("  - Checking ${keptHistory.length} messages... Current Tokens: $currentTokens");
-
-        if (currentTokens <= historyTokenBudget) {
-          // Token count is within budget, we're done.
-          debugPrint("  - Token count is within budget. Kept ${keptHistory.length}.");
-          final allDropped = [...droppedByTurns, ...droppedByTokens.reversed];
-          return _HistoryLimitResult(keptHistory, allDropped);
+      // Step 2b: Iterate from newest to oldest, accumulating tokens and messages.
+      int currentTotalTokens = 0;
+      final List<Message> keptHistory = [];
+      
+      for (var i = messageTokenPairs.length - 1; i >= 0; i--) {
+        final pair = messageTokenPairs[i];
+        final messageTokens = pair['tokens'] as int;
+        
+        if (currentTotalTokens + messageTokens <= historyTokenBudget) {
+          currentTotalTokens += messageTokens;
+          keptHistory.insert(0, pair['message'] as Message); // Insert at beginning to maintain order
         } else {
-          // Token count exceeds budget, remove the oldest message and try again.
-          final droppedMessage = keptHistory.removeAt(0);
-          droppedByTokens.add(droppedMessage);
-          debugPrint("  - Token count exceeds budget. Dropping oldest message (ID: ${droppedMessage.id}).");
+          // Budget exceeded, the rest are dropped.
+          debugPrint("  - Budget exceeded. Dropping from message ID ${(pair['message'] as Message).id} onwards.");
+          break; // Exit the loop
         }
-      } catch (e) {
-        debugPrint("  - Token counting failed during history limitation: $e. Aborting safely.");
-        return _HistoryLimitResult([], fullHistory); // Safer to drop all history on error
       }
-    }
 
-    // If the loop finishes, it means even a single message exceeds the budget.
-    debugPrint("ContextXmlService: Token limiting resulted in dropping all turn-limited messages.");
-    return _HistoryLimitResult([], fullHistory);
+      debugPrint("  - Token count is within budget. Kept ${keptHistory.length} messages with $currentTotalTokens tokens.");
+      final Set<int> keptIds = keptHistory.map((m) => m.id).toSet();
+      final List<Message> droppedByTokens = turnLimitedHistory.where((m) => !keptIds.contains(m.id)).toList();
+      final allDropped = [...droppedByTurns, ...droppedByTokens];
+
+      return _HistoryLimitResult(keptHistory, allDropped);
+
+    } catch (e) {
+      debugPrint("  - Token counting process failed during history limitation: $e. Aborting safely.");
+      return _HistoryLimitResult([], fullHistory); // Safer to drop all history on error
+    }
   }
 
 
@@ -236,7 +252,7 @@ class ContextXmlService {
   /// 3. Call a helper to truncate the message history within this specific budget.
   /// 4. Assemble all parts into the final context.
   Future<ApiRequestContext> buildApiRequestContext({
-    required Chat chat,
+    required int chatId, // 重构：传入 chatId
     required Message currentUserMessage,
     String? lastMessageOverride,
     int? messageIdToPreserveXml,
@@ -246,6 +262,11 @@ class ContextXmlService {
   }) async {
     final messageRepo = _ref.read(messageRepositoryProvider);
     final llmService = _ref.read(llmServiceProvider);
+    // 重构：从 Notifier 获取 chat 和 apiConfig
+    final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
+    final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
+    final apiConfig = notifier.getEffectiveApiConfig();
+
     // Use the historyOverride if provided, otherwise fetch from the database.
     final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
 
@@ -277,13 +298,13 @@ class ContextXmlService {
     // --- 2. Calculate budget for history ---
     int fixedTokens = 0;
     int fixedTurns = 0; // Summary and/or XML count as one turn
-    int historyTokenBudget = chat.contextConfig.maxContextTokens ?? 4096; // Default fallback
+    int historyTokenBudget = chat.contextConfig.maxContextTokens ?? 256000; 
     int historyTurnBudget = chat.contextConfig.maxTurns;
 
     // Concurrently calculate tokens for all fixed parts
     if (fixedContextParts.isNotEmpty) {
       try {
-        final tokenFutures = fixedContextParts.map((part) => llmService.countTokens(llmContext: [part], chat: chat));
+        final tokenFutures = fixedContextParts.map((part) => llmService.countTokens(llmContext: [part], apiConfig: apiConfig));
         final tokenCounts = await Future.wait(tokenFutures);
         fixedTokens = tokenCounts.sum;
         debugPrint("ContextXmlService: Calculated fixed tokens: $fixedTokens");
@@ -298,12 +319,12 @@ class ContextXmlService {
       fixedTurns = 1;
     }
 
-    historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 4096) - fixedTokens;
+    historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 256000) - fixedTokens;
     historyTurnBudget = chat.contextConfig.maxTurns - fixedTurns;
 
     // --- 3. Limit history using the calculated budget ---
     final historyResult = await _limitHistoryForPrompt(
-      chat: chat,
+      chatId: chatId,
       fullHistory: fullHistory,
       historyTokenBudget: historyTokenBudget,
       historyTurnBudget: historyTurnBudget,

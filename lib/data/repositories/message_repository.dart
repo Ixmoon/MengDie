@@ -22,7 +22,6 @@ class MessageRepository {
 
   // --- 数据库操作 ---
   Future<List<Message>> getMessagesForChat(int chatId) async {
-    debugPrint("MessageRepository: 获取聊天 ID: $chatId 的所有消息 (Drift)...");
     final messageDataList = await _messageDao.getMessagesForChat(chatId);
     return messageDataList.map(MessageMapper.fromData).toList();
   }
@@ -39,7 +38,6 @@ class MessageRepository {
 
   Future<List<Message>> getLastNMessagesForChat(int chatId, int n) async {
     if (n <= 0) return [];
-    debugPrint("MessageRepository: 获取聊天 ID: $chatId 的最后 $n 条消息 (Drift)...");
     final messageDataList = await _messageDao.getLastNMessagesForChat(chatId, n);
     return messageDataList.map(MessageMapper.fromData).toList();
   }

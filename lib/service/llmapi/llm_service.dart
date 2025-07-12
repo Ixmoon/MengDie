@@ -45,18 +45,10 @@ class LlmService {
 
   LlmService(this._ref, this._apiKeyNotifier, this._services);
 
-  /// Retrieves the API configuration for a given chat and prepares generation parameters.
-  (ApiConfig?, Map<String, dynamic>) _getApiConfigAndParams(Chat chat, {String? apiConfigIdOverride}) {
-    final configId = apiConfigIdOverride ?? chat.apiConfigId;
-    if (configId == null) {
-      return (null, {});
-    }
-    final apiConfig = _apiKeyNotifier.getConfigById(configId);
-    if (apiConfig == null) {
-      return (null, {});
-    }
-
-    final Map<String, dynamic> params = {
+  /// 【私有方法】根据传入的 ApiConfig 对象准备生成参数。
+  /// 这个方法现在是纯粹的功能性辅助方法，不再包含任何配置解析逻辑。
+  Map<String, dynamic> _prepareGenerationParams(ApiConfig apiConfig) {
+    return {
       if (apiConfig.useCustomTemperature && apiConfig.temperature != null) 'temperature': apiConfig.temperature,
       if (apiConfig.useCustomTopP && apiConfig.topP != null) 'topP': apiConfig.topP,
       if (apiConfig.useCustomTopK && apiConfig.topK != null) 'topK': apiConfig.topK,
@@ -69,20 +61,15 @@ class LlmService {
         'reasoning_effort': apiConfig.reasoningEffort!.toApiValue,
       },
     };
-    return (apiConfig, params);
   }
 
-  /// Sends messages and gets a streaming response.
+  /// 发送消息并获取流式响应。
+  /// 【重构】此方法不再解析配置，而是直接接收一个确定的 `ApiConfig` 对象。
   Stream<LlmStreamChunk> sendMessageStream({
     required List<LlmContent> llmContext,
-    required Chat chat,
-    String? apiConfigIdOverride,
+    required ApiConfig apiConfig, // 直接接收配置对象
   }) {
-    final (apiConfig, generationParams) = _getApiConfigAndParams(chat, apiConfigIdOverride: apiConfigIdOverride);
-
-    if (apiConfig == null) {
-      return Stream.value(LlmStreamChunk.error("API configuration not found for this chat.", ''));
-    }
+    final generationParams = _prepareGenerationParams(apiConfig);
 
     _activeServiceType = apiConfig.apiType;
     debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
@@ -104,17 +91,13 @@ class LlmService {
     }
   }
 
-  /// Sends messages and gets a single, complete response.
+  /// 发送消息并获取一次性完整响应。
+  /// 【重构】此方法不再解析配置，而是直接接收一个确定的 `ApiConfig` 对象。
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
-    required Chat chat,
-    String? apiConfigIdOverride,
+    required ApiConfig apiConfig, // 直接接收配置对象
   }) async {
-    final (apiConfig, generationParams) = _getApiConfigAndParams(chat, apiConfigIdOverride: apiConfigIdOverride);
-
-    if (apiConfig == null) {
-      return const LlmResponse.error("API configuration not found for this chat.");
-    }
+    final generationParams = _prepareGenerationParams(apiConfig);
 
     _activeServiceType = apiConfig.apiType;
     debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
@@ -139,16 +122,12 @@ class LlmService {
   /// Counts tokens for a given context using the appropriate local tokenizer.
   /// This method is now a direct pass-through and will throw an exception
   /// if the underlying service fails (e.g., model not found in tokenizer).
+  /// 为给定的上下文计算 token 数量。
+  /// 【重构】此方法不再解析配置，而是直接接收一个确定的 `ApiConfig` 对象。
   Future<int> countTokens({
     required List<LlmContent> llmContext,
-    required Chat chat,
+    required ApiConfig apiConfig, // 直接接收配置对象
   }) async {
-    final (apiConfig, _) = _getApiConfigAndParams(chat);
-
-    if (apiConfig == null) {
-      // Throwing an exception is more robust than returning a magic number.
-      throw Exception("LlmService.countTokens Error: API configuration not found for chat.");
-    }
 
     final service = _services[apiConfig.apiType];
     if (service == null) {

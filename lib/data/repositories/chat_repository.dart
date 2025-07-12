@@ -38,13 +38,11 @@ class ChatRepository {
   }
 
   Future<Chat?> getChat(int chatId) async {
-    debugPrint("ChatRepository: 获取聊天 ID: $chatId (Drift)...");
     final chatData = await _chatDao.getChat(chatId);
     return chatData != null ? ChatMapper.fromData(chatData) : null;
   }
 
   Future<int> saveChat(Chat chat) async {
-    debugPrint("ChatRepository: 保存聊天 ID: ${chat.id}, 标题: ${chat.title} (Drift)...");
 
     LlmType? apiType;
     if (chat.apiConfigId != null) {

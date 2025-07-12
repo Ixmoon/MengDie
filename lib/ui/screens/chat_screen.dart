@@ -21,9 +21,10 @@ import '../widgets/message_bubble.dart';
 import '../widgets/top_message_banner.dart'; // 导入顶部消息横幅 Widget
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../providers/settings_providers.dart'; // 导入全局设置
- 
- // 本文件包含单个聊天会话的屏幕界面。
- 
+import '../providers/api_key_provider.dart';
+  
+  // 本文件包含单个聊天会话的屏幕界面。
+  
 // --- 聊天屏幕 ---
 // 使用 ConsumerStatefulWidget 以便访问 Ref 并管理本地状态（控制器、滚动等）。
 // 聊天屏幕，现在作为 PageView 的宿主
@@ -916,62 +917,79 @@ class _MessageListState extends ConsumerState<_MessageList> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(widget.chatId), (previous, next) {
-      final isLoading = ref.read(chatStateNotifierProvider(widget.chatId)).isLoading;
-      if (isLoading) return;
+      // 当消息列表数据更新时，或首次加载时，重新计算 Token 数量。
+      // 这是Token计算的唯一触发点，以避免重复计算。
+      
+      // 1. 利用 AsyncValue 的 `==` 操作符，仅在状态确实发生变化时才继续。
+      //    这能处理从 loading -> data，以及 data -> new data 的情况。
+      if (previous == next) return;
 
-      if (next is AsyncData) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
-          }
-        });
+      // 2. 我们只关心包含有效数据的状态。
+      if (next is! AsyncData || !next.hasValue || next.requireValue.isEmpty) {
+        return;
       }
-    });
 
-    ref.listen<ChatScreenState>(chatStateNotifierProvider(widget.chatId), (previous, next) {
-      final wasLoading = previous?.isLoading ?? false;
-      if (wasLoading && !next.isLoading) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
-          }
-        });
-      }
+      // 3. 如果正在进行其他加载操作，则不计算。
+      final chatState = ref.read(chatStateNotifierProvider(widget.chatId));
+      if (chatState.isLoading) return;
+      
+      // 4. 执行计算。
+      ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
     });
 
     final messagesAsync = ref.watch(chatMessagesProvider(widget.chatId));
     final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
 
     return messagesAsync.when(
-      data: (messages) {
+      data: (dbMessages) {
+        // 当UI构建时，如果发现没有 token 数据，则主动触发一次计算。
+        if ((chatState.totalTokens ?? 0) == 0 && !chatState.isLoading && dbMessages.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
+            }
+          });
+        }
+        
+        final List<Message> allMessages = List.from(dbMessages);
+        final streamingMessage = chatState.streamingMessage;
+
+        // If a streaming message exists and is visible, add it to the list for display.
+        // It's added at the end (which is the top when reversed).
+        if (chatState.isStreamingMessageVisible && streamingMessage != null) {
+          allMessages.add(streamingMessage);
+        }
+
         return ListView.builder(
           reverse: true,
           controller: widget.scrollController,
           padding: const EdgeInsets.all(8.0),
-          itemCount: messages.length,
+          itemCount: allMessages.length,
           itemBuilder: (context, index) {
-            final message = messages[messages.length - 1 - index];
+            final message = allMessages[allMessages.length - 1 - index];
             final isLastMessage = index == 0;
+            // A message is considered "streaming" if it's the one currently in the state's cache.
+            final isThisMessageStreaming = chatState.isStreaming && streamingMessage != null && message.id == streamingMessage.id;
 
             Widget buildMessageItem() {
               return MessageBubble(
                 key: ValueKey(message.id),
                 message: message,
-                isStreaming: isLastMessage && chatState.isStreaming,
+                isStreaming: isThisMessageStreaming,
                 isTransparent: chatState.isBubbleTransparent,
                 isHalfWidth: chatState.isBubbleHalfWidth,
-                onTap: () => widget.onMessageTap(message, messages),
-                totalTokens: isLastMessage && !chatState.isStreaming ? chatState.totalTokens : null,
+                onTap: () => widget.onMessageTap(message, allMessages),
+                totalTokens: isLastMessage && !isThisMessageStreaming ? chatState.totalTokens : null,
               );
             }
             
             Widget buildActionButtons() {
               final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
               final canPerformAction = isLastMessage &&
-                                    messages.isNotEmpty &&
-                                    messages.last.role == MessageRole.model &&
+                                    allMessages.isNotEmpty &&
+                                    allMessages.last.role == MessageRole.model &&
                                     !chatState.isLoading &&
-                                    !chatState.isStreaming;
+                                    !isThisMessageStreaming; // Use the specific streaming flag
 
               if (!canPerformAction) return const SizedBox.shrink();
 
@@ -1282,8 +1300,10 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
        notifier.showTopMessage('错误：无法获取当前聊天信息', backgroundColor: Colors.red);
        return;
      }
-     if (currentChat.apiConfigId == null) {
-       notifier.showTopMessage('请先在聊天设置中选择一个 API 配置', backgroundColor: Colors.orange);
+     // 新逻辑：检查全局是否有任何可用的API配置
+     final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+     if (apiConfigs.isEmpty) {
+       notifier.showTopMessage('请先在全局设置中添加至少一个 API 配置', backgroundColor: Colors.orange);
        return;
      }
 
