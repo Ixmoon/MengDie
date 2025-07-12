@@ -156,13 +156,13 @@ class ChatRepository {
         contextSummary: const Value(null), // 分叉时清除上下文摘要
         orderIndex: const Value(null), // 分叉的聊天应使用默认排序
     );
-    
     // 调用通用的 DAO 方法，并传入消息ID以上限
     return await _chatDao.forkOrCloneChat(
       forkedChatCompanion,
       originalChatId,
       upToMessageId: fromMessageId,
     );
+    
   }
 
   /// 从一个现有聊天创建新聊天（作为模板），可以指定父文件夹。

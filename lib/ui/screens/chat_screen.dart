@@ -591,8 +591,13 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     final newChatId = await notifier.forkChat(message);
 
     if (mounted && newChatId != null) {
+      final chat = ref.read(currentChatProvider(widget.chatId)).value;
+      if (chat != null) {
+        // Invalidate the list provider to ensure it fetches the new chat
+        ref.invalidate(chatListProvider((parentFolderId: chat.parentFolderId, mode: ChatListMode.normal)));
+      }
       ref.read(activeChatIdProvider.notifier).state = newChatId;
-      context.go('/chat');
+      // No need to context.go('/chat'), as the PageView will react to the activeChatId change.
     }
   }
 
@@ -951,13 +956,18 @@ class _MessageListState extends ConsumerState<_MessageList> {
           });
         }
         
-        final List<Message> allMessages = List.from(dbMessages);
         final streamingMessage = chatState.streamingMessage;
+        final List<Message> allMessages;
 
-        // If a streaming message exists and is visible, add it to the list for display.
-        // It's added at the end (which is the top when reversed).
         if (chatState.isStreamingMessageVisible && streamingMessage != null) {
-          allMessages.add(streamingMessage);
+          // If a streaming/processing message exists, use it as the source of truth.
+          // Remove any message from the DB list that has the same ID to prevent duplicates.
+          final tempMessages = dbMessages.where((m) => m.id != streamingMessage.id).toList();
+          tempMessages.add(streamingMessage);
+          allMessages = tempMessages;
+        } else {
+          // Otherwise, just use the messages from the database.
+          allMessages = dbMessages;
         }
 
         return ListView.builder(
@@ -985,11 +995,12 @@ class _MessageListState extends ConsumerState<_MessageList> {
             
             Widget buildActionButtons() {
               final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+              // The action buttons should only appear when the entire generation process is complete.
+              // This is now solely determined by the `isLoading` flag.
               final canPerformAction = isLastMessage &&
-                                    allMessages.isNotEmpty &&
-                                    allMessages.last.role == MessageRole.model &&
-                                    !chatState.isLoading &&
-                                    !isThisMessageStreaming; // Use the specific streaming flag
+                                     allMessages.isNotEmpty &&
+                                     allMessages.last.role == MessageRole.model &&
+                                     !chatState.isLoading;
 
               if (!canPerformAction) return const SizedBox.shrink();
 

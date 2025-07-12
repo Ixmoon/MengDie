@@ -166,7 +166,8 @@ final firstModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
 // --- 聊天屏幕状态 ---
 @immutable
 class ChatScreenState {
-  final bool isLoading;
+  final bool isLoading; // Master lock for the entire process (send -> all background tasks done)
+  final bool isPrimaryResponseLoading; // Lock for the direct user-facing response (stream/single)
   final String? errorMessage; // For critical errors, might still be useful
   final String? topMessageText; // For general informational messages
   final Color? topMessageColor; // Color for the top message banner
@@ -189,6 +190,7 @@ class ChatScreenState {
 
   const ChatScreenState({
     this.isLoading = false,
+    this.isPrimaryResponseLoading = false,
     this.generationStartTime,
     this.errorMessage,
     this.topMessageText,
@@ -212,6 +214,7 @@ class ChatScreenState {
 
   ChatScreenState copyWith({
     bool? isLoading,
+    bool? isPrimaryResponseLoading,
     String? errorMessage,
     bool clearError = false, // If true, sets errorMessage to null
     String? topMessageText,
@@ -242,6 +245,7 @@ class ChatScreenState {
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
+      isPrimaryResponseLoading: isPrimaryResponseLoading ?? this.isPrimaryResponseLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       topMessageText: clearTopMessage ? null : (topMessageText ?? this.topMessageText),
       topMessageColor: clearTopMessage ? null : (topMessageColor ?? this.topMessageColor),
@@ -758,7 +762,8 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
     // --- Start loading state ---
     state = state.copyWith(
-        isLoading: true,
+        isLoading: true, // Master lock ON
+        isPrimaryResponseLoading: true, // Primary response lock ON
         isCancelled: false, // Ensure cancellation is reset when starting
         clearError: true,
         clearTopMessage: true,
@@ -882,20 +887,31 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        }
      } finally {
        if (mounted) {
-         // Clear all processing states together, including the timer.
+         // Clear all processing states together, including the master isLoading flag.
          state = state.copyWith(
+           isLoading: false, // Master lock OFF
+           isPrimaryResponseLoading: false, // Ensure this is also off
            isProcessingInBackground: false,
            clearGenerationStartTime: true,
            clearElapsedSeconds: true,
+           clearStreamingMessage: true,
          );
          _stopUpdateTimer();
-         debugPrint("ChatStateNotifier($_chatId): Background processing state and timer cleared.");
+         debugPrint("ChatStateNotifier($_chatId): All processing finished. isLoading is now false.");
        }
      }
    } else {
-     // If there are no tasks, ensure the state is cleared immediately.
+     // If there are no tasks, ensure all loading states are cleared immediately.
      if (mounted) {
-       state = state.copyWith(isProcessingInBackground: false);
+       state = state.copyWith(
+         isLoading: false, // Master lock OFF
+         isPrimaryResponseLoading: false, // Ensure this is also off
+         isProcessingInBackground: false,
+         clearGenerationStartTime: true,
+         clearElapsedSeconds: true,
+         clearStreamingMessage: true,
+       );
+       _stopUpdateTimer();
      }
    }
  }
@@ -904,91 +920,121 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  // _finalizeStreamedMessage and _handleSingleResponse before the message is saved.
 
  /// Executes the new, robust summarization process for dropped messages.
- /// This method now chunks the history, summarizes each chunk in parallel with retries,
- /// and then joins the results.
+ /// Implements a robust, "intelligent merge" incremental summarization algorithm.
  Future<void> _executePreprocessing(Chat chat) async {
    if (state.isCancelled) return;
-   debugPrint("ChatStateNotifier($_chatId): Executing pre-processing (summarization)...");
-   
+   debugPrint("ChatStateNotifier($_chatId): Executing intelligent merge summarization...");
+
    final contextXmlService = _ref.read(contextXmlServiceProvider);
    final chatRepo = _ref.read(chatRepositoryProvider);
+   final messageRepo = _ref.read(messageRepositoryProvider);
 
-   // 1. Determine the initial set of messages that need summarization.
-   // We build a temporary context to find out which messages would be dropped.
-   final initialContextResult = await contextXmlService.buildApiRequestContext(
-     chatId: _chatId,
-     // A placeholder message is used as we don't have a "current" user message here.
-     currentUserMessage: Message(chatId: _chatId, role: MessageRole.user, parts: [MessagePart.text("summarize")]),
-   );
-   
-   List<Message> messagesToSummarize = initialContextResult.droppedMessages;
-
-   if (messagesToSummarize.isEmpty) {
-     debugPrint("ChatStateNotifier($_chatId): No messages dropped, skipping summarization.");
+   // 1. Get the complete, current message history.
+   final allMessages = await messageRepo.getMessagesForChat(_chatId);
+   if (allMessages.length < 2) {
+     debugPrint("ChatStateNotifier($_chatId): Not enough messages for context diff, skipping.");
      return;
    }
 
+   // 2. Simulate context "AFTER" the latest turn to find all currently dropped messages.
+   final contextAfter = await contextXmlService.buildApiRequestContext(
+     chatId: _chatId,
+     currentUserMessage: Message(chatId: _chatId, role: MessageRole.user, parts: [MessagePart.text("after")]),
+   );
+   final droppedMessagesAfter = contextAfter.droppedMessages;
+
+   // If nothing is dropped now, there's nothing to do.
+   if (droppedMessagesAfter.isEmpty) {
+     debugPrint("ChatStateNotifier($_chatId): No messages are dropped. Clearing summary if it exists.");
+     if (chat.contextSummary != null) {
+       await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
+     }
+     return;
+   }
+
+   // 3. Simulate context "BEFORE" the latest turn.
+   final historyBefore = allMessages.sublist(0, allMessages.length - 2);
+   final contextBefore = await contextXmlService.buildApiRequestContext(
+     chatId: _chatId,
+     currentUserMessage: Message(chatId: _chatId, role: MessageRole.user, parts: [MessagePart.text("before")]),
+     historyOverride: historyBefore,
+   );
+   final droppedMessagesBefore = contextBefore.droppedMessages;
+
+   // 4. Calculate the "diff" - the messages that were newly dropped.
+   final droppedIdsBefore = droppedMessagesBefore.map((m) => m.id).toSet();
+   final List<Message> messagesToSummarize = droppedMessagesAfter
+       .where((msg) => !droppedIdsBefore.contains(msg.id))
+       .toList();
+
+   if (messagesToSummarize.isEmpty) {
+     debugPrint("ChatStateNotifier($_chatId): Context diff is empty. No new messages to summarize.");
+     return; // Nothing new was dropped, so the existing summary is still valid.
+   }
+
+   debugPrint("ChatStateNotifier($_chatId): Found ${messagesToSummarize.length} new messages to summarize.");
    if (state.isCancelled) return;
 
-   // 2. Chunking: Split the messages into processable chunks based on context limits.
+   // 5. Chunking & Summarization
+   // The logic now takes the existing summary and merges it with the new "diff".
    final List<List<Message>> chunks = [];
-   while (messagesToSummarize.isNotEmpty) {
+   List<Message> remainingToChunk = List.from(messagesToSummarize);
+
+   while (remainingToChunk.isNotEmpty) {
      if (state.isCancelled) return;
-
-     // Use the context builder purely for its truncation logic.
-     // We pass the remaining messages as a `historyOverride`.
      final chunkingContext = await contextXmlService.buildApiRequestContext(
-       chatId: _chatId,
-       currentUserMessage: Message(chatId: _chatId, role: MessageRole.user, parts: [MessagePart.text("chunking")]),
-       historyOverride: messagesToSummarize,
-       // The summary prompt is the system prompt for the chunking operation
-       chatSystemPromptOverride: chat.preprocessingPrompt,
-     );
-
+         chatId: _chatId,
+         currentUserMessage: Message(chatId: _chatId, role: MessageRole.user, parts: [MessagePart.text("chunking")]),
+         historyOverride: remainingToChunk,
+         chatSystemPromptOverride: chat.preprocessingPrompt);
+     
      final List<Message> droppedInThisChunk = chunkingContext.droppedMessages;
      final Set<int> droppedIds = droppedInThisChunk.map((m) => m.id).toSet();
-     final List<Message> currentChunk = messagesToSummarize.where((m) => !droppedIds.contains(m.id)).toList();
+     final List<Message> currentChunk = remainingToChunk.where((m) => !droppedIds.contains(m.id)).toList();
 
      if (currentChunk.isEmpty) {
-       debugPrint("Warning: Chunking produced an empty chunk. Discarding remaining ${messagesToSummarize.length} messages to prevent infinite loop.");
-       break; // Safety break
+       debugPrint("Warning: Chunking produced an empty chunk. Discarding remaining ${remainingToChunk.length} messages.");
+       break;
      }
-     
      chunks.add(currentChunk);
-     messagesToSummarize = droppedInThisChunk; // The dropped messages are the input for the next iteration
-     debugPrint("ChatStateNotifier($_chatId): Created a summary chunk of ${currentChunk.length} messages. ${messagesToSummarize.length} messages remaining.");
+     remainingToChunk = droppedInThisChunk;
    }
 
    if (chunks.isEmpty) {
-     debugPrint("ChatStateNotifier($_chatId): Chunking resulted in no chunks to process.");
+     debugPrint("ChatStateNotifier($_chatId): Chunking of diff resulted in no chunks to process.");
      return;
    }
 
-   // 3. Parallel Execution: Summarize each chunk concurrently.
-   debugPrint("ChatStateNotifier($_chatId): Starting parallel summarization for ${chunks.length} chunks.");
+   // 6. Parallel Intelligent Merge Execution
+   // **CRITICAL FIX**: Reverse the chunks so they are processed from OLDEST to NEWEST.
+   // This ensures the existing summary is merged with the oldest part of the new diff.
+   final reversedChunks = chunks.reversed.toList();
+   final existingSummary = chat.contextSummary;
    final List<Future<String>> summaryFutures = [];
-   final previousSummary = chat.contextSummary;
 
-   for (int i = 0; i < chunks.length; i++) {
-     final chunk = chunks[i];
-     // The very first chunk gets the previous summary prepended.
-     final effectivePreviousSummary = (i == 0) ? previousSummary : null;
-     summaryFutures.add(_summarizeChunkWithRetry(chat, chunk, effectivePreviousSummary));
+   for (int i = 0; i < reversedChunks.length; i++) {
+     final chunk = reversedChunks[i];
+     // The very first chunk (which is now the OLDEST part of the history)
+     // gets the existing summary to perform the intelligent merge.
+     final summaryForThisChunk = (i == 0) ? existingSummary : null;
+     summaryFutures.add(_summarizeChunkWithRetry(chat, chunk, summaryForThisChunk));
    }
 
    final summaryResults = await Future.wait(summaryFutures);
-   
    if (state.isCancelled) return;
 
-   // 4. Aggregation: Join the results and save.
+   // 7. Aggregation & Full Replacement
+   // The result from the first future is the new, fully-merged summary.
+   // Subsequent results are summaries of any further chunks, which we join.
    final finalSummary = summaryResults.where((s) => s.isNotEmpty).join('\n\n---\n\n');
 
    if (finalSummary.isNotEmpty) {
+     // We are performing a full replacement of the old summary with the new one.
      await chatRepo.saveChat(chat.copyWith({'contextSummary': finalSummary}));
-     debugPrint("ChatStateNotifier($_chatId): Summarization successful. New summary saved.");
+     debugPrint("ChatStateNotifier($_chatId): Intelligent merge summarization successful. New summary saved.");
    } else {
      debugPrint("ChatStateNotifier($_chatId): Summarization resulted in an empty summary. Nothing to save.");
-      throw Exception("Summarization failed: All chunks resulted in empty content.");
+     throw Exception("Summarization failed: All chunks resulted in empty content.");
    }
  }
 
@@ -1208,13 +1254,13 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         final savedMessageId = await messageRepo.saveMessage(processedMessage);
         final savedMessage = await messageRepo.getMessageById(savedMessageId);
         
-        // 4. The main generation is "done", so stop the loading state for the input bar.
+        // 4. The primary response is "done". Turn off its specific lock.
+        //    Keep the master `isLoading` lock on for background tasks.
         state = state.copyWith(
-          isLoading: false,
+          isPrimaryResponseLoading: false,
           clearError: true,
           clearTopMessage: true,
         );
-        // Timer is NOT stopped here anymore; it continues for background tasks.
 
         // 5. Asynchronously run post-save tasks on the saved message.
         if (savedMessage != null) {
@@ -1388,13 +1434,15 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        );
     }
 
-    // 2. Always reset the main loading state *before* running background tasks.
+    // 2. The primary response (stream) is "done". Turn off its specific lock.
+    //    Keep the master `isLoading` lock on for background tasks.
     if (mounted) {
       state = state.copyWith(
-        isLoading: false, isStreaming: false, clearStreaming: true,
-        clearStreamingMessage: true,
+        isPrimaryResponseLoading: false,
+        isStreaming: false,
+        clearStreaming: true,
+        // CRITICAL: Do NOT clear isLoading or the streaming message here.
       );
-      // calculateAndStoreTokenCount(); // REMOVED: The listener in MessageList will handle this.
     }
 
     // 3. Now, with the main state cleared, run async pre-save and post-save processing.
@@ -1414,16 +1462,23 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         
         // 3c. Run post-save async tasks.
         if (savedMessage != null) {
-           debugPrint("Running async post-save processing for newly saved message ID $savedId...");
-           if (!state.isCancelled) {
-             await _runAsyncProcessingTasks(savedMessage);
-             debugPrint("Async post-save processing for message ID $savedId finished.");
-             if (mounted && !state.isCancelled) {
-               showTopMessage("已完成", backgroundColor: Colors.green);
-             }
-           } else {
-             debugPrint("Async post-save processing for message ID $savedId skipped due to cancellation.");
-           }
+          // CRITICAL: Update the state's streamingMessage with the one from the DB.
+          // This "promotes" the temporary message to a persistent one with a real ID,
+          // ensuring a seamless transition in the UI.
+          if (mounted) {
+            state = state.copyWith(streamingMessage: savedMessage);
+          }
+
+          debugPrint("Running async post-save processing for newly saved message ID $savedId...");
+          if (!state.isCancelled) {
+            await _runAsyncProcessingTasks(savedMessage);
+            debugPrint("Async post-save processing for message ID $savedId finished.");
+            if (mounted && !state.isCancelled) {
+              showTopMessage("已完成", backgroundColor: Colors.green);
+            }
+          } else {
+            debugPrint("Async post-save processing for message ID $savedId skipped due to cancellation.");
+          }
         }
       } else if (wasRunning) {
         debugPrint("Skipping async processing: chat or message not available.");
@@ -1558,14 +1613,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady, bool forceRefresh = false}) async {
-    // 1. Prevent starting if another task is already running.
-    if (state.isLoading || state.isGeneratingSuggestions) {
-      showTopMessage('正在处理中，请稍后...', backgroundColor: Colors.orange);
-      return;
-    }
 
-    // 2. This is a new, user-initiated action. Reset the cancellation flag from any previous operation
-    //    and set the specific loading flag for this action.
     if (!mounted) return;
     state = state.copyWith(isCancelled: false, isGeneratingSuggestions: true);
 
@@ -1575,7 +1623,10 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       // 3. Handle cache case
       if (!forceRefresh && hasExistingSuggestions) {
         debugPrint("ChatStateNotifier($_chatId): Using cached 'Help Me Reply' suggestions.");
-        onSuggestionsReady?.call(state.helpMeReplySuggestions![state.helpMeReplyPageIndex]);
+        if (onSuggestionsReady != null) {
+          final currentPage = state.helpMeReplySuggestions![state.helpMeReplyPageIndex];
+          onSuggestionsReady(currentPage);
+        }
         return; // Early exit, finally block will clean up state
       }
 
