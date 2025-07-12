@@ -9,7 +9,7 @@ class OpenAIModelsState {
   final String? selectedConfigId;
 
   const OpenAIModelsState({
-    this.models = const AsyncValue.loading(),
+    this.models = const AsyncValue.data([]),
     this.selectedConfigId,
   });
 
@@ -38,6 +38,10 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
     }
   }
 
+  void resetState() {
+    state = const OpenAIModelsState();
+  }
+
   Future<void> fetchModels(ApiConfig config) async {
     if (config.baseUrl == null || config.baseUrl!.isEmpty || config.apiKey == null || config.apiKey!.isEmpty) {
       state = state.copyWith(models: AsyncValue.error('API基础URL或密钥未设置。', StackTrace.current));
@@ -56,7 +60,7 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
   }
 }
 
-final openAIModelsProvider = StateNotifierProvider<OpenAIModelsNotifier, OpenAIModelsState>((ref) {
+final openAIModelsProvider = StateNotifierProvider.autoDispose<OpenAIModelsNotifier, OpenAIModelsState>((ref) {
   // Now depends on the globally provided OpenAIService
   final apiService = ref.watch(openaiServiceProvider);
   return OpenAIModelsNotifier(apiService);

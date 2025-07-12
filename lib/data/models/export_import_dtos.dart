@@ -171,6 +171,9 @@ class ChatExportDto {
   final String? contextSummary;
   final String? continuePrompt;
   final bool hasRealCoverImage;
+  // 新增时间戳字段
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   const ChatExportDto({
     this.title,
@@ -190,6 +193,8 @@ class ChatExportDto {
     this.contextSummary,
     this.continuePrompt,
     this.hasRealCoverImage = false,
+    this.createdAt, // 在构造函数中添加
+    this.updatedAt, // 在构造函数中添加
   });
 
   factory ChatExportDto.fromJson(Map<String, dynamic> json) {
@@ -215,6 +220,9 @@ class ChatExportDto {
       contextSummary: json['contextSummary'] as String?,
       continuePrompt: json['continuePrompt'] as String?,
       hasRealCoverImage: json['hasRealCoverImage'] as bool? ?? false,
+      // 从 JSON 解析时间戳
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
+      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : null,
     );
   }
 
@@ -287,6 +295,9 @@ class ChatExportDto {
       'contextSummary': contextSummary,
       'continuePrompt': continuePrompt,
       'hasRealCoverImage': hasRealCoverImage,
+      // 将时间戳转换为 ISO 8601 字符串以便序列化
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 

@@ -68,14 +68,27 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     });
   }
 
+  /// 批量移动聊天到新的父文件夹。
+  Future<void> moveChatsToNewParent(List<int> chatIds, int? newParentFolderId) {
+    if (chatIds.isEmpty) return Future.value();
+    return (update(chats)..where((t) => t.id.isIn(chatIds))).write(
+      ChatsCompanion(
+        parentFolderId: Value(newParentFolderId),
+        orderIndex: const Value(null), // 移动到新文件夹后，重置排序
+      ),
+    );
+  }
+
   // --- Database Listening Streams ---
 
   Stream<List<ChatData>> watchChatsInFolder(int? parentFolderId) {
     final query = select(chats)
       ..where((t) => parentFolderId == null ? t.parentFolderId.isNull() : t.parentFolderId.equals(parentFolderId))
       ..orderBy([
-        (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.last),
-        (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+       // 最终修正：手动排序的项目（orderIndex 非 null）在后，自动排序的项目（orderIndex 为 null）在前
+       (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.first),
+       // 自动排序的项目内部，按创建时间倒序，实现“新建的在最前”
+       (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)
       ]);
     return query.watch();
   }
@@ -88,8 +101,10 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     final query = select(chats)
       ..where((t) => parentFolderId == null ? t.parentFolderId.isNull() : t.parentFolderId.equals(parentFolderId))
       ..orderBy([
-        (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.last),
-        (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+       // 最终修正：手动排序的项目（orderIndex 非 null）在后，自动排序的项目（orderIndex 为 null）在前
+       (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.first),
+       // 自动排序的项目内部，按创建时间倒序，实现“新建的在最前”
+       (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)
       ]);
     return query.get();
   }
@@ -121,8 +136,9 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       isFolder: Value(chatDto.isFolder),
       contextConfig: contextConfigDrift,
       xmlRules: xmlRulesDrift,
-      createdAt: now,
-      updatedAt: now,
+      // 优先使用 DTO 中的时间戳，否则使用当前时间作为备用
+      createdAt: chatDto.createdAt ?? now,
+      updatedAt: chatDto.updatedAt ?? now,
       apiConfigId: Value(chatDto.apiConfigId),
       parentFolderId: Value(parentFolderId),
       orderIndex: const Value(0),
@@ -174,43 +190,43 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     // return Future.value(0); // Remove dummy return
   }
 
-  Future<int> forkChat(int originalChatId, int fromMessageId) async {
+  /// 通用方法，用于分叉或克隆聊天。
+  ///
+  /// [newChatCompanion] 是预设好的新聊天对象。
+  /// [originalChatId] 是原始聊天的ID。
+  /// [upToMessageId] (可选) 如果提供，则只复制到此消息ID为止（分叉行为）。
+  /// 如果为 null，则复制所有消息（克隆行为）。
+  Future<int> forkOrCloneChat(
+    ChatsCompanion newChatCompanion,
+    int originalChatId, {
+    int? upToMessageId,
+  }) async {
     return db.transaction(() async {
-      // 1. Get the original chat
-      final originalChat = await getChat(originalChatId);
-      if (originalChat == null) {
-        throw Exception('Original chat not found for forking.');
+      // 1. 插入由 Repository 层准备好的新聊天记录
+      final newChatId = await into(chats).insert(newChatCompanion);
+
+      // 2. 构建消息查询
+      final query = select(messages)
+        ..where((t) => t.chatId.equals(originalChatId))
+        ..orderBy([(t) => OrderingTerm(expression: t.timestamp)]);
+
+      // 如果是分叉，则添加消息ID限制
+      if (upToMessageId != null) {
+        query.where((t) => t.id.isSmallerOrEqualValue(upToMessageId));
       }
 
-      // 2. Create a new chat companion from the original, resetting some fields
-      final now = DateTime.now();
-      final forkedChatCompanion = originalChat.toCompanion(true).copyWith(
-        id: const Value.absent(), // New ID will be assigned
-        title: Value('${originalChat.title} (Forked)'),
-        createdAt: Value(now),
-        updatedAt: Value(now),
-        contextSummary: const Value(null), // Clear summary on fork
-      );
-      
-      final newChatId = await into(chats).insert(forkedChatCompanion);
+      final messagesToCopy = await query.get();
 
-      // 3. Get messages from the original chat up to the specified message ID
-      final messagesToCopy = await (select(messages)
-        ..where((t) => t.chatId.equals(originalChatId))
-        ..where((t) => t.id.isSmallerOrEqualValue(fromMessageId))
-        ..orderBy([(t) => OrderingTerm(expression: t.timestamp)])
-      ).get();
-
-      // 4. Create new message companions for the new chat
+      // 3. 为新聊天创建新的消息副本
       final List<MessagesCompanion> newMessages = [];
       for (final msg in messagesToCopy) {
         newMessages.add(msg.toCompanion(true).copyWith(
-          id: const Value.absent(), // New ID
-          chatId: Value(newChatId), // Link to the new chat
+          id: const Value.absent(), // 新的自增ID
+          chatId: Value(newChatId), // 关联到新的聊天ID
         ));
       }
 
-      // 5. Batch insert the copied messages
+      // 4. 批量插入复制的消息
       if (newMessages.isNotEmpty) {
         await batch((batch) {
           batch.insertAll(messages, newMessages);

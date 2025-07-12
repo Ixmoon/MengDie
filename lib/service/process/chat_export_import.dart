@@ -261,6 +261,9 @@ class ChatExportImportService {
       xmlRules: chat.xmlRules.map((r) => XmlRuleDto(tagName: r.tagName, action: r.action)).toList(),
       messages: messageDtos,
       hasRealCoverImage: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+      // 填充时间戳
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
     );
 
     final jsonString = jsonEncode(chatDto.toJson());
@@ -286,9 +289,9 @@ class ChatExportImportService {
     return img.encodeJpg(image);
   }
 
-  // --- 更新：导入聊天（支持批量图片和 ZIP 压缩包）---
-  Future<int> importChats() async {
-    debugPrint("ChatExportImportService: 开始导入...");
+  // --- 更新：导入聊天（支持批量图片和 ZIP 压缩包），可指定父文件夹 ---
+  Future<int> importChats({int? parentFolderId}) async {
+    debugPrint("ChatExportImportService: 开始导入到文件夹 ID: $parentFolderId");
     await _ensurePermissions();
 
     try {
@@ -314,10 +317,12 @@ class ChatExportImportService {
         final fileName = file.name.toLowerCase();
         try {
           if (fileName.endsWith('.zip')) {
-            final count = await _importFromZip(file.bytes!);
+            // 将 parentFolderId 传递给 ZIP 导入逻辑
+            final count = await _importFromZip(file.bytes!, parentFolderId);
             successCount += count;
           } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
-            await _importFromImage(file.bytes!, null); // Import to root
+            // 将 parentFolderId 传递给单个图片导入逻辑
+            await _importFromImage(file.bytes!, parentFolderId);
             successCount++;
           }
         } catch (e, s) {
@@ -332,13 +337,15 @@ class ChatExportImportService {
     }
   }
 
-  Future<int> _importFromZip(Uint8List zipBytes) async {
-    debugPrint("ChatExportImportService: 正在从 ZIP 文件导入...");
+  // ZIP 导入逻辑现在接收一个基础的 parentFolderId
+  Future<int> _importFromZip(Uint8List zipBytes, int? baseParentFolderId) async {
+    debugPrint("ChatExportImportService: 正在从 ZIP 文件导入到基础文件夹 ID: $baseParentFolderId");
     final archive = ZipDecoder().decodeBytes(zipBytes);
     int successCount = 0;
     
     // Map to keep track of created folder IDs: 'path/in/zip' -> db_id
-    final Map<String, int?> createdFolderIds = {'': null}; // Root path
+    // 根路径现在映射到基础父文件夹 ID
+    final Map<String, int?> createdFolderIds = {'': baseParentFolderId};
 
     // Create a mutable copy of the files list and sort it to process directories first
     final sortedFiles = List.of(archive.files);
@@ -351,8 +358,8 @@ class ChatExportImportService {
           final pathParts = file.name.split('/');
           final parentPath = pathParts.length > 1 ? pathParts.sublist(0, pathParts.length - 1).join('/') : '';
           
-          // Get or create the folder ID for the parent path
-          final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds);
+          // Get or create the folder ID for the parent path, relative to the baseParentFolderId
+          final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds, baseParentFolderId);
 
           // Import the chat from the image file content
           await _importFromImage(file.content as Uint8List, parentFolderId);
@@ -365,15 +372,18 @@ class ChatExportImportService {
     return successCount;
   }
 
-  Future<int?> _getOrCreateFolderIdByPath(String path, Map<String, int?> createdFolderIds) async {
-    if (path.isEmpty) return null; // Root folder
+  // _getOrCreateFolderIdByPath 现在也接收基础父文件夹 ID
+  Future<int?> _getOrCreateFolderIdByPath(String path, Map<String, int?> createdFolderIds, int? baseParentFolderId) async {
+    if (path.isEmpty) return baseParentFolderId; // 如果路径为空，返回基础父ID
     if (createdFolderIds.containsKey(path)) {
       return createdFolderIds[path];
     }
 
     // Path doesn't exist, we need to create it, and possibly its parents first
+    // Path doesn't exist, we need to create it, and possibly its parents first
     final pathParts = path.split('/');
-    int? currentParentId = null; // Start from root
+    // 起始的父ID是基础父ID
+    int? currentParentId = baseParentFolderId;
     String currentPath = '';
 
     for (int i = 0; i < pathParts.length; i++) {
@@ -381,13 +391,14 @@ class ChatExportImportService {
       currentPath = (i == 0) ? part : '$currentPath/$part';
       
       if (!createdFolderIds.containsKey(currentPath)) {
-        // This folder part doesn't exist, create it
-        debugPrint("ChatExportImportService: 正在创建文件夹: $currentPath");
+        // This folder part doesn't exist, create it under the current parent
+        debugPrint("ChatExportImportService: 正在创建文件夹: $currentPath in parent $currentParentId");
         final folderDto = ChatExportDto.createFolder(title: part);
         final newFolderId = await _chatRepository.importChat(folderDto, parentFolderId: currentParentId);
         createdFolderIds[currentPath] = newFolderId;
         currentParentId = newFolderId;
       } else {
+        // The folder already exists in our map, just update the current parent ID
         currentParentId = createdFolderIds[currentPath];
       }
     }

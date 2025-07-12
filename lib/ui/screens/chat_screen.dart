@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // 导入 shared_pr
 
 // 导入模型、Provider、仓库、服务和 Widget
 import '../../data/models/models.dart';
+import '../../data/repositories/chat_repository.dart';
 import '../providers/chat_state_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/message_bubble.dart';
@@ -86,7 +87,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
 
-        final siblingChatsAsync = ref.watch(chatListProvider(chat.parentFolderId));
+        final siblingChatsAsync = ref.watch(chatListProvider((parentFolderId: chat.parentFolderId, mode: ChatListMode.normal)));
 
         return siblingChatsAsync.when(
           loading: () => Scaffold(
@@ -841,6 +842,33 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   }
                 }
                 break;
+              case 'cloneAsTemplate':
+                try {
+                  final repo = ref.read(chatRepositoryProvider);
+                  await repo.cloneChat(chat.id, asTemplate: true);
+                  if (!context.mounted) return;
+                  notifier.showTopMessage('已成功克隆为模板', backgroundColor: Colors.green);
+                  context.push('/list?mode=manage');
+                } catch (e) {
+                  if (context.mounted) {
+                    notifier.showTopMessage('克隆为模板失败: $e', backgroundColor: Colors.red);
+                  }
+                }
+                break;
+              case 'cloneAsChat':
+                try {
+                  final repo = ref.read(chatRepositoryProvider);
+                  final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
+                  if (!context.mounted) return;
+                  notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
+                  ref.read(activeChatIdProvider.notifier).state = newChatId;
+                  // 不需要go,因为activeChatId改变会自动触发页面切换
+                } catch (e) {
+                  if (context.mounted) {
+                    notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
+                  }
+                }
+                break;
             }
           },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -852,7 +880,10 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
             buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
             buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
             const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'exportChat', icon: Icons.upload_file, label: '导出聊天到文件'),
+            buildPopupMenuItem(value: 'exportChat', icon: Icons.upload_file_outlined, label: '导出聊天到文件'),
+            buildPopupMenuItem(value: 'cloneAsTemplate', icon: Icons.flip_to_front_outlined, label: '导出聊天到模板'),
+            buildPopupMenuItem(value: 'cloneAsChat', icon: Icons.control_point_duplicate_outlined, label: '导出为新聊天'),
+            const PopupMenuDivider(),
             buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
           ],
         ),
@@ -978,38 +1009,52 @@ class _MessageListState extends ConsumerState<_MessageList> {
                 );
               }
 
-              // Help Me Reply Button
+              // Help Me Reply / Cancel Button
               if (globalSettings.enableHelpMeReply) {
-                 buttons.add(const SizedBox(width: 8));
-                 buttons.add(
-                  FilledButton.tonalIcon(
-                    icon: chatState.isGeneratingSuggestions
-                          ? const SizedBox.shrink() // Hide icon when loading
-                          : const Icon(Icons.quickreply_rounded, size: 16),
-                    label: chatState.isGeneratingSuggestions
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Text('帮我回复'),
-                    onPressed: chatState.isGeneratingSuggestions ? null : () {
-                      notifier.generateHelpMeReply(
-                        onSuggestionsReady: (suggestions) {
-                          if (!mounted) return;
-                          showDialog(
-                            context: context,
-                            builder: (dialogContext) => _HelpMeReplyDialog(
-                              chatId: widget.chatId,
-                              initialSuggestions: suggestions,
-                              onSuggestionSelected: widget.onSuggestionSelected,
-                            ),
-                          );
-                        },
-                      );
-                    },
-                    style: FilledButton.styleFrom(
+                buttons.add(const SizedBox(width: 8));
+                if (chatState.isGeneratingSuggestions) {
+                  // Show a contextual cancel button
+                  buttons.add(
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                      label: const Text('取消'),
+                      onPressed: () => notifier.cancelGeneration(),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        backgroundColor: Colors.red.withOpacity(0.1),
+                        foregroundColor: Colors.red.shade700,
+                      ),
+                    ),
+                  );
+                } else {
+                  // Show the "Help Me Reply" button
+                  buttons.add(
+                    FilledButton.tonalIcon(
+                      icon: const Icon(Icons.quickreply_rounded, size: 16),
+                      label: const Text('帮我回复'),
+                      onPressed: () {
+                        notifier.generateHelpMeReply(
+                          onSuggestionsReady: (suggestions) {
+                            if (!mounted) return;
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) => _HelpMeReplyDialog(
+                                chatId: widget.chatId,
+                                initialSuggestions: suggestions,
+                                onSuggestionSelected: widget.onSuggestionSelected,
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                       ),
-                  ),
-                );
+                    ),
+                  );
+                }
               }
 
               return Padding(
@@ -1414,7 +1459,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                      controller: widget.messageController,
                      focusNode: _inputFocusNode,
                      decoration: InputDecoration(
-                       hintText: (chatState.isLoading || chatState.isProcessingInBackground)
+                       hintText: (chatState.isLoading || chatState.isProcessingInBackground) // Removed isGeneratingSuggestions check
                            ? '处理中... (${chatState.elapsedSeconds ?? 0}s)'
                            : '输入消息',
                        border: OutlineInputBorder(
@@ -1437,7 +1482,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                    ),
                  ),
                  const SizedBox(width: 4.0),
-                 if (chatState.isLoading || chatState.isProcessingInBackground)
+                 if (chatState.isLoading || chatState.isProcessingInBackground) // Removed isGeneratingSuggestions check
                    Padding(
                      padding: const EdgeInsets.only(right: 4.0),
                      child: IconButton(

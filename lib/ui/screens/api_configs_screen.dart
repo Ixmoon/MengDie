@@ -108,8 +108,8 @@ class ApiConfigsScreen extends ConsumerWidget {
     var enableReasoningEffort = existingConfig?.enableReasoningEffort ?? false;
     var reasoningEffort = existingConfig?.reasoningEffort ?? OpenAIReasoningEffort.auto;
 
-    // Reset the state of the models provider when opening the dialog
-    // Future.microtask(() => ref.read(openAIModelsProvider.notifier).resetState()); // No longer needed
+    // Reset the state of the models provider when opening the dialog to ensure data isolation.
+    Future.microtask(() => ref.read(openAIModelsProvider.notifier).resetState());
 
     showDialog(
       context: context,
@@ -176,7 +176,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                                         itemBuilder: (BuildContext context) {
                                           return models.map((model) {
                                             return PopupMenuItem<String>(
-                                              value: model!.id,
+                                              value: model.id,
                                               child: Text(model.id),
                                             );
                                           }).toList();

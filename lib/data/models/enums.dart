@@ -56,3 +56,13 @@ enum OpenAIReasoningEffort {
 }
 
 
+
+// --- 聊天列表屏幕模式 ---
+enum ChatListMode {
+  /// 正常模式，浏览和管理聊天。
+  normal,
+  /// 模板选择模式，用于根据模板新建聊天。
+  templateSelection,
+  /// 模板管理模式，用于编辑和创建模板。
+  templateManagement,
+}

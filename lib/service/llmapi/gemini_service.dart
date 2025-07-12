@@ -8,7 +8,6 @@ import 'package:tiktoken/tiktoken.dart' as tiktoken; // Import tiktoken for fall
 
 // Import local models, providers, services, and the NEW generic LLM types
 import '../../data/models/models.dart';
-import '../../data/models/api_config.dart';
 import 'llm_models.dart'; // Import LlmContent, LlmPart, LlmTextPart
 import '../../ui/providers/api_key_provider.dart';
 import 'base_llm_service.dart'; // 导入抽象基类

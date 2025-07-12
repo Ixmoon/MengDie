@@ -48,16 +48,42 @@ final activeChatIdProvider = StateProvider<int?>((ref) => null);
 // --- 当前文件夹 ID Provider ---
 final currentFolderIdProvider = StateProvider<int?>((ref) => null);
 
+// --- 用于 chatListProvider 的参数 ---
+// 使用 Record 类型来传递多个参数
+typedef ChatListProviderParams = ({int? parentFolderId, ChatListMode mode});
+
 // --- 聊天列表 Provider (Stream Family) ---
-final chatListProvider = StreamProvider.family<List<Chat>, int?>((ref, parentFolderId) {
+final chatListProvider =
+    StreamProvider.family<List<Chat>, ChatListProviderParams>((ref, params) {
   try {
-     final repo = ref.watch(chatRepositoryProvider);
-      debugPrint("chatListProvider(folderId: $parentFolderId): 正在监听聊天/文件夹。");
-      return repo.watchChatsInFolder(parentFolderId);
-   } catch (e) {
-      debugPrint("chatListProvider(folderId: $parentFolderId) 错误: $e");
-     return Stream.error(e);
-   }
+    final repo = ref.watch(chatRepositoryProvider);
+    debugPrint(
+        "chatListProvider(folderId: ${params.parentFolderId}, mode: ${params.mode}): 正在监听聊天/文件夹。");
+
+    // 监听原始数据流
+    final sourceStream = repo.watchChatsInFolder(params.parentFolderId);
+
+    // 根据模式和时间戳过滤数据流
+    return sourceStream.map((chats) {
+      switch (params.mode) {
+        case ChatListMode.normal:
+          // 普通模式：只显示 updatedAt 不是模板时间戳的聊天
+          return chats
+              .where((chat) => chat.updatedAt.millisecondsSinceEpoch >= 1000)
+              .toList();
+        case ChatListMode.templateSelection:
+        case ChatListMode.templateManagement:
+          // 模板模式：只显示 updatedAt 是模板时间戳的聊天 (允许1秒误差)
+          return chats
+              .where((chat) => chat.updatedAt.millisecondsSinceEpoch < 1000)
+              .toList();
+      }
+    });
+  } catch (e) {
+    debugPrint(
+        "chatListProvider(folderId: ${params.parentFolderId}, mode: ${params.mode}) 错误: $e");
+    return Stream.error(e);
+  }
 });
 
 
@@ -101,6 +127,26 @@ final lastModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
   );
 });
 
+// --- 新增：第一条模型消息 Provider (用于列表预览) ---
+final firstModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
+  final messagesAsyncValue = ref.watch(chatMessagesProvider(chatId));
+  return messagesAsyncValue.when(
+    data: (messages) {
+      try {
+        // 使用 firstWhereOrNull 高效查找第一条模型消息
+        return messages.firstWhereOrNull((msg) => msg.role == MessageRole.model);
+      } catch (e) {
+        return null; // 容错处理
+      }
+    },
+    loading: () => null, // 加载时返回 null
+    error: (error, stack) {
+      debugPrint("firstModelMessageProvider($chatId): 消息流错误: $error");
+      return null; // 出错时返回 null
+    },
+  );
+});
+
 
 // --- 聊天屏幕状态 ---
 @immutable
@@ -122,6 +168,7 @@ class ChatScreenState {
   final int helpMeReplyPageIndex; // To track the current page of suggestions
   final bool isProcessingInBackground; // New state for background tasks
   final bool isGeneratingSuggestions; // New state specifically for the "Help Me Reply" feature
+  final bool isCancelled; // Flag to indicate if the current generation has been cancelled.
 
   const ChatScreenState({
     this.isLoading = false,
@@ -141,6 +188,7 @@ class ChatScreenState {
     this.helpMeReplyPageIndex = 0,
     this.isProcessingInBackground = false, // Default to false
     this.isGeneratingSuggestions = false,
+    this.isCancelled = false,
   });
 
   ChatScreenState copyWith({
@@ -168,6 +216,7 @@ class ChatScreenState {
     int? helpMeReplyPageIndex,
     bool? isProcessingInBackground,
     bool? isGeneratingSuggestions,
+    bool? isCancelled,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -187,6 +236,7 @@ class ChatScreenState {
       helpMeReplyPageIndex: clearHelpMeReplySuggestions ? 0 : (helpMeReplyPageIndex ?? this.helpMeReplyPageIndex),
       isProcessingInBackground: isProcessingInBackground ?? this.isProcessingInBackground,
       isGeneratingSuggestions: isGeneratingSuggestions ?? this.isGeneratingSuggestions,
+      isCancelled: isCancelled ?? this.isCancelled,
     );
   }
 }
@@ -206,9 +256,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   StreamSubscription<LlmStreamChunk>? _llmStreamSubscription;
   Timer? _updateTimer;
   Timer? _topMessageTimer; // Timer for top messages
-  bool _isCancelling = false; // Flag to prevent reentry into cancelGeneration
   bool _isFinalizing = false; // Flag to prevent reentry into _finalizeStreamedMessage
-  bool _isBackgroundTaskCancelled = false; // Cancellation flag for background tasks
 
   ChatStateNotifier(this._ref, this._chatId) : super(const ChatScreenState());
 
@@ -328,6 +376,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       if (mounted) {
         if (deleted) {
           showTopMessage('消息已删除', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+          clearHelpMeReplySuggestions(); // Clear suggestions as they might be based on the deleted message
           calculateAndStoreTokenCount(); // Recalculate tokens
 
           // --- 优化后的摘要清除逻辑 ---
@@ -389,6 +438,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
       if (mounted) {
         showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+        clearHelpMeReplySuggestions(); // Clear suggestions as they might be based on the edited message
         calculateAndStoreTokenCount(); // Recalculate tokens
 
         // --- 优化后的摘要清除逻辑 ---
@@ -560,6 +610,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     if (!mounted) return;
 
     // 3. 调用 sendMessage 进行重新生成
+    clearHelpMeReplySuggestions(); // Clear suggestions before regenerating
     // For regeneration, we pass the original user message object
     await sendMessage(userMessage: userMessage, isRegeneration: true);
   }
@@ -591,6 +642,11 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     if (state.isLoading && !isRegeneration && !isContinuation) {
       debugPrint("sendMessage ($_chatId) 取消：已在加载中。");
       return;
+    }
+    
+    // Reset the cancellation state for this new request.
+    if (state.isCancelled) {
+      state = state.copyWith(isCancelled: false);
     }
     
     final chat = _ref.read(currentChatProvider(_chatId)).value;
@@ -629,6 +685,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     // --- Start loading state ---
     state = state.copyWith(
         isLoading: true,
+        isCancelled: false, // Ensure cancellation is reset when starting
         clearError: true,
         clearTopMessage: true,
         clearStreaming: true,
@@ -712,8 +769,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    final chat = _ref.read(currentChatProvider(_chatId)).value;
    if (chat == null) return;
 
-   // 1. Reset cancellation flag and set background processing state
-   _isBackgroundTaskCancelled = false;
+   if (!mounted || state.isCancelled) return; // Critical cancellation check
+
+   // 1. Set background processing state
    if (mounted) {
      state = state.copyWith(isProcessingInBackground: true);
    }
@@ -740,7 +798,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        // The "Completed" message is now shown by the caller contexts
        // (_finalizeStreamedMessage or _handleSingleResponse) after this whole process finishes.
      } catch (e) {
-       if (!_isBackgroundTaskCancelled) { // Only show error if not cancelled by user
+       if (!state.isCancelled) { // Only show error if not cancelled by user
          debugPrint("ChatStateNotifier($_chatId): Error during async processing tasks: $e");
          if (mounted) {
            showTopMessage("后台处理任务出错: $e", backgroundColor: Colors.red.withAlpha(204));
@@ -767,7 +825,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  }
 
  Future<void> _executePostGenerationProcessing(Chat chat, Message modelMessage) async {
-   if (_isBackgroundTaskCancelled) return; // Check for cancellation
+   if (state.isCancelled) return; // Check for cancellation
    debugPrint("ChatStateNotifier($_chatId): Starting post-generation processing for an existing message...");
    final messageRepo = _ref.read(messageRepositoryProvider);
 
@@ -777,10 +835,10 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
      return;
    }
    
-   if (_isBackgroundTaskCancelled) return; // Check again before heavy lifting
+   if (state.isCancelled) return; // Check again before heavy lifting
    final finalMessage = await _getFinalProcessedMessage(chat, messageToUpdate);
 
-   if (_isBackgroundTaskCancelled) return; // Check again before saving
+   if (state.isCancelled) return; // Check again before saving
 
    if (finalMessage.rawText != messageToUpdate.rawText ||
        finalMessage.originalXmlContent != messageToUpdate.originalXmlContent ||
@@ -796,7 +854,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  /// This method now chunks the history, summarizes each chunk in parallel with retries,
  /// and then joins the results.
  Future<void> _executePreprocessing(Chat chat) async {
-   if (_isBackgroundTaskCancelled) return;
+   if (state.isCancelled) return;
    debugPrint("ChatStateNotifier($_chatId): Executing pre-processing (summarization)...");
    
    final contextXmlService = _ref.read(contextXmlServiceProvider);
@@ -817,12 +875,12 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
      return;
    }
 
-   if (_isBackgroundTaskCancelled) return;
+   if (state.isCancelled) return;
 
    // 2. Chunking: Split the messages into processable chunks based on context limits.
    final List<List<Message>> chunks = [];
    while (messagesToSummarize.isNotEmpty) {
-     if (_isBackgroundTaskCancelled) return;
+     if (state.isCancelled) return;
 
      // Use the context builder purely for its truncation logic.
      // We pass the remaining messages as a `historyOverride`.
@@ -867,7 +925,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
    final summaryResults = await Future.wait(summaryFutures);
    
-   if (_isBackgroundTaskCancelled) return;
+   if (state.isCancelled) return;
 
    // 4. Aggregation: Join the results and save.
    final finalSummary = summaryResults.where((s) => s.isNotEmpty).join('\n\n---\n\n');
@@ -888,7 +946,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    final summaryPrompt = chat.preprocessingPrompt!;
 
    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-     if (_isBackgroundTaskCancelled) return ""; // Check for cancellation before each attempt
+     if (state.isCancelled) return ""; // Check for cancellation before each attempt
 
      try {
        // Manually construct the context for this specific chunk.
@@ -925,7 +983,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        }
      } catch (e) {
        debugPrint("ChatStateNotifier($_chatId): Chunk summarization attempt $attempt/$maxRetries failed: $e");
-       if (attempt == maxRetries || _isBackgroundTaskCancelled) {
+       if (attempt == maxRetries || state.isCancelled) {
          // If it's the last attempt or cancelled, rethrow to fail the Future.
          // The Future.wait will catch this, but we'll return an empty string
          // so that a single failed chunk doesn't stop the entire process.
@@ -1039,6 +1097,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       final response = await llmService.sendMessageOnce(llmContext: llmContext, chat: chat, apiConfigIdOverride: apiConfigIdOverride);
       if (!mounted) return;
  
+      if (state.isCancelled) return; // Check for cancellation after response
       if (response.isSuccess && response.parts.isNotEmpty) {
         final messageRepo = _ref.read(messageRepositoryProvider);
         final String newContent = response.parts.map((p) => p.text ?? "").join("\n");
@@ -1080,6 +1139,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
        // 4. Asynchronously run post-processing tasks on the saved message.
        // We now await this to ensure proper completion handling.
        if (savedMessage != null) {
+          if (state.isCancelled) return; // Final check before starting background tasks
          await _runAsyncProcessingTasks(savedMessage);
        } else {
          // If there's no message, ensure loading state is cleared.
@@ -1093,7 +1153,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
        debugPrint("ChatStateNotifier($_chatId): Single response and async tasks finished (ID: $savedMessageId).");
        calculateAndStoreTokenCount(); // Recalculate tokens based on initial saved message.
-     } else {
+      } else {
        showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
        state = state.copyWith(isLoading: false, clearGenerationStartTime: true, clearElapsedSeconds: true);
      }
@@ -1116,21 +1176,25 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    String? newSecondaryXmlContent;
 
    if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
-     await _executeSpecialAction(
-       prompt: chat.secondaryXmlPrompt!,
-       apiConfigIdOverride: chat.secondaryXmlApiConfigId,
-       actionType: _SpecialActionType.secondaryXml,
-       targetMessage: initialMessage,
-       onSuccess: (generatedText) {
-         debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content START ==========");
-         debugPrint(generatedText);
-         debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content END ==========");
-         newSecondaryXmlContent = generatedText;
-       },
-       onError: (error) {
-          debugPrint("ChatStateNotifier($_chatId): Secondary XML generation failed. Error: $error");
-       }
-     );
+     try {
+       if (state.isCancelled) return initialMessage; // Early exit
+       final generatedText = await _executeSpecialAction(
+         prompt: chat.secondaryXmlPrompt!,
+         apiConfigIdOverride: chat.secondaryXmlApiConfigId,
+         actionType: _SpecialActionType.secondaryXml,
+         targetMessage: initialMessage,
+       );
+       debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content START ==========");
+       debugPrint(generatedText);
+       debugPrint("ChatStateNotifier($_chatId): ========== Secondary XML Raw Content END ==========");
+       newSecondaryXmlContent = generatedText;
+     } catch (e) {
+       // If it fails, we log it but don't stop the whole finalization process.
+       // The error is already logged inside _executeSpecialAction.
+       // We rethrow to let the caller (_runAsyncProcessingTasks) know something failed.
+       debugPrint("ChatStateNotifier($_chatId): Secondary XML generation failed and will not be included.");
+       rethrow;
+     }
    }
 
    final newParts = [MessagePart.text(displayText)];
@@ -1144,63 +1208,65 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  }
 
   Future<void> cancelGeneration() async {
-    // Check against all loading states
-    if ((!state.isLoading && !state.isStreaming && !state.isProcessingInBackground) || _isCancelling) {
-      debugPrint("Cancel generation skipped: isLoading=${state.isLoading}, isStreaming=${state.isStreaming}, isProcessingInBackground=${state.isProcessingInBackground}, isCancelling=$_isCancelling");
+    // If nothing is running, or it's already cancelled, do nothing.
+    if ((!state.isLoading && !state.isStreaming && !state.isProcessingInBackground && !state.isGeneratingSuggestions) || state.isCancelled) {
+      debugPrint("Cancel generation skipped: isLoading=${state.isLoading}, isStreaming=${state.isStreaming}, isProcessingInBackground=${state.isProcessingInBackground}, isGeneratingSuggestions=${state.isGeneratingSuggestions}, isCancelled=${state.isCancelled}");
       return;
     }
 
-    _isCancelling = true;
     debugPrint("Attempting to cancel generation for chat $_chatId...");
 
     try {
-      // 1. Set cancellation flag for background tasks
-      _isBackgroundTaskCancelled = true;
-      debugPrint("ChatStateNotifier($_chatId): Background task cancellation flag set.");
+      // 1. Set the cancellation flag in the state. This is the new source of truth.
+      if (mounted) {
+        state = state.copyWith(isCancelled: true);
+      }
 
       // 2. Cancel any active LLM request (covers main stream and background tasks)
       await _ref.read(llmServiceProvider).cancelActiveRequest();
 
-      // 3. Cancel the stream subscription if it exists
+      // 3. Cancel the stream subscription if it exists.
+      // This will trigger its onDone/onError, which will see the isCancelled flag and stop.
       if (_llmStreamSubscription != null) {
         await _llmStreamSubscription?.cancel();
         _llmStreamSubscription = null;
       }
 
-      // 4. Finalize state immediately
-      final lastMessage = _ref.read(chatMessagesProvider(_chatId)).value?.lastWhereOrNull((m) => m.role == MessageRole.model);
-      if (state.isStreaming && lastMessage != null) {
-        // If a stream was active, finalize it to save partial progress
-        await _finalizeStreamedMessage(lastMessage.id);
-      } else {
-        // If it was a non-stream or background task, just reset all loading states
-        if (mounted) {
-          state = state.copyWith(
-            isLoading: false,
-            isStreaming: false,
-            isProcessingInBackground: false,
-            clearStreaming: true,
-            clearGenerationStartTime: true,
-            clearElapsedSeconds: true,
-          );
-          _stopUpdateTimer();
-          showTopMessage("已停止", backgroundColor: Colors.blueGrey);
-        }
+      // 4. Finalize state immediately for instant UI feedback.
+      // The async tasks will check the `isCancelled` state flag and stop themselves.
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          isStreaming: false,
+          isProcessingInBackground: false,
+          isGeneratingSuggestions: false, // Also clear this flag
+          clearStreaming: true,
+          clearGenerationStartTime: true,
+          clearElapsedSeconds: true,
+        );
+        _stopUpdateTimer();
+        showTopMessage("已停止", backgroundColor: Colors.blueGrey);
       }
-
     } catch (e) {
       debugPrint("Error during cancelGeneration: $e");
       if (mounted) {
         showTopMessage("取消操作时出错: $e", backgroundColor: Colors.red);
       }
     } finally {
-      _isCancelling = false;
-      debugPrint("Cancellation process finished for chat $_chatId. _isCancelling reset to false.");
+      debugPrint("Cancellation process finished for chat $_chatId.");
     }
   }
 
   Future<void> _finalizeStreamedMessage(int messageId, {bool hasError = false}) async {
     if (!mounted || _isFinalizing) return;
+    
+    // CRITICAL: If cancellation was requested, stop all finalization and post-processing.
+    if (state.isCancelled) {
+      _isFinalizing = false; // Release lock
+      debugPrint("Finalization skipped for message ID $messageId because task was cancelled.");
+      return;
+    }
+
     _isFinalizing = true;
     debugPrint("Finalizing stream for message ID $messageId... Has Error: $hasError");
 
@@ -1245,10 +1311,15 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       final chat = _ref.read(currentChatProvider(_chatId)).value;
       if (chat != null && messageToFinalize != null) {
         debugPrint("Running async post-processing for message ID $messageId...");
-        await _runAsyncProcessingTasks(messageToFinalize);
-        debugPrint("Async post-processing for message ID $messageId finished.");
-        if (mounted && !_isBackgroundTaskCancelled) {
-          showTopMessage("已完成", backgroundColor: Colors.green);
+        // Final check before starting background tasks
+        if (!state.isCancelled) {
+          await _runAsyncProcessingTasks(messageToFinalize);
+          debugPrint("Async post-processing for message ID $messageId finished.");
+          if (mounted && !state.isCancelled) {
+            showTopMessage("已完成", backgroundColor: Colors.green);
+          }
+        } else {
+          debugPrint("Async post-processing for message ID $messageId skipped due to cancellation.");
         }
       } else {
         debugPrint("Skipping async post-processing for message ID $messageId: chat or message not found.");
@@ -1300,9 +1371,9 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  }
 
  Future<void> _executeAutoTitleGeneration(Chat chat, Message currentModelMessage) async {
-   if (_isBackgroundTaskCancelled) return;
-   await Future.delayed(const Duration(milliseconds: 200));
-   if (!mounted || _isBackgroundTaskCancelled) return;
+  if (state.isCancelled) return;
+  await Future.delayed(const Duration(milliseconds: 200));
+  if (!mounted || state.isCancelled) return;
 
    final globalSettings = _ref.read(globalSettingsProvider);
    if (!globalSettings.enableAutoTitleGeneration ||
@@ -1321,31 +1392,33 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
    debugPrint("ChatStateNotifier($_chatId): Starting auto title generation...");
 
-   await _executeSpecialAction(
-     prompt: globalSettings.titleGenerationPrompt,
-     apiConfigIdOverride: globalSettings.titleGenerationApiConfigId,
-     actionType: _SpecialActionType.autoTitle,
-     targetMessage: currentModelMessage,
-     onSuccess: (generatedText) async {
-       final newTitle = generatedText.trim().replaceAll(RegExp(r'["\n]'), '');
-       if (newTitle.isNotEmpty) {
-         final chatRepo = _ref.read(chatRepositoryProvider);
-         final currentChat = await chatRepo.getChat(_chatId);
-         if (currentChat != null && mounted && !_isBackgroundTaskCancelled) {
-           await chatRepo.saveChat(currentChat.copyWith({'title': newTitle}));
-           debugPrint("ChatStateNotifier($_chatId): Auto title generation successful. New title: $newTitle");
-         }
-       } else {
-         debugPrint("ChatStateNotifier($_chatId): Auto title generation resulted in an empty title. Skipping update.");
+   try {
+     if (state.isCancelled) return;
+     final generatedText = await _executeSpecialAction(
+       prompt: globalSettings.titleGenerationPrompt,
+       apiConfigIdOverride: globalSettings.titleGenerationApiConfigId,
+       actionType: _SpecialActionType.autoTitle,
+       targetMessage: currentModelMessage,
+     );
+     final newTitle = generatedText.trim().replaceAll(RegExp(r'["\n]'), '');
+     if (newTitle.isNotEmpty) {
+       final chatRepo = _ref.read(chatRepositoryProvider);
+       final currentChat = await chatRepo.getChat(_chatId);
+       if (currentChat != null && mounted && !state.isCancelled) {
+         await chatRepo.saveChat(currentChat.copyWith({'title': newTitle}));
+         debugPrint("ChatStateNotifier($_chatId): Auto title generation successful. New title: $newTitle");
        }
-     },
-     onError: (error) {
-       if (!_isBackgroundTaskCancelled) {
-         debugPrint("ChatStateNotifier($_chatId): Error during auto title generation: $error");
-         // Silently fail.
-       }
-     },
-   );
+     } else {
+       debugPrint("ChatStateNotifier($_chatId): Auto title generation resulted in an empty title. Skipping update.");
+     }
+   } catch (e) {
+     if (!state.isCancelled) {
+       debugPrint("ChatStateNotifier($_chatId): Error during auto title generation after retries: $e");
+       // We rethrow the error so Future.wait in _runAsyncProcessingTasks can catch it
+       // and show a generic background error message.
+       rethrow;
+     }
+   }
  }
 
   // --- Special Actions ---
@@ -1377,81 +1450,85 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   }
 
   Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady, bool forceRefresh = false}) async {
-    if (state.isGeneratingSuggestions) {
-      showTopMessage('正在生成建议，请稍后...', backgroundColor: Colors.orange);
+    // 1. Prevent starting if another task is already running.
+    if (state.isLoading || state.isGeneratingSuggestions) {
+      showTopMessage('正在处理中，请稍后...', backgroundColor: Colors.orange);
       return;
     }
 
-    final bool hasExistingSuggestions = state.helpMeReplySuggestions != null && state.helpMeReplySuggestions!.isNotEmpty;
+    // 2. This is a new, user-initiated action. Reset the cancellation flag from any previous operation
+    //    and set the specific loading flag for this action.
+    if (!mounted) return;
+    state = state.copyWith(isCancelled: false, isGeneratingSuggestions: true);
 
-    // If not forcing a refresh and we have suggestions, use the cache.
-    if (!forceRefresh && hasExistingSuggestions) {
-      debugPrint("ChatStateNotifier($_chatId): Using cached 'Help Me Reply' suggestions.");
-      onSuggestionsReady?.call(state.helpMeReplySuggestions![state.helpMeReplyPageIndex]);
-      return;
+    try {
+      final bool hasExistingSuggestions = state.helpMeReplySuggestions != null && state.helpMeReplySuggestions!.isNotEmpty;
+
+      // 3. Handle cache case
+      if (!forceRefresh && hasExistingSuggestions) {
+        debugPrint("ChatStateNotifier($_chatId): Using cached 'Help Me Reply' suggestions.");
+        onSuggestionsReady?.call(state.helpMeReplySuggestions![state.helpMeReplyPageIndex]);
+        return; // Early exit, finally block will clean up state
+      }
+
+      // 4. Perform checks
+      final lastMessage = _ref.read(lastModelMessageProvider(_chatId));
+      if (lastMessage == null) {
+        if (onSuggestionsReady != null) showTopMessage('没有可供回复的消息', backgroundColor: Colors.orange);
+        return;
+      }
+
+      final globalSettings = _ref.read(globalSettingsProvider);
+      if (!globalSettings.enableHelpMeReply) {
+        if (onSuggestionsReady != null) showTopMessage('“帮我回复”功能已禁用', backgroundColor: Colors.orange);
+        return;
+      }
+
+      // 5. Execute the action
+      try {
+        final generatedText = await _executeSpecialAction(
+          prompt: globalSettings.helpMeReplyPrompt,
+          apiConfigIdOverride: globalSettings.helpMeReplyApiConfigId,
+          actionType: _SpecialActionType.helpMeReply,
+          targetMessage: lastMessage,
+        );
+
+        final newSuggestions = RegExp(r'^\s*\d+\.\s*(.*)', multiLine: true)
+            .allMatches(generatedText)
+            .map((m) => m.group(1)!.trim())
+            .toList();
+        final finalSuggestions = newSuggestions.isNotEmpty ? newSuggestions : [generatedText.trim()];
+        
+        if (mounted) {
+          final List<List<String>> newPages = [];
+          for (var i = 0; i < finalSuggestions.length; i += _kSuggestionsPerPage) {
+            final end = (i + _kSuggestionsPerPage < finalSuggestions.length) ? i + _kSuggestionsPerPage : finalSuggestions.length;
+            newPages.add(finalSuggestions.sublist(i, end));
+          }
+
+          final clearPreviousSuggestions = !hasExistingSuggestions;
+          final currentPages = clearPreviousSuggestions ? <List<String>>[] : (state.helpMeReplySuggestions ?? []);
+          final updatedPages = List<List<String>>.from(currentPages)..addAll(newPages);
+          
+          state = state.copyWith(
+            helpMeReplySuggestions: updatedPages,
+            helpMeReplyPageIndex: updatedPages.length - 1,
+          );
+
+          onSuggestionsReady?.call(newPages.isNotEmpty ? newPages.first : []);
+        }
+      } catch (e) {
+        if (mounted && !state.isCancelled) {
+          showTopMessage(e.toString(), backgroundColor: Colors.red);
+        }
+      }
+    } finally {
+      // 6. Always ensure the loading flag is cleared
+      if (mounted) {
+        state = state.copyWith(isGeneratingSuggestions: false);
+      }
     }
-
-    final lastMessage = _ref.read(lastModelMessageProvider(_chatId));
-    if (lastMessage == null) {
-      if (onSuggestionsReady != null) showTopMessage('没有可供回复的消息', backgroundColor: Colors.orange);
-      return;
-    }
-
-    final globalSettings = _ref.read(globalSettingsProvider);
-    if (!globalSettings.enableHelpMeReply) {
-      if (onSuggestionsReady != null) showTopMessage('“帮我回复”功能已禁用', backgroundColor: Colors.orange);
-      return;
-    }
-
-   final task = _executeSpecialAction(
-     prompt: globalSettings.helpMeReplyPrompt,
-     apiConfigIdOverride: globalSettings.helpMeReplyApiConfigId,
-     actionType: _SpecialActionType.helpMeReply,
-     targetMessage: lastMessage,
-     onSuccess: (generatedText) {
-       final newSuggestions = RegExp(r'^\s*\d+\.\s*(.*)', multiLine: true)
-           .allMatches(generatedText)
-           .map((m) => m.group(1)!.trim())
-           .toList();
-       final finalSuggestions = newSuggestions.isNotEmpty ? newSuggestions : [generatedText.trim()];
-       
-       if (mounted) {
-         final List<List<String>> newPages = [];
-         for (var i = 0; i < finalSuggestions.length; i += _kSuggestionsPerPage) {
-           final end = (i + _kSuggestionsPerPage < finalSuggestions.length) ? i + _kSuggestionsPerPage : finalSuggestions.length;
-           newPages.add(finalSuggestions.sublist(i, end));
-         }
-
-         final clearPreviousSuggestions = !hasExistingSuggestions;
-         final currentPages = clearPreviousSuggestions ? <List<String>>[] : (state.helpMeReplySuggestions ?? []);
-         final updatedPages = List<List<String>>.from(currentPages)..addAll(newPages);
-         
-         state = state.copyWith(
-           helpMeReplySuggestions: updatedPages,
-           helpMeReplyPageIndex: updatedPages.length - 1,
-         );
-
-         onSuggestionsReady?.call(newPages.isNotEmpty ? newPages.first : []);
-       }
-     },
-     onError: (error) {
-       if (mounted) showTopMessage(error, backgroundColor: Colors.red);
-     },
-   );
-
-   if (onSuggestionsReady != null) {
-     state = state.copyWith(isGeneratingSuggestions: true);
-     try {
-       await task;
-     } finally {
-       if (mounted) {
-         state = state.copyWith(isGeneratingSuggestions: false);
-       }
-     }
-   } else {
-     await task;
-   }
- }
+  }
 
   void clearHelpMeReplySuggestions() {
     if (!mounted) return;
@@ -1476,73 +1553,78 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    super.dispose();
  }
 
- /// A unified method to execute special, single-shot LLM actions like title generation,
- /// secondary XML creation, or getting reply suggestions.
+ /// A unified method to execute special, single-shot LLM actions with a retry mechanism.
  /// It ensures consistent context building (always demoting the chat's system prompt)
- /// and centralizes API call logic.
- Future<void> _executeSpecialAction({
+ /// and centralizes API call logic, returning a Future with the result.
+ Future<String> _executeSpecialAction({
    required String prompt,
    required String? apiConfigIdOverride,
    required _SpecialActionType actionType,
    required Message targetMessage,
-   required Function(String) onSuccess,
-   required Function(String) onError,
  }) async {
-   if (_isBackgroundTaskCancelled) return;
-
+   const maxRetries = 3;
    final chat = _ref.read(currentChatProvider(_chatId)).value;
    if (chat == null) {
-     onError('无法执行操作：聊天数据未加载');
-     return;
+     throw Exception('无法执行操作：聊天数据未加载');
    }
 
-   try {
-     final contextXmlService = _ref.read(contextXmlServiceProvider);
-     final llmService = _ref.read(llmServiceProvider);
+   final contextXmlService = _ref.read(contextXmlServiceProvider);
+   final llmService = _ref.read(llmServiceProvider);
 
-     // Build context, always demoting the original system prompt
-     final apiRequestContext = await contextXmlService.buildApiRequestContext(
-       chat: chat,
-       currentUserMessage: targetMessage,
-       chatSystemPromptOverride: prompt,
-       lastMessageOverride: prompt,
-       keepAsSystemPrompt: false, // This is the key to ensuring the chat's prompt becomes a user message
-     );
+   // Build context, always demoting the original system prompt
+   final apiRequestContext = await contextXmlService.buildApiRequestContext(
+     chat: chat,
+     currentUserMessage: targetMessage,
+     chatSystemPromptOverride: prompt,
+     lastMessageOverride: prompt,
+     keepAsSystemPrompt: false, // This is the key to ensuring the chat's prompt becomes a user message
+   );
 
-     if (_isBackgroundTaskCancelled) return;
-
-     final response = await llmService.sendMessageOnce(
-       llmContext: apiRequestContext.contextParts,
-       chat: chat,
-       apiConfigIdOverride: apiConfigIdOverride ?? chat.apiConfigId,
-     );
-
-     if (!mounted || _isBackgroundTaskCancelled) return;
-
-     if (response.isSuccess && response.parts.isNotEmpty) {
-       final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
-       // Use the callback to handle the successful result
-       await onSuccess(generatedText);
-     } else {
-       // Use the callback to handle the error
-       onError(response.error ?? "操作失败 (可能响应为空)");
+   for (int attempt = 1; attempt <= maxRetries; attempt++) {
+     if (state.isCancelled) {
+       throw Exception("Operation cancelled by user.");
      }
-   } catch (e) {
-     if (!_isBackgroundTaskCancelled) {
-       onError('操作时发生意外错误: $e');
+
+     try {
+       final response = await llmService.sendMessageOnce(
+         llmContext: apiRequestContext.contextParts,
+         chat: chat,
+         apiConfigIdOverride: apiConfigIdOverride ?? chat.apiConfigId,
+       );
+
+       if (!mounted || state.isCancelled) {
+         throw Exception("Operation cancelled by user.");
+       }
+
+       if (response.isSuccess && response.parts.isNotEmpty) {
+         final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
+         debugPrint("ChatStateNotifier($_chatId): Special action '$actionType' successful on attempt $attempt.");
+         return generatedText; // Success
+       } else {
+         throw Exception("API Error: ${response.error ?? 'Empty response'}");
+       }
+     } catch (e) {
+       debugPrint("ChatStateNotifier($_chatId): Special action '$actionType' attempt $attempt/$maxRetries failed: $e");
+       if (attempt == maxRetries || state.isCancelled) {
+         // If it's the last attempt or cancelled, rethrow to fail the Future.
+         rethrow;
+       }
+       // Wait before retrying
+       await Future.delayed(Duration(seconds: attempt * 2));
      }
    }
+   // This part should be unreachable if maxRetries > 0
+   throw Exception("Special action '$actionType' failed after $maxRetries attempts.");
  }
 
  // Helper to run a single manual background task with state management
  Future<void> _runManagedSingleTask(Future<void> task) async {
    if (!mounted) return;
-   _isBackgroundTaskCancelled = false;
-   state = state.copyWith(isProcessingInBackground: true);
+   state = state.copyWith(isProcessingInBackground: true, isCancelled: false);
    try {
      await task;
    } catch (e) {
-     if (!_isBackgroundTaskCancelled && mounted) {
+     if (!state.isCancelled && mounted) {
        showTopMessage('操作失败: $e', backgroundColor: Colors.red);
      }
    } finally {

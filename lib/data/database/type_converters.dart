@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'models/drift_context_config.dart';
 import 'models/drift_xml_rule.dart';
-import 'common_enums.dart';
 import '../../data/models/enums.dart';
 
 // Note: GenerationConfigConverter is removed as its fields are now part of the ApiConfigs table.

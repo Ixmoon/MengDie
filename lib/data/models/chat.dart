@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'context_config.dart';
 import 'xml_rule.dart';
 
+/// 用于标识聊天模板的特殊时间戳。
+/// 使用一个极早的时间来避免与真实的用户数据冲突。
+final kTemplateTimestamp = DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true);
+
 @immutable
 class Chat {
   final int id;
@@ -50,31 +54,29 @@ class Chat {
     this.continuePrompt,
   });
 
-  // A more robust copyWith that can differentiate between a field being absent
-  // and a field being explicitly set to null.
-  Chat copyWith(Map<String, dynamic> updates) {
+  Chat copyWith(Map<String, dynamic> changes) {
     return Chat(
-      id: updates.containsKey('id') ? updates['id'] : id,
-      title: updates.containsKey('title') ? updates['title'] : title,
-      systemPrompt: updates.containsKey('systemPrompt') ? updates['systemPrompt'] : systemPrompt,
-      createdAt: updates.containsKey('createdAt') ? updates['createdAt'] : createdAt,
-      updatedAt: updates.containsKey('updatedAt') ? updates['updatedAt'] : updatedAt,
-      coverImageBase64: updates.containsKey('coverImageBase64') ? updates['coverImageBase64'] : coverImageBase64,
-      backgroundImagePath: updates.containsKey('backgroundImagePath') ? updates['backgroundImagePath'] : backgroundImagePath,
-      orderIndex: updates.containsKey('orderIndex') ? updates['orderIndex'] : orderIndex,
-      isFolder: updates.containsKey('isFolder') ? updates['isFolder'] : isFolder,
-      parentFolderId: updates.containsKey('parentFolderId') ? updates['parentFolderId'] : parentFolderId,
-      apiConfigId: updates.containsKey('apiConfigId') ? updates['apiConfigId'] : apiConfigId,
-      contextConfig: updates.containsKey('contextConfig') ? updates['contextConfig'] : contextConfig,
-      xmlRules: updates.containsKey('xmlRules') ? updates['xmlRules'] : xmlRules,
-      enablePreprocessing: updates.containsKey('enablePreprocessing') ? updates['enablePreprocessing'] : enablePreprocessing,
-      preprocessingPrompt: updates.containsKey('preprocessingPrompt') ? updates['preprocessingPrompt'] : preprocessingPrompt,
-      contextSummary: updates.containsKey('contextSummary') ? updates['contextSummary'] : contextSummary,
-      preprocessingApiConfigId: updates.containsKey('preprocessingApiConfigId') ? updates['preprocessingApiConfigId'] : preprocessingApiConfigId,
-      enableSecondaryXml: updates.containsKey('enableSecondaryXml') ? updates['enableSecondaryXml'] : enableSecondaryXml,
-      secondaryXmlPrompt: updates.containsKey('secondaryXmlPrompt') ? updates['secondaryXmlPrompt'] : secondaryXmlPrompt,
-      secondaryXmlApiConfigId: updates.containsKey('secondaryXmlApiConfigId') ? updates['secondaryXmlApiConfigId'] : secondaryXmlApiConfigId,
-      continuePrompt: updates.containsKey('continuePrompt') ? updates['continuePrompt'] : continuePrompt,
+      id: changes.containsKey('id') ? changes['id'] as int : id,
+      title: changes.containsKey('title') ? changes['title'] as String? : title,
+      systemPrompt: changes.containsKey('systemPrompt') ? changes['systemPrompt'] as String? : systemPrompt,
+      createdAt: changes.containsKey('createdAt') ? changes['createdAt'] as DateTime : createdAt,
+      updatedAt: changes.containsKey('updatedAt') ? changes['updatedAt'] as DateTime : updatedAt,
+      coverImageBase64: changes.containsKey('coverImageBase64') ? changes['coverImageBase64'] as String? : coverImageBase64,
+      backgroundImagePath: changes.containsKey('backgroundImagePath') ? changes['backgroundImagePath'] as String? : backgroundImagePath,
+      orderIndex: changes.containsKey('orderIndex') ? changes['orderIndex'] as int? : orderIndex,
+      isFolder: changes.containsKey('isFolder') ? changes['isFolder'] as bool : isFolder,
+      parentFolderId: changes.containsKey('parentFolderId') ? changes['parentFolderId'] as int? : parentFolderId,
+      apiConfigId: changes.containsKey('apiConfigId') ? changes['apiConfigId'] as String? : apiConfigId,
+      contextConfig: changes.containsKey('contextConfig') ? changes['contextConfig'] as ContextConfig : contextConfig,
+      xmlRules: changes.containsKey('xmlRules') ? List<XmlRule>.from(changes['xmlRules']) : xmlRules,
+      enablePreprocessing: changes.containsKey('enablePreprocessing') ? changes['enablePreprocessing'] as bool : enablePreprocessing,
+      preprocessingPrompt: changes.containsKey('preprocessingPrompt') ? changes['preprocessingPrompt'] as String? : preprocessingPrompt,
+      contextSummary: changes.containsKey('contextSummary') ? changes['contextSummary'] as String? : contextSummary,
+      preprocessingApiConfigId: changes.containsKey('preprocessingApiConfigId') ? changes['preprocessingApiConfigId'] as String? : preprocessingApiConfigId,
+      enableSecondaryXml: changes.containsKey('enableSecondaryXml') ? changes['enableSecondaryXml'] as bool : enableSecondaryXml,
+      secondaryXmlPrompt: changes.containsKey('secondaryXmlPrompt') ? changes['secondaryXmlPrompt'] as String? : secondaryXmlPrompt,
+      secondaryXmlApiConfigId: changes.containsKey('secondaryXmlApiConfigId') ? changes['secondaryXmlApiConfigId'] as String? : secondaryXmlApiConfigId,
+      continuePrompt: changes.containsKey('continuePrompt') ? changes['continuePrompt'] as String? : continuePrompt,
     );
   }
 }

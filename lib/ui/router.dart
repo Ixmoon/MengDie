@@ -3,6 +3,7 @@ import 'package:flutter/material.dart'; // for Scaffold
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
+import '../data/models/enums.dart'; // 导入枚举
 // 导入需要导航到的屏幕
 import 'screens/main_screen.dart';
 import 'screens/startup_screen.dart';
@@ -46,9 +47,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/list',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ChatListScreen(),
-            ),
+            pageBuilder: (context, state) {
+              // 从查询参数中获取 mode
+              // 从查询参数中获取 mode
+              final queryParams = state.uri.queryParameters;
+              final modeString = queryParams['mode'] ?? 'normal';
+              ChatListMode mode;
+              switch (modeString) {
+                case 'select':
+                  mode = ChatListMode.templateSelection;
+                  break;
+                case 'manage':
+                  mode = ChatListMode.templateManagement;
+                  break;
+                default:
+                  mode = ChatListMode.normal;
+              }
+
+              // 新增：解析 from_folder_id
+              final fromFolderIdString = queryParams['from_folder_id'];
+              final fromFolderId = fromFolderIdString != null ? int.tryParse(fromFolderIdString) : null;
+
+              return NoTransitionPage(
+                child: ChatListScreen(
+                  mode: mode,
+                  fromFolderId: fromFolderId,
+                ),
+              );
+            },
           ),
           GoRoute(
             path: '/chat',

@@ -35,6 +35,7 @@ final llmServiceProvider = Provider<LlmService>((ref) {
 // This service acts as a facade, providing a generic interface
 // for interacting with different LLMs.
 class LlmService {
+  // ignore: unused_field
   final Ref _ref;
   final ApiKeyNotifier _apiKeyNotifier;
   final Map<LlmType, BaseLlmService> _services;

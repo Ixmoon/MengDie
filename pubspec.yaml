@@ -15,7 +15,7 @@ dependencies:
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
   flutter_secure_storage: ^9.0.0 # Check pub.dev for latest version
   shared_preferences: ^2.5.3  # Check pub.dev for latest version
-  uuid: ^4.3.3             # Check pub.dev for latest version
+  uuid: ^4.5.1             # Check pub.dev for latest version
   intl: ^0.20.2              # Check pub.dev for latest version, adjust based on Flutter version
   flutter_markdown: ^0.7.7    # 更新版本约束以允许最新版本
   image_picker: ^1.0.7        # 添加 image_picker 依赖

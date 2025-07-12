@@ -497,7 +497,6 @@ class OpenAIService implements BaseLlmService {
       try {
         // 优先尝试获取特定模型的编码器。
         return tiktoken.encodingForModel(apiConfig.model);
-        return tiktoken.encodingForModel(apiConfig.model);
       } catch (_) {
         // 如果失败，则回退到通用编码器。
         debugPrint("Model '${apiConfig.model}' not found in tiktoken, falling back to 'cl100k_base' for token counting.");
