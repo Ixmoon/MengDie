@@ -4,7 +4,6 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat.dart';
-import '../models/chat.dart';
 import '../models/export_import_dtos.dart';
 import '../../ui/providers/core_providers.dart';
 import '../database/app_database.dart';

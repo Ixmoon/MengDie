@@ -97,6 +97,7 @@ class GeminiService implements BaseLlmService {
    /// 这是一个纯本地的、高性能的异步操作，旨在为所有模型提供一个统一的估算标准。
    /// 注意: Gemini 有其专有的分词器，使用 tiktoken 会产生估算偏差，但这对于上下文管理已足够。
    /// 如果计算失败，它将抛出异常。
+   @override
    Future<int> countTokens({
      required List<LlmContent> llmContext,
      required ApiConfig apiConfig,
@@ -363,6 +364,7 @@ List<genai.SafetySetting> _defaultSafetySettings() {
   ];
 }
 
+@override
 Future<void> cancelRequest() async {
   debugPrint("GeminiService: Setting cancellation flag.");
   _isCancelled = true;

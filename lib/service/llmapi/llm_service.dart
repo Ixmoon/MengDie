@@ -10,7 +10,6 @@ import '../../data/models/models.dart';
 import 'gemini_service.dart';
 import 'openai_service.dart';
 import 'llm_models.dart'; // 新增：导入通用数据模型
-import '../../ui/providers/api_key_provider.dart';
 import 'base_llm_service.dart';
 
 
@@ -19,7 +18,6 @@ final llmServiceProvider = Provider<LlmService>((ref) {
   // LlmService now depends on the specific service providers
   final geminiService = ref.watch(geminiServiceProvider);
   final openAIService = ref.watch(openaiServiceProvider);
-  final apiKeyNotifier = ref.watch(apiKeyNotifierProvider.notifier);
 
   // Create a map of available services, keyed by their LlmType.
   final Map<LlmType, BaseLlmService> services = {
@@ -27,24 +25,23 @@ final llmServiceProvider = Provider<LlmService>((ref) {
     LlmType.openai: openAIService,
   };
 
-  return LlmService(ref, apiKeyNotifier, services);
+  return LlmService(ref, services);
 });
 
 
 // --- LLM Service Implementation ---
 // This service acts as a facade, providing a generic interface
 // for interacting with different LLMs.
+
 class LlmService {
   // ignore: unused_field
   final Ref _ref;
-  final ApiKeyNotifier _apiKeyNotifier;
   final Map<LlmType, BaseLlmService> _services;
 
   // --- Cancellation State ---
   LlmType? _activeServiceType;
 
-  LlmService(this._ref, this._apiKeyNotifier, this._services);
-
+  LlmService(this._ref, this._services);
   /// 【私有方法】根据传入的 ApiConfig 对象准备生成参数。
   /// 这个方法现在是纯粹的功能性辅助方法，不再包含任何配置解析逻辑。
   Map<String, dynamic> _prepareGenerationParams(ApiConfig apiConfig) {

@@ -153,10 +153,7 @@ class ChatExportImportService {
     final zipEncoder = ZipEncoder();
     final zipBytes = zipEncoder.encode(archive);
 
-    if (zipBytes == null) {
-      debugPrint("ChatExportImportService: ZIP 编码失败。");
-      throw Exception("创建 ZIP 文件失败。");
-    }
+    // zipBytes is non-nullable, so no need to check for null
 
     final String suggestedFileName = 'mengdie_export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.zip';
     
@@ -362,7 +359,7 @@ class ChatExportImportService {
           final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds, baseParentFolderId);
 
           // Import the chat from the image file content
-          await _importFromImage(file.content as Uint8List, parentFolderId);
+          await _importFromImage(file.content, parentFolderId);
           successCount++;
         } catch (e, s) {
           debugPrint("ChatExportImportService: 从 ZIP 中的文件 ${file.name} 导入失败: $e\n$s");
@@ -455,7 +452,7 @@ class ChatExportImportService {
       throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
     }
 
-    if (jsonString == null || jsonString.isEmpty) {
+    if (jsonString.isEmpty) {
       throw Exception("未能从图片中恢复有效的聊天数据。");
     }
 

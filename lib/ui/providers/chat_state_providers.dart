@@ -794,7 +794,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     try {
       final contextXmlService = _ref.read(contextXmlServiceProvider);
       
-      Chat chatForContext = chat;
       String? lastMessageOverride;
 
       if (promptOverride != null) {
@@ -1547,7 +1546,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
       return;
     }
 
-    final chat = _ref.read(currentChatProvider(_chatId)).value!;
     await sendMessage(
       isContinuation: true,
       promptOverride: globalSettings.resumePrompt,
@@ -1596,7 +1594,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
 
       // 5. Execute the action
       try {
-        final chat = _ref.read(currentChatProvider(_chatId)).value!;
         final apiConfig = getEffectiveApiConfig(specificConfigId: globalSettings.helpMeReplyApiConfigId);
         final generatedText = await _executeSpecialAction(
           prompt: globalSettings.helpMeReplyPrompt,
@@ -1729,22 +1726,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    throw Exception("Special action '$actionType' failed after $maxRetries attempts.");
  }
 
- // Helper to run a single manual background task with state management
- Future<void> _runManagedSingleTask(Future<void> task) async {
-   if (!mounted) return;
-   state = state.copyWith(isProcessingInBackground: true, isCancelled: false);
-   try {
-     await task;
-   } catch (e) {
-     if (!state.isCancelled && mounted) {
-       showTopMessage('操作失败: $e', backgroundColor: Colors.red);
-     }
-   } finally {
-     if (mounted) {
-       state = state.copyWith(isProcessingInBackground: false);
-     }
-   }
- }
 }
 
 enum _SpecialActionType { helpMeReply, secondaryXml, autoTitle }

@@ -729,23 +729,26 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           if (chat.isFolder) {
             ref.read(currentFolderIdProvider.notifier).state = chat.id;
           } else {
+            final navigator = Navigator.of(context);
             final prefs = await ref.read(sharedPreferencesProvider.future);
             await prefs.setInt('last_open_chat_id', chat.id);
             ref.read(activeChatIdProvider.notifier).state = chat.id;
-            if (!context.mounted) return;
-            context.go('/chat');
+            if (navigator.mounted) {
+              navigator.pushReplacementNamed('/chat');
+            }
           }
           break;
         case ChatListMode.templateSelection:
           // 从模板创建新聊天
+          final navigator = Navigator.of(context);
           final repo = ref.read(chatRepositoryProvider);
           // 关键修复：将 fromFolderId 传递给创建方法
           final newChatId = await repo.createChatFromTemplate(chat.id, parentFolderId: widget.fromFolderId);
-          if (context.mounted) {
+          if (navigator.mounted) {
             ref.read(activeChatIdProvider.notifier).state = newChatId;
             // 关键修复：创建后重置 currentFolderIdProvider，确保返回时回到正确的聊天列表层级
             ref.read(currentFolderIdProvider.notifier).state = widget.fromFolderId;
-            context.go('/chat'); // 直接进入新创建的聊天
+            navigator.pushReplacementNamed('/chat'); // 直接进入新创建的聊天
           }
           break;
         case ChatListMode.templateManagement:

@@ -1040,7 +1040,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        backgroundColor: Colors.red.withOpacity(0.1),
+                        backgroundColor: Colors.red.withAlpha((255 * 0.1).round()),
                         foregroundColor: Colors.red.shade700,
                       ),
                     ),

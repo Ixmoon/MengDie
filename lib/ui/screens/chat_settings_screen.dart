@@ -148,11 +148,15 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
 
     return PopScope(
       canPop: false, // 禁止默认的返回行为，由 onPopInvoked 控制
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return; // 如果已经 pop，则不执行任何操作
 
+        // 在异步操作前捕获 context 相关的对象
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        final navigator = Navigator.of(context);
+
         // 显示正在保存的提示
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('正在保存设置...'), duration: Duration(seconds: 1)),
         );
 
@@ -162,15 +166,15 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
           // 在后台静默处理错误，或者使用日志库记录
           debugPrint('自动保存聊天设置失败: $e');
           // 可选：显示一个错误提示
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+          if (scaffoldMessenger.mounted) {
+            scaffoldMessenger.showSnackBar(
               SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
             );
           }
         } finally {
           // 无论成功或失败，最后都返回上一页
-          if (context.mounted) {
-            Navigator.of(context).pop();
+          if (navigator.mounted) {
+            navigator.pop();
           }
         }
       },
