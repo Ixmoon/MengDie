@@ -961,11 +961,23 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    );
    final droppedMessagesBefore = contextBefore.droppedMessages;
 
-   // 4. Calculate the "diff" - the messages that were newly dropped.
-   final droppedIdsBefore = droppedMessagesBefore.map((m) => m.id).toSet();
-   final List<Message> messagesToSummarize = droppedMessagesAfter
-       .where((msg) => !droppedIdsBefore.contains(msg.id))
-       .toList();
+   // 4. Determine the messages to summarize based on whether a summary already exists.
+   final List<Message> messagesToSummarize;
+
+   if (chat.contextSummary == null || chat.contextSummary!.isEmpty) {
+     // SCENARIO A: No existing summary. We must summarize ALL currently dropped messages
+     // to build the summary from scratch.
+     messagesToSummarize = droppedMessagesAfter;
+     debugPrint("ChatStateNotifier($_chatId): No existing summary. Summarizing all ${messagesToSummarize.length} dropped messages.");
+   } else {
+     // SCENARIO B: Existing summary found. We only need to summarize the "diff" -
+     // the messages that were newly dropped in this turn.
+     final droppedIdsBefore = droppedMessagesBefore.map((m) => m.id).toSet();
+     messagesToSummarize = droppedMessagesAfter
+         .where((msg) => !droppedIdsBefore.contains(msg.id))
+         .toList();
+     debugPrint("ChatStateNotifier($_chatId): Existing summary found. Summarizing diff of ${messagesToSummarize.length} messages.");
+   }
 
    if (messagesToSummarize.isEmpty) {
      debugPrint("ChatStateNotifier($_chatId): Context diff is empty. No new messages to summarize.");
