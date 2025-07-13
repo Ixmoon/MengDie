@@ -2,8 +2,9 @@
 import 'package:drift/drift.dart';
 import 'package:logging/logging.dart';
 
-// Conditional import for connection logic
 import 'connections/native.dart' if (dart.library.html) 'connections/web.dart';
+import 'connections/remote.dart';
+import 'sync/sync_service.dart';
 
 // Import tables
 import 'tables/chats.dart';
@@ -29,9 +30,15 @@ final _log = Logger('AppDatabase');
 
 @DriftDatabase(tables: [Chats, Messages, ApiConfigs], daos: [ChatDao, MessageDao, ApiConfigDao])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(connect()); // Use the conditionally imported connect()
+  AppDatabase() : super(connect()) {
+    // Pass the database instance itself to the SyncService for rollback capabilities.
+    SyncService.initialize(this, connectRemote);
+  }
 
   AppDatabase.forTesting(super.connection);
+
+  // The transactionExecutor getter is removed as SyncService will use
+  // the transaction() method directly to ensure a proper transaction context.
 
   @override
   int get schemaVersion => 19; // Bump version to 19 for reasoning_effort columns

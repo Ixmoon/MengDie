@@ -1,12 +1,16 @@
-import 'package:drift/drift.dart';
-import '../app_database.dart';
-import '../tables/chats.dart';
 import 'dart:convert';
-import '../tables/messages.dart'; // For deleting related messages
-import '../../models/export_import_dtos.dart'; // For DTOs in importChat
+
+import 'package:drift/drift.dart';
+import 'package:postgres/postgres.dart';
+
+import '../../models/export_import_dtos.dart';
+import '../app_database.dart';
+import '../common_enums.dart' as drift_enums;
 import '../models/drift_context_config.dart';
 import '../models/drift_xml_rule.dart';
-import '../common_enums.dart' as drift_enums;
+import '../sync/sync_service.dart';
+import '../tables/chats.dart';
+import '../tables/messages.dart';
 
 
 part 'chat_dao.g.dart'; // Drift will generate this file
@@ -23,59 +27,252 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     return (select(chats)..orderBy([(t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)])).get();
   }
 
-  Future<ChatData?> getChat(int chatId) {
+  Future<ChatData?> getChat(int chatId, {bool forceRemoteRead = false}) async {
+    // Attempt to read from remote first, based on the "OR" logic handled by SyncService.
+    final remoteChat = await SyncService.instance.remoteRead<ChatData?>(
+      force: forceRemoteRead,
+      remoteReadAction: (remote) async {
+        final result = await remote.execute(
+          'SELECT * FROM chats WHERE id = @id',
+          parameters: {'id': chatId},
+        );
+        if (result.isEmpty) return null;
+        final row = result.first.toColumnMap();
+        return _mapRemoteRowToChatData(row);
+      },
+    );
+
+    // If we got data from the remote, update the local database.
+    if (remoteChat != null) {
+      await into(chats).insertOnConflictUpdate(remoteChat.toCompanion(true));
+    }
+
+    // Always return data from the local database, which is now up-to-date if remote read succeeded.
     return (select(chats)..where((t) => t.id.equals(chatId))).getSingleOrNull();
   }
 
-  Future<int> saveChat(ChatsCompanion chat) async {
-    // The companion's updatedAt should be set before calling this
-    return into(chats).insert(chat, mode: InsertMode.insertOrReplace);
+  Future<int> saveChat(ChatsCompanion chat, {bool forceRemoteWrite = false}) async {
+    final chatId = await into(chats).insert(chat, mode: InsertMode.insertOrReplace);
+    
+    SyncService.instance.backgroundWrite(
+      force: forceRemoteWrite,
+      remoteTransaction: (remote) async {
+        final params = _chatToRemoteParams(chat.copyWith(id: Value(chatId)));
+        await remote.execute(
+          'INSERT INTO chats (id, title, system_prompt, created_at, updated_at, cover_image_base64, background_image_path, order_index, is_folder, parent_folder_id, context_config, xml_rules, api_config_id, enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id, enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id, continue_prompt) '
+          'VALUES (@id, @title, @system_prompt, @created_at, @updated_at, @cover_image_base64, @background_image_path, @order_index, @is_folder, @parent_folder_id, @context_config, @xml_rules, @api_config_id, @enable_preprocessing, @preprocessing_prompt, @context_summary, @preprocessing_api_config_id, @enable_secondary_xml, @secondary_xml_prompt, @secondary_xml_api_config_id, @continue_prompt) '
+          'ON CONFLICT (id) DO UPDATE SET '
+          'title = @title, system_prompt = @system_prompt, updated_at = @updated_at, cover_image_base64 = @cover_image_base64, background_image_path = @background_image_path, order_index = @order_index, is_folder = @is_folder, parent_folder_id = @parent_folder_id, context_config = @context_config, xml_rules = @xml_rules, api_config_id = @api_config_id, enable_preprocessing = @enable_preprocessing, preprocessing_prompt = @preprocessing_prompt, context_summary = @context_summary, preprocessing_api_config_id = @preprocessing_api_config_id, enable_secondary_xml = @enable_secondary_xml, secondary_xml_prompt = @secondary_xml_prompt, secondary_xml_api_config_id = @secondary_xml_api_config_id, continue_prompt = @continue_prompt',
+          parameters: params,
+        );
+      },
+      rollbackAction: () async {
+        await (delete(chats)..where((t) => t.id.equals(chatId))).go();
+      },
+    );
+    return chatId;
   }
-  
-  Future<void> updateChat(ChatsCompanion chat) async {
+
+  Future<void> updateChat(ChatsCompanion chat, {bool forceRemoteWrite = false}) async {
+    final oldChatData = await getChat(chat.id.value);
     await (update(chats)..where((t) => t.id.equals(chat.id.value))).write(chat);
+
+    SyncService.instance.backgroundWrite(
+      force: forceRemoteWrite,
+      remoteTransaction: (remote) async {
+        final params = _chatToRemoteParams(chat);
+        await remote.execute(
+          'UPDATE chats SET '
+          'title = @title, system_prompt = @system_prompt, updated_at = @updated_at, cover_image_base64 = @cover_image_base64, background_image_path = @background_image_path, order_index = @order_index, is_folder = @is_folder, parent_folder_id = @parent_folder_id, context_config = @context_config, xml_rules = @xml_rules, api_config_id = @api_config_id, enable_preprocessing = @enable_preprocessing, preprocessing_prompt = @preprocessing_prompt, context_summary = @context_summary, preprocessing_api_config_id = @preprocessing_api_config_id, enable_secondary_xml = @enable_secondary_xml, secondary_xml_prompt = @secondary_xml_prompt, secondary_xml_api_config_id = @secondary_xml_api_config_id, continue_prompt = @continue_prompt '
+          'WHERE id = @id',
+          parameters: params,
+        );
+      },
+      rollbackAction: () async {
+        if (oldChatData != null) {
+          await into(chats).insertOnConflictUpdate(oldChatData.toCompanion(true));
+        }
+      },
+    );
   }
 
+  Future<bool> deleteChatAndMessages(int chatId, {bool forceRemoteWrite = false}) async {
+    final chatToDelete = await getChat(chatId);
+    if (chatToDelete == null) return false;
+    final messagesToDelete = await (select(messages)..where((t) => t.chatId.equals(chatId))).get();
 
-  Future<bool> deleteChatAndMessages(int chatId) {
-    return transaction(() async {
-      // 1. Delete associated messages
+    final count = await db.transaction(() async {
       await (delete(messages)..where((t) => t.chatId.equals(chatId))).go();
-      // 2. Delete the chat itself
-      final count = await (delete(chats)..where((t) => t.id.equals(chatId))).go();
-      return count > 0;
+      return await (delete(chats)..where((t) => t.id.equals(chatId))).go();
     });
+
+    if (count > 0) {
+      SyncService.instance.backgroundWrite(
+        force: forceRemoteWrite,
+        remoteTransaction: (remote) async {
+          await remote.execute('DELETE FROM messages WHERE chat_id = @id', parameters: {'id': chatId});
+          await remote.execute('DELETE FROM chats WHERE id = @id', parameters: {'id': chatId});
+        },
+        rollbackAction: () async {
+          await db.transaction(() async {
+            await into(chats).insertOnConflictUpdate(chatToDelete.toCompanion(true));
+            await batch((b) => b.insertAll(messages, messagesToDelete));
+          });
+        },
+      );
+    }
+    return count > 0;
   }
 
-  Future<int> deleteMultipleChatsAndMessages(List<int> chatIds) {
-    if (chatIds.isEmpty) return Future.value(0);
-    return transaction(() async {
-      int totalDeleted = 0;
-      // 1. Delete associated messages for all chats
+  Future<int> deleteMultipleChatsAndMessages(List<int> chatIds, {bool forceRemoteWrite = false}) async {
+    if (chatIds.isEmpty) return 0;
+
+    final chatsToDelete = await (select(chats)..where((t) => t.id.isIn(chatIds))).get();
+    final messagesToDelete = await (select(messages)..where((t) => t.chatId.isIn(chatIds))).get();
+
+    if (chatsToDelete.isEmpty) return 0;
+
+    final count = await db.transaction(() async {
       await (delete(messages)..where((t) => t.chatId.isIn(chatIds))).go();
-      // 2. Delete the chats themselves
-      totalDeleted = await (delete(chats)..where((t) => t.id.isIn(chatIds))).go();
-      return totalDeleted;
+      return await (delete(chats)..where((t) => t.id.isIn(chatIds))).go();
     });
+
+    if (count > 0) {
+      SyncService.instance.backgroundWrite(
+        force: forceRemoteWrite,
+        remoteTransaction: (remote) async {
+          await remote.execute('DELETE FROM messages WHERE chat_id = ANY(@ids)', parameters: {'ids': chatIds});
+          await remote.execute('DELETE FROM chats WHERE id = ANY(@ids)', parameters: {'ids': chatIds});
+        },
+        rollbackAction: () async {
+          await db.transaction(() async {
+            await batch((b) => b.insertAll(chats, chatsToDelete));
+            await batch((b) => b.insertAll(messages, messagesToDelete));
+          });
+        },
+      );
+    }
+    return count;
   }
 
-  Future<void> updateChatOrder(List<ChatsCompanion> chatsToUpdate) {
-    if (chatsToUpdate.isEmpty) return Future.value();
-    return transaction(() async {
+  Future<void> updateChatOrder(List<ChatsCompanion> chatsToUpdate, {bool forceRemoteWrite = false}) async {
+    if (chatsToUpdate.isEmpty) return;
+    
+    final oldChats = await (select(chats)..where((t) => t.id.isIn(chatsToUpdate.map((c) => c.id.value)))).get();
+
+    await db.transaction(() async {
       for (final chatCompanion in chatsToUpdate) {
         await (update(chats)..where((t) => t.id.equals(chatCompanion.id.value))).write(chatCompanion);
       }
     });
+
+    SyncService.instance.backgroundWrite(
+      force: forceRemoteWrite,
+      remoteTransaction: (remote) async {
+        for (final chatCompanion in chatsToUpdate) {
+          await remote.execute(
+            'UPDATE chats SET order_index = @order_index, updated_at = @updated_at WHERE id = @id',
+            parameters: {
+              'id': chatCompanion.id.value,
+              'order_index': chatCompanion.orderIndex.value,
+              'updated_at': chatCompanion.updatedAt.value,
+            },
+          );
+        }
+      },
+      rollbackAction: () async {
+        await db.transaction(() async {
+          for (final oldChat in oldChats) {
+            await into(chats).insertOnConflictUpdate(oldChat.toCompanion(true));
+          }
+        });
+      },
+    );
   }
 
-  /// 批量移动聊天到新的父文件夹。
-  Future<void> moveChatsToNewParent(List<int> chatIds, int? newParentFolderId) {
-    if (chatIds.isEmpty) return Future.value();
-    return (update(chats)..where((t) => t.id.isIn(chatIds))).write(
+  Future<void> moveChatsToNewParent(List<int> chatIds, int? newParentFolderId, {bool forceRemoteWrite = false}) async {
+    if (chatIds.isEmpty) return;
+
+    final oldChats = await (select(chats)..where((t) => t.id.isIn(chatIds))).get();
+
+    await (update(chats)..where((t) => t.id.isIn(chatIds))).write(
       ChatsCompanion(
         parentFolderId: Value(newParentFolderId),
-        orderIndex: const Value(null), // 移动到新文件夹后，重置排序
+        orderIndex: const Value(null),
       ),
+    );
+
+    SyncService.instance.backgroundWrite(
+      force: forceRemoteWrite,
+      remoteTransaction: (remote) async {
+        await remote.execute(
+          'UPDATE chats SET parent_folder_id = @parent_folder_id, order_index = NULL WHERE id = ANY(@ids)',
+          parameters: {'parent_folder_id': newParentFolderId, 'ids': chatIds},
+        );
+      },
+      rollbackAction: () async {
+        await db.transaction(() async {
+          for (final oldChat in oldChats) {
+            await into(chats).insertOnConflictUpdate(oldChat.toCompanion(true));
+          }
+        });
+      },
+    );
+  }
+
+  // Helper to convert chat companion to remote parameters
+  Map<String, dynamic> _chatToRemoteParams(ChatsCompanion chat) {
+    return {
+      'id': chat.id.value,
+      'title': chat.title.value,
+      'system_prompt': chat.systemPrompt.value,
+      'created_at': chat.createdAt.value,
+      'updated_at': chat.updatedAt.value,
+      'cover_image_base64': chat.coverImageBase64.value,
+      'background_image_path': chat.backgroundImagePath.value,
+      'order_index': chat.orderIndex.value,
+      'is_folder': chat.isFolder.value,
+      'parent_folder_id': chat.parentFolderId.value,
+      'context_config': jsonEncode(chat.contextConfig.value.toJson()),
+      'xml_rules': jsonEncode(chat.xmlRules.value.map((e) => e.toJson()).toList()),
+      'api_config_id': chat.apiConfigId.value,
+      'enable_preprocessing': chat.enablePreprocessing.value,
+      'preprocessing_prompt': chat.preprocessingPrompt.value,
+      'context_summary': chat.contextSummary.value,
+      'preprocessing_api_config_id': chat.preprocessingApiConfigId.value,
+      'enable_secondary_xml': chat.enableSecondaryXml.value,
+      'secondary_xml_prompt': chat.secondaryXmlPrompt.value,
+      'secondary_xml_api_config_id': chat.secondaryXmlApiConfigId.value,
+      'continue_prompt': chat.continuePrompt.value,
+    };
+  }
+
+  /// Helper to map a raw SQL row to a Drift ChatData object.
+  ChatData _mapRemoteRowToChatData(Map<String, dynamic> row) {
+    return ChatData(
+      id: row['id'],
+      title: row['title'],
+      systemPrompt: row['system_prompt'],
+      createdAt: row['created_at'],
+      updatedAt: row['updated_at'],
+      coverImageBase64: row['cover_image_base64'],
+      backgroundImagePath: row['background_image_path'],
+      orderIndex: row['order_index'],
+      isFolder: row['is_folder'],
+      parentFolderId: row['parent_folder_id'],
+      contextConfig: DriftContextConfig.fromJson(jsonDecode(row['context_config'])),
+      xmlRules: (jsonDecode(row['xml_rules']) as List)
+          .map((e) => DriftXmlRule.fromJson(e))
+          .toList(),
+      apiConfigId: row['api_config_id'],
+      enablePreprocessing: row['enable_preprocessing'],
+      preprocessingPrompt: row['preprocessing_prompt'],
+      contextSummary: row['context_summary'],
+      preprocessingApiConfigId: row['preprocessing_api_config_id'],
+      enableSecondaryXml: row['enable_secondary_xml'],
+      secondaryXmlPrompt: row['secondary_xml_prompt'],
+      secondaryXmlApiConfigId: row['secondary_xml_api_config_id'],
+      continuePrompt: row['continue_prompt'],
     );
   }
 

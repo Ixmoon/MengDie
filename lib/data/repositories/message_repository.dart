@@ -21,8 +21,8 @@ class MessageRepository {
   MessageRepository(this._messageDao);
 
   // --- 数据库操作 ---
-  Future<List<Message>> getMessagesForChat(int chatId) async {
-    final messageDataList = await _messageDao.getMessagesForChat(chatId);
+  Future<List<Message>> getMessagesForChat(int chatId, {bool forceRemoteRead = false}) async {
+    final messageDataList = await _messageDao.getMessagesForChat(chatId, forceRemoteRead: forceRemoteRead);
     return messageDataList.map(MessageMapper.fromData).toList();
   }
 
@@ -42,21 +42,21 @@ class MessageRepository {
     return messageDataList.map(MessageMapper.fromData).toList();
   }
 
-  Future<int> saveMessage(Message message) async {
+  Future<int> saveMessage(Message message, {bool forceRemoteWrite = false}) async {
     debugPrint("MessageRepository: 保存消息 ID: ${message.id} (Chat ID: ${message.chatId}) (Drift)...");
     final companion = MessageMapper.toCompanion(message);
-    return await _messageDao.saveMessage(companion);
+    return await _messageDao.saveMessage(companion, forceRemoteWrite: forceRemoteWrite);
   }
 
-  Future<void> saveMessages(List<Message> messages) async {
+  Future<void> saveMessages(List<Message> messages, {bool forceRemoteWrite = false}) async {
     debugPrint("MessageRepository: 批量保存 ${messages.length} 条消息 (Chat ID: ${messages.firstOrNull?.chatId}) (Drift)...");
     final companions = messages.map(MessageMapper.toCompanion).toList();
-    await _messageDao.saveMessages(companions);
+    await _messageDao.saveMessages(companions, forceRemoteWrite: forceRemoteWrite);
   }
 
-  Future<bool> deleteMessage(int messageId) async {
+  Future<bool> deleteMessage(int messageId, {bool forceRemoteWrite = false}) async {
     debugPrint("MessageRepository: 删除消息 ID: $messageId (Drift)...");
-    return await _messageDao.deleteMessage(messageId);
+    return await _messageDao.deleteMessage(messageId, forceRemoteWrite: forceRemoteWrite);
   }
 
   // --- 数据库监听流 ---

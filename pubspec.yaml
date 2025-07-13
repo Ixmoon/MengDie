@@ -41,6 +41,8 @@ dependencies:
   mime: ^2.0.0              # 用于查找 Mime 类型
   tiktoken: ^1.0.3          # For OpenAI token counting
   archive: ^4.0.7           # For creating ZIP archives
+  postgres: ^3.0.0          # For Neon database connection
+  retry: ^3.1.2             # For retry mechanism in sync service
   # For real persistence (replace in-memory history):
   # hive: ^latest
   # hive_flutter: ^latest
