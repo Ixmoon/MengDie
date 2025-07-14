@@ -1293,10 +1293,10 @@ class $MessagesTable extends Messages
       requiredDuringInsert: true,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('REFERENCES chats (id)'));
-  static const VerificationMeta _partsJsonMeta =
-      const VerificationMeta('partsJson');
+  static const VerificationMeta _rawTextMeta =
+      const VerificationMeta('rawText');
   @override
-  late final GeneratedColumn<String> partsJson = GeneratedColumn<String>(
+  late final GeneratedColumn<String> rawText = GeneratedColumn<String>(
       'raw_text', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
   @override
@@ -1326,7 +1326,7 @@ class $MessagesTable extends Messages
   List<GeneratedColumn> get $columns => [
         id,
         chatId,
-        partsJson,
+        rawText,
         role,
         timestamp,
         originalXmlContent,
@@ -1352,10 +1352,10 @@ class $MessagesTable extends Messages
       context.missing(_chatIdMeta);
     }
     if (data.containsKey('raw_text')) {
-      context.handle(_partsJsonMeta,
-          partsJson.isAcceptableOrUnknown(data['raw_text']!, _partsJsonMeta));
+      context.handle(_rawTextMeta,
+          rawText.isAcceptableOrUnknown(data['raw_text']!, _rawTextMeta));
     } else if (isInserting) {
-      context.missing(_partsJsonMeta);
+      context.missing(_rawTextMeta);
     }
     if (data.containsKey('timestamp')) {
       context.handle(_timestampMeta,
@@ -1388,7 +1388,7 @@ class $MessagesTable extends Messages
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
       chatId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}chat_id'])!,
-      partsJson: attachedDatabase.typeMapping
+      rawText: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}raw_text'])!,
       role: $MessagesTable.$converterrole.fromSql(attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}role'])!),
@@ -1413,7 +1413,7 @@ class $MessagesTable extends Messages
 class MessageData extends DataClass implements Insertable<MessageData> {
   final int id;
   final int chatId;
-  final String partsJson;
+  final String rawText;
   final MessageRole role;
   final DateTime timestamp;
   final String? originalXmlContent;
@@ -1421,7 +1421,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   const MessageData(
       {required this.id,
       required this.chatId,
-      required this.partsJson,
+      required this.rawText,
       required this.role,
       required this.timestamp,
       this.originalXmlContent,
@@ -1431,7 +1431,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['chat_id'] = Variable<int>(chatId);
-    map['raw_text'] = Variable<String>(partsJson);
+    map['raw_text'] = Variable<String>(rawText);
     {
       map['role'] = Variable<String>($MessagesTable.$converterrole.toSql(role));
     }
@@ -1449,7 +1449,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     return MessagesCompanion(
       id: Value(id),
       chatId: Value(chatId),
-      partsJson: Value(partsJson),
+      rawText: Value(rawText),
       role: Value(role),
       timestamp: Value(timestamp),
       originalXmlContent: originalXmlContent == null && nullToAbsent
@@ -1467,7 +1467,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     return MessageData(
       id: serializer.fromJson<int>(json['id']),
       chatId: serializer.fromJson<int>(json['chatId']),
-      partsJson: serializer.fromJson<String>(json['partsJson']),
+      rawText: serializer.fromJson<String>(json['rawText']),
       role: serializer.fromJson<MessageRole>(json['role']),
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
       originalXmlContent:
@@ -1482,7 +1482,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'chatId': serializer.toJson<int>(chatId),
-      'partsJson': serializer.toJson<String>(partsJson),
+      'rawText': serializer.toJson<String>(rawText),
       'role': serializer.toJson<MessageRole>(role),
       'timestamp': serializer.toJson<DateTime>(timestamp),
       'originalXmlContent': serializer.toJson<String?>(originalXmlContent),
@@ -1493,7 +1493,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   MessageData copyWith(
           {int? id,
           int? chatId,
-          String? partsJson,
+          String? rawText,
           MessageRole? role,
           DateTime? timestamp,
           Value<String?> originalXmlContent = const Value.absent(),
@@ -1501,7 +1501,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       MessageData(
         id: id ?? this.id,
         chatId: chatId ?? this.chatId,
-        partsJson: partsJson ?? this.partsJson,
+        rawText: rawText ?? this.rawText,
         role: role ?? this.role,
         timestamp: timestamp ?? this.timestamp,
         originalXmlContent: originalXmlContent.present
@@ -1515,7 +1515,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     return MessageData(
       id: data.id.present ? data.id.value : this.id,
       chatId: data.chatId.present ? data.chatId.value : this.chatId,
-      partsJson: data.partsJson.present ? data.partsJson.value : this.partsJson,
+      rawText: data.rawText.present ? data.rawText.value : this.rawText,
       role: data.role.present ? data.role.value : this.role,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
       originalXmlContent: data.originalXmlContent.present
@@ -1532,7 +1532,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     return (StringBuffer('MessageData(')
           ..write('id: $id, ')
           ..write('chatId: $chatId, ')
-          ..write('partsJson: $partsJson, ')
+          ..write('rawText: $rawText, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
           ..write('originalXmlContent: $originalXmlContent, ')
@@ -1542,7 +1542,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   }
 
   @override
-  int get hashCode => Object.hash(id, chatId, partsJson, role, timestamp,
+  int get hashCode => Object.hash(id, chatId, rawText, role, timestamp,
       originalXmlContent, secondaryXmlContent);
   @override
   bool operator ==(Object other) =>
@@ -1550,7 +1550,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       (other is MessageData &&
           other.id == this.id &&
           other.chatId == this.chatId &&
-          other.partsJson == this.partsJson &&
+          other.rawText == this.rawText &&
           other.role == this.role &&
           other.timestamp == this.timestamp &&
           other.originalXmlContent == this.originalXmlContent &&
@@ -1560,7 +1560,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
 class MessagesCompanion extends UpdateCompanion<MessageData> {
   final Value<int> id;
   final Value<int> chatId;
-  final Value<String> partsJson;
+  final Value<String> rawText;
   final Value<MessageRole> role;
   final Value<DateTime> timestamp;
   final Value<String?> originalXmlContent;
@@ -1568,7 +1568,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.chatId = const Value.absent(),
-    this.partsJson = const Value.absent(),
+    this.rawText = const Value.absent(),
     this.role = const Value.absent(),
     this.timestamp = const Value.absent(),
     this.originalXmlContent = const Value.absent(),
@@ -1577,19 +1577,19 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   MessagesCompanion.insert({
     this.id = const Value.absent(),
     required int chatId,
-    required String partsJson,
+    required String rawText,
     required MessageRole role,
     required DateTime timestamp,
     this.originalXmlContent = const Value.absent(),
     this.secondaryXmlContent = const Value.absent(),
   })  : chatId = Value(chatId),
-        partsJson = Value(partsJson),
+        rawText = Value(rawText),
         role = Value(role),
         timestamp = Value(timestamp);
   static Insertable<MessageData> custom({
     Expression<int>? id,
     Expression<int>? chatId,
-    Expression<String>? partsJson,
+    Expression<String>? rawText,
     Expression<String>? role,
     Expression<DateTime>? timestamp,
     Expression<String>? originalXmlContent,
@@ -1598,7 +1598,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (chatId != null) 'chat_id': chatId,
-      if (partsJson != null) 'raw_text': partsJson,
+      if (rawText != null) 'raw_text': rawText,
       if (role != null) 'role': role,
       if (timestamp != null) 'timestamp': timestamp,
       if (originalXmlContent != null)
@@ -1611,7 +1611,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   MessagesCompanion copyWith(
       {Value<int>? id,
       Value<int>? chatId,
-      Value<String>? partsJson,
+      Value<String>? rawText,
       Value<MessageRole>? role,
       Value<DateTime>? timestamp,
       Value<String?>? originalXmlContent,
@@ -1619,7 +1619,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     return MessagesCompanion(
       id: id ?? this.id,
       chatId: chatId ?? this.chatId,
-      partsJson: partsJson ?? this.partsJson,
+      rawText: rawText ?? this.rawText,
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       originalXmlContent: originalXmlContent ?? this.originalXmlContent,
@@ -1636,8 +1636,8 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     if (chatId.present) {
       map['chat_id'] = Variable<int>(chatId.value);
     }
-    if (partsJson.present) {
-      map['raw_text'] = Variable<String>(partsJson.value);
+    if (rawText.present) {
+      map['raw_text'] = Variable<String>(rawText.value);
     }
     if (role.present) {
       map['role'] =
@@ -1661,7 +1661,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     return (StringBuffer('MessagesCompanion(')
           ..write('id: $id, ')
           ..write('chatId: $chatId, ')
-          ..write('partsJson: $partsJson, ')
+          ..write('rawText: $rawText, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
           ..write('originalXmlContent: $originalXmlContent, ')
@@ -3864,7 +3864,7 @@ typedef $$ChatsTableProcessedTableManager = ProcessedTableManager<
 typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
   required int chatId,
-  required String partsJson,
+  required String rawText,
   required MessageRole role,
   required DateTime timestamp,
   Value<String?> originalXmlContent,
@@ -3873,7 +3873,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
   Value<int> chatId,
-  Value<String> partsJson,
+  Value<String> rawText,
   Value<MessageRole> role,
   Value<DateTime> timestamp,
   Value<String?> originalXmlContent,
@@ -3911,8 +3911,8 @@ class $$MessagesTableFilterComposer
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
 
-  ColumnFilters<String> get partsJson => $composableBuilder(
-      column: $table.partsJson, builder: (column) => ColumnFilters(column));
+  ColumnFilters<String> get rawText => $composableBuilder(
+      column: $table.rawText, builder: (column) => ColumnFilters(column));
 
   ColumnWithTypeConverterFilters<MessageRole, MessageRole, String> get role =>
       $composableBuilder(
@@ -3963,8 +3963,8 @@ class $$MessagesTableOrderingComposer
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
 
-  ColumnOrderings<String> get partsJson => $composableBuilder(
-      column: $table.partsJson, builder: (column) => ColumnOrderings(column));
+  ColumnOrderings<String> get rawText => $composableBuilder(
+      column: $table.rawText, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<String> get role => $composableBuilder(
       column: $table.role, builder: (column) => ColumnOrderings(column));
@@ -4013,8 +4013,8 @@ class $$MessagesTableAnnotationComposer
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<String> get partsJson =>
-      $composableBuilder(column: $table.partsJson, builder: (column) => column);
+  GeneratedColumn<String> get rawText =>
+      $composableBuilder(column: $table.rawText, builder: (column) => column);
 
   GeneratedColumnWithTypeConverter<MessageRole, String> get role =>
       $composableBuilder(column: $table.role, builder: (column) => column);
@@ -4074,7 +4074,7 @@ class $$MessagesTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
             Value<int> chatId = const Value.absent(),
-            Value<String> partsJson = const Value.absent(),
+            Value<String> rawText = const Value.absent(),
             Value<MessageRole> role = const Value.absent(),
             Value<DateTime> timestamp = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
@@ -4083,7 +4083,7 @@ class $$MessagesTableTableManager extends RootTableManager<
               MessagesCompanion(
             id: id,
             chatId: chatId,
-            partsJson: partsJson,
+            rawText: rawText,
             role: role,
             timestamp: timestamp,
             originalXmlContent: originalXmlContent,
@@ -4092,7 +4092,7 @@ class $$MessagesTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
             required int chatId,
-            required String partsJson,
+            required String rawText,
             required MessageRole role,
             required DateTime timestamp,
             Value<String?> originalXmlContent = const Value.absent(),
@@ -4101,7 +4101,7 @@ class $$MessagesTableTableManager extends RootTableManager<
               MessagesCompanion.insert(
             id: id,
             chatId: chatId,
-            partsJson: partsJson,
+            rawText: rawText,
             role: role,
             timestamp: timestamp,
             originalXmlContent: originalXmlContent,

@@ -210,20 +210,20 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
 
       final List<MessagesCompanion> messageCompanions = [];
       for (final messageDto in chatDto.messages) {
-        String partsJson;
+        String rawText;
         // Prioritize the new 'parts' field if it exists and is not empty
         if (messageDto.parts != null && messageDto.parts!.isNotEmpty) {
-          partsJson = jsonEncode(messageDto.parts);
+          rawText = jsonEncode(messageDto.parts);
         } else {
           // Fallback to legacy 'rawText'
           final parts = [{'type': 'text', 'text': messageDto.rawText}];
-          partsJson = jsonEncode(parts);
+          rawText = jsonEncode(parts);
         }
 
         messageCompanions.add(
           MessagesCompanion.insert(
             chatId: newChatId,
-            partsJson: partsJson,
+            rawText: rawText,
             role: messageDto.role, // DTO now uses the same enum
             timestamp: DateTime.now(), // MessageExportDto does not have timestamp, generate new
           )

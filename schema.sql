@@ -59,8 +59,6 @@ CREATE TABLE IF NOT EXISTS chats (
     context_config TEXT NOT NULL,
     xml_rules TEXT NOT NULL,
     api_config_id TEXT,
-    api_type TEXT,
-    generation_config TEXT,
     enable_preprocessing BOOLEAN,
     preprocessing_prompt TEXT,
     context_summary TEXT,
@@ -83,10 +81,9 @@ CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
     chat_id INTEGER NOT NULL,
     role TEXT NOT NULL,
-    raw_text TEXT NOT NULL, -- Keep name consistent with local 'named' column
+    raw_text TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     original_xml_content TEXT,
-    secondary_xml_content TEXT,
-    -- created_at and updated_at are removed to align with the local model,
-    -- as message synchronization is atomic with its parent chat.
+    secondary_xml_content TEXT
+    -- created_at and updated_at are removed to align with the local model.
 );
