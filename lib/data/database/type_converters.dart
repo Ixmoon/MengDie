@@ -85,7 +85,6 @@ class StringListConverter extends TypeConverter<List<String>, String> {
       return jsonData.map((item) => item as String).toList();
     } catch (e) {
       // Handle potential old data that was stored as a single string or comma-separated.
-      // This makes the migration more robust.
       if (fromDb.startsWith('[') && fromDb.endsWith(']')) {
         final content = fromDb.substring(1, fromDb.length - 1);
         return content.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();

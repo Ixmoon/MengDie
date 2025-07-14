@@ -13,8 +13,7 @@ export '../database/common_enums.dart'
 		XmlAction,
 		LocalHarmCategory,
 		LocalHarmBlockThreshold,
-		ContextManagementMode,
-		HelpMeReplyTriggerMode;
+		ContextManagementMode;
 
 // --- “帮我回复”触发模式 ---
 enum HelpMeReplyTriggerMode {
