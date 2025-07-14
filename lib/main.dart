@@ -17,7 +17,6 @@ import 'ui/theme.dart'; // 导入主题配置
 import 'ui/router.dart'; // 导入路由配置
 import 'ui/providers/auth_providers.dart';
 import 'ui/providers/settings_providers.dart';
-import 'data/database/app_database.dart';
 import 'data/database/sync/sync_service.dart';
 import 'data/database/connections/remote.dart';
 import 'ui/providers/core_providers.dart';

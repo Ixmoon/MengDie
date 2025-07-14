@@ -44,7 +44,7 @@ Future<void> main() async {
     // 由于脚本开头有 DROP TABLE，因此整个过程是幂等的，事务不是必需的。
     for (final statement in statements) {
       // 使用 ! 是安全的，因为如果连接为空，在之前的步骤中就会抛出异常。
-      await connection!.execute(statement);
+      await connection.execute(statement);
     }
 
     print('数据库初始化成功！所有表已清空并根据最新结构重建。');
