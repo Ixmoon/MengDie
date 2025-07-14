@@ -14,28 +14,33 @@ import '../../service/process/chat_export_import.dart'; // 导入导出/导入�
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
 import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPreferences
-// import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
+import '../widgets/chat_list_item.dart';
+import '../widgets/chat_grid_item.dart';
+import '../widgets/move_up_target.dart';
+import '../widgets/chat_list_app_bar.dart';
+import '../widgets/chat_list_body.dart';
 
-// 本文件包含显示聊天列表的主屏幕。
+// --- 文件功能 ---
+// 本文件是聊天列表页面的主屏幕，作为状态管理和业务逻辑的核心协调中心。
 //
-// --- 主要功能 ---
-// 1. **多模式支持**: 支持普通、模板选择、模板管理三种模式，适配不同业务场景。
-// 2. **双视图显示**: 能以列表 (ListView) 或网格 (GridView) 形式显示聊天会话和文件夹。
-// 3. **多选操作**: 提供完整的批量操作能力，包括选择、全选、反选、删除和导出。
-// 4. **高级拖放排序**:
-//    - **统一排序逻辑**: 实现了一个健壮的、统一的排序处理方法 `_handleReorder`，精确处理单选和多选在不同视图下的排序。
-//    - **文件夹操作**: 支持将项目拖入文件夹、在文件夹内排序以及从文件夹中拖出至上一级。
-//    - **多选拖动动画**: 在列表视图中，为多选拖动提供了平滑的堆叠卡片动画效果。
-// 5. **状态管理**:
-//    - **乐观更新**: 使用本地缓存 `_localChats` 进行UI的乐观更新，提升拖拽等操作的流畅度。
-//    - **状态隔离**: 通过 `_isReordering` 标志位和 `ref.listen`，有效隔离本地UI状态和远程数据流，防止在用户交互时发生UI跳变。
-// 6. **内容创建与导入**: 支持新建聊天、模板、文件夹，并能从外部文件导入数据到当前文件夹。
+// --- 核心职责 ---
+// 1. **状态管理**:
+//    - 管理核心UI状态，如视图模式（列表/网格）、多选模式、选中项集合等。
+//    - 通过 `_localChats` 本地缓存和 `_isReordering` 标志位实现拖拽操作的乐观更新。
+//    - 使用 `ref.listen` 监听远程数据源 (`chatListProvider`)，并在适当时机（非拖拽时）同步数据到本地缓存，解决UI闪烁问题。
+// 2. **业务逻辑处理**:
+//    - 实现所有用户交互的核心处理方法，如 `_handleItemTap`, `_handleListViewReorder`, `_handleGridViewReorder`。
+//    - 管理多选操作逻辑（全选、删除、导出等）。
+//    - 处理新建项目（聊天、模板、文件夹）和导入导出的逻辑。
+// 3. **UI组件编排**:
+//    - 构建顶层 `Scaffold`。
+//    - 将状态和回调函数传递给子组件 `ChatListAppBar` 和 `ChatListBody`，由它们负责具体的UI渲染。
 //
-// --- 代码结构 ---
-// - **`_ChatListScreenState`**: 管理所有UI状态和业务逻辑。
-// - **`_build...` 方法**: 构建UI的各个部分，如 `_buildAppBar`, `_buildListView` 等。
-// - **`_handle...` 方法**: 处理用户交互事件，如 `_handleReorder`, `_handleItemTap`。
-// - **私有 Widget**: 封装了如 `_ChatListItem`, `_ChatGridItem` 等独立的UI组件。
+// --- 代码结构 (重构后) ---
+// - **`ChatListScreen` / `_ChatListScreenState`**: 专注于状态和逻辑。
+// - **`ChatListAppBar`**: 独立的 AppBar 组件，负责渲染所有顶部操作栏UI。
+// - **`ChatListBody`**: 独立的主体内容组件，负责渲染列表、网格、加载、错误和空状态。
+// - **`ChatListItem` / `ChatGridItem`**: 独立的列表/网格项组件。
 
 
 // --- 聊天列表屏幕 ---
@@ -423,112 +428,93 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
 
 
-  // --- 构建列表视图 ---
-  Widget _buildListView(List<Chat> chats, WidgetRef ref) {
-    final inFolder = ref.watch(currentFolderIdProvider) != null;
 
-    // 关键修复：保持数据源的稳定性。不过滤列表，以防止 ReorderableListView 状态崩溃。
-    // 视觉上的“隐藏”将在 itemBuilder 中通过返回占位符来实现。
-    final displayChats = chats;
-    final itemCount = inFolder ? displayChats.length + 1 : displayChats.length;
 
-    return ReorderableListView.builder(
-      padding: const EdgeInsets.only(top: 8),
-      itemCount: itemCount,
-      buildDefaultDragHandles: false,
-      proxyDecorator: _buildDragProxy, // 应用自定义拖动预览
-      onReorder: _handleListViewReorder,
+  @override
+  Widget build(BuildContext context) {
+    final currentFolderId = ref.watch(currentFolderIdProvider);
+    final chatListProviderInstance = chatListProvider((parentFolderId: currentFolderId, mode: widget.mode));
+    
+    // 优化：仅在文件夹内（currentFolderId != null）时才订阅 currentChatProvider。
+    final currentFolderAsync = currentFolderId != null
+        ? ref.watch(currentChatProvider(currentFolderId))
+        : const AsyncValue<Chat?>.data(null);
+
+    // 最终闪烁修复：使用 ref.listen 在后台同步数据，而UI始终依赖 _localChats。
+    ref.listen(chatListProviderInstance, (previous, next) {
+      // 仅在非拖拽状态下接受来自 Provider 的更新
+      if (!_isReordering && next.hasValue) {
+        setState(() {
+          _localChats = next.value;
+        });
+      }
+    });
+
+    // 关键修复：当文件夹改变时，清空本地缓存以触发加载状态
+    ref.listen(currentFolderIdProvider, (previous, next) {
+      if (previous != next) {
+        setState(() {
+          _localChats = null;
+        });
+      }
+    });
+
+    // 从 Provider 获取初始状态，用于处理加载和错误情况
+    final chatListAsync = ref.watch(chatListProviderInstance);
+
+    // 关键修复：确保在重建时（例如，从其他页面返回），如果本地状态丢失但Provider有数据，能立即恢复。
+    if (_localChats == null && chatListAsync.hasValue) {
+      _localChats = chatListAsync.value;
+    }
+
+    final Widget body = ChatListBody(
+      mode: widget.mode,
+      isGridView: _isGridView,
+      localChats: _localChats,
+      chatListAsync: chatListAsync,
+      currentFolderId: currentFolderId,
+      selectedItemIds: _selectedItemIds,
+      draggedItemId: _draggedItemId,
+      isMultiSelectMode: _isMultiSelectMode,
+      proxyDecorator: _buildDragProxy,
+      onListViewReorder: _handleListViewReorder,
+      onGridViewReorder: _handleGridViewReorder,
+      onReorderStart: (index) {
+        final inFolder = ref.read(currentFolderIdProvider) != null;
+        final chatIndex = inFolder ? index - 1 : index;
+        if (chatIndex >= 0 && chatIndex < (_localChats?.length ?? 0)) {
+          final draggedChat = _localChats![chatIndex];
+          if (_isMultiSelectMode && _selectedItemIds.contains(draggedChat.id)) {
+            setState(() {
+              _draggedItemId = draggedChat.id;
+            });
+          }
+        }
+      },
       onReorderEnd: (index) {
-        // 关键修复：当拖动在 ListView 中结束时（无论是完成排序还是被取消），
-        // 都必须清理拖动状态。缺少这个回调是导致“点击消失”问题的根本原因。
         if (_draggedItemId != null) {
           setState(() {
             _draggedItemId = null;
           });
         }
       },
-      onReorderStart: (index) {
-        final chatIndex = inFolder ? index - 1 : index;
-        if (chatIndex >= 0 && chatIndex < displayChats.length) {
-          final draggedChat = displayChats[chatIndex];
-          // 关键交互修复：仅当在多选模式下，且用户拖动的是一个**已选中**的项目时，
-          // 才触发“多选拖动”状态（即设置 _draggedItemId，从而隐藏其他选中项）。
-          if (_isMultiSelectMode && _selectedItemIds.contains(draggedChat.id)) {
-            setState(() {
-              _draggedItemId = draggedChat.id;
-            });
-          }
-          // 如果用户在多选模式下拖动一个“未选中”的项，则不设置 _draggedItemId，
-          // 这将使本次拖动表现为普通的单项拖动，符合用户预期。
-        }
-      },
-      itemBuilder: (context, index) {
-        if (inFolder && index == 0) {
-          return const _MoveUpTarget(key: ValueKey('move-up-target-list'), isListView: true);
-        }
-        final chatIndex = inFolder ? index - 1 : index;
-        final chat = displayChats[chatIndex];
-        
-        // 关键修复：在多选拖动时，隐藏所有被选中的项目（包括被拖动的那个），
-        // 因为它们的视觉呈现已完全由拖动代理 `proxyDecorator` 接管。
-        // 这可以防止被拖动项在原位置出现视觉残留，并确保列表索引稳定。
-        final bool shouldHide = _isMultiSelectMode &&
-                                _draggedItemId != null &&
-                                _selectedItemIds.contains(chat.id);
-
-        if (shouldHide) {
-          // 最终视觉优化：返回一个零尺寸的占位符，使空间能够折叠。
-          // 同时保留 key，以确保 Flutter 能够正确跟踪小部件，保证动画平滑。
-          return SizedBox.shrink(key: ValueKey(chat.id));
-        }
-        
-        return ReorderableDelayedDragStartListener(
-          key: ValueKey(chat.id),
-          index: index,
-          child: _ChatListItem(
-            chat: chat,
-            isSelected: _selectedItemIds.contains(chat.id),
-            isMultiSelectMode: _isMultiSelectMode,
-            onTap: () => _handleItemTap(chat),
-          ),
-        );
-      },
-    );
-  }
-
-
-  // --- 构建网格视图 ---
-  Widget _buildGridView(List<Chat> chats, WidgetRef ref) {
-    final inFolder = ref.watch(currentFolderIdProvider) != null;
-
-    // 最终修复：对于 GridView，必须在拖动时过滤数据源，以解决占位问题。
-    final List<Chat> displayChats;
-    if (_isMultiSelectMode && _draggedItemId != null) {
-      displayChats = chats.where((chat) => !_selectedItemIds.contains(chat.id)).toList();
-    } else {
-      displayChats = chats;
-    }
-    final itemCount = inFolder ? displayChats.length + 1 : displayChats.length;
-
-    return ReorderableGridView.builder(
-      onReorder: _handleGridViewReorder,
-      padding: const EdgeInsets.all(8.0),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 8.0,
-        mainAxisSpacing: 8.0,
-        childAspectRatio: 1 / 1.5,
-      ),
-      itemCount: itemCount,
-      dragWidgetBuilderV2: DragWidgetBuilderV2(
+      onItemTap: _handleItemTap,
+      dragWidgetBuilder: DragWidgetBuilderV2(
         isScreenshotDragWidget: false,
         builder: (index, child, screenshot) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            final inFolder = ref.read(currentFolderIdProvider) != null;
             final chatIndex = inFolder ? index - 1 : index;
-            // 安全检查：确保索引在 displayChats 范围内
+
+            final List<Chat> displayChats;
+            if (_isMultiSelectMode && _draggedItemId != null) {
+              displayChats = _localChats!.where((chat) => !_selectedItemIds.contains(chat.id)).toList();
+            } else {
+              displayChats = _localChats ?? [];
+            }
+            
             if (chatIndex >= 0 && chatIndex < displayChats.length) {
                final draggedChat = displayChats[chatIndex];
-               // 触发多选拖动状态
                if (_isMultiSelectMode && _selectedItemIds.contains(draggedChat.id)) {
                  if (_draggedItemId != draggedChat.id) {
                    setState(() {
@@ -541,89 +527,51 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           return child;
         },
       ),
-      itemBuilder: (context, index) {
-        if (inFolder && index == 0) {
-          return const _MoveUpTarget(key: ValueKey('move-up-target-grid'), isListView: false);
-        }
-        final chatIndex = inFolder ? index - 1 : index;
-        final chat = displayChats[chatIndex];
-
-        // GridView 不需要 shouldHide 逻辑，因为数据源已经被过滤
-        return ReorderableDelayedDragStartListener(
-          key: ValueKey(chat.id),
-          index: index,
-          enabled: !_isMultiSelectMode || _selectedItemIds.contains(chat.id),
-          child: _ChatGridItem(
-            chat: chat,
-            isSelected: _selectedItemIds.contains(chat.id),
-            onTap: () => _handleItemTap(chat),
-          ),
-        );
-      },
     );
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    final currentFolderId = ref.watch(currentFolderIdProvider);
-    final chatListProviderInstance = chatListProvider((parentFolderId: currentFolderId, mode: widget.mode));
-    final chatListAsync = ref.watch(chatListProviderInstance);
-    // 优化：仅在文件夹内（currentFolderId != null）时才订阅 currentChatProvider，
-    // 从而避免在根目录时创建不必要的 currentChatProvider(-1) 监听。
-    final currentFolderAsync = currentFolderId != null
-        ? ref.watch(currentChatProvider(currentFolderId))
-        : const AsyncValue<Chat?>.data(null);
-
-    // 关键修复: 统一数据源逻辑，避免在 .when() 的不同分支中构建列表。
-    // 这样可以确保在任何时候都只有一个列表widget实例，从而解决GlobalKey冲突。
-    Widget body;
-    
-    // 1. 确定要显示的数据
-    // 在拖拽时，使用本地缓存 `_localChats` 进行乐观更新。
-    // 在其他时候，如果 provider 有数据，则使用它；如果 provider 正在加载但我们有旧数据，也使用旧数据以避免闪烁。
-    final List<Chat>? chatsForDisplay = _isReordering ? _localChats : (chatListAsync.value ?? _localChats);
-
-    // 2. 仅在非拖拽且有新数据时更新本地缓存
-    if (!_isReordering && chatListAsync.hasValue) {
-      _localChats = chatListAsync.value;
-    }
-
-    // 3. 根据状态构建 body
-    if (chatsForDisplay != null) {
-      // 如果有任何可显示的数据（新的或旧的），则构建列表
-      if (chatsForDisplay.isEmpty && currentFolderId == null) {
-        switch (widget.mode) {
-          case ChatListMode.normal:
-            body = const Center(child: Text('点击右下角 + 开始新聊天'));
-            break;
-          case ChatListMode.templateSelection:
-            body = const Center(child: Text('没有可用的模板'));
-            break;
-          case ChatListMode.templateManagement:
-            body = const Center(child: Text('没有可用的模板，点击右下角 + 新建'));
-            break;
-        }
-      } else if (chatsForDisplay.isEmpty && currentFolderId != null) {
-        body = const Center(child: Text('此文件夹为空'));
-      } else {
-        body = _isGridView
-            ? _buildGridView(chatsForDisplay, ref)
-            : _buildListView(chatsForDisplay, ref);
-      }
-    } else if (chatListAsync.isLoading) {
-      // 如果没有任何可显示的数据，并且正在加载，则显示加载指示器
-      body = const Center(child: CircularProgressIndicator());
-    } else if (chatListAsync.hasError) {
-      // 如果没有任何可显示的数据，并且出错，则显示错误信息
-      body = Center(child: Text('无法加载列表: ${chatListAsync.error}'));
-    } else {
-      // 默认情况（例如，初始状态，没有数据也没有错误）
-      body = const Center(child: Text('没有内容'));
-    }
 
     return Scaffold(
-      appBar: _buildAppBar(context, ref, currentFolderId, currentFolderAsync),
+      appBar: ChatListAppBar(
+        mode: widget.mode,
+        isMultiSelectMode: _isMultiSelectMode,
+        isGridView: _isGridView,
+        currentFolderId: currentFolderId,
+        currentFolderAsync: currentFolderAsync,
+        selectedItemCount: _selectedItemIds.length,
+        allItems: _localChats ?? [],
+        onToggleMultiSelectMode: () => _toggleMultiSelectMode(enable: !_isMultiSelectMode),
+        onToggleViewMode: () {
+          setState(() {
+            _isGridView = !_isGridView;
+            _saveViewMode(_isGridView);
+          });
+        },
+        onImport: () async {
+          final scaffoldMessenger = ScaffoldMessenger.of(context);
+          final importType = widget.mode == ChatListMode.normal ? '聊天' : '模板';
+          scaffoldMessenger.showSnackBar(
+            SnackBar(content: Text('正在导入$importType...'), duration: const Duration(seconds: 10)),
+          );
+          try {
+            final count = await ref.read(chatExportImportServiceProvider).importChats(parentFolderId: currentFolderId);
+            if (!context.mounted) return;
+            scaffoldMessenger.hideCurrentSnackBar();
+            if (count > 0) {
+              scaffoldMessenger.showSnackBar(SnackBar(content: Text('成功导入 $count 个$importType！')));
+            } else {
+              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入已取消或没有导入任何项目'), duration: Duration(seconds: 2)));
+            }
+          } catch (e) {
+            if (!context.mounted) return;
+            scaffoldMessenger.hideCurrentSnackBar();
+            scaffoldMessenger.showSnackBar(SnackBar(content: Text('导入$importType失败: $e'), backgroundColor: Colors.red));
+          }
+        },
+        onSelectAll: () => _selectAll(_localChats ?? []),
+        onDeselectAll: _deselectAll,
+        onInvertSelection: () => _invertSelection(_localChats ?? []),
+        onExport: _exportSelected,
+        onDelete: _showMultiDeleteConfirmationDialog,
+      ),
       body: body,
       floatingActionButton: widget.mode == ChatListMode.templateSelection
         ? null
@@ -784,155 +732,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     }
   }
 
-  AppBar _buildAppBar(BuildContext context, WidgetRef ref, int? currentFolderId, AsyncValue<Chat?> currentFolderAsync) {
-    // 根据是否处于多选模式，调用不同的构建方法，使逻辑更清晰
-    if (_isMultiSelectMode) {
-      return _buildMultiSelectAppBar(ref, currentFolderId);
-    } else {
-      return _buildNormalAppBar(ref, currentFolderId, currentFolderAsync);
-    }
-  }
-
-  /// 构建普通模式下的 AppBar
-  AppBar _buildNormalAppBar(WidgetRef ref, int? currentFolderId, AsyncValue<Chat?> currentFolderAsync) {
-    String title;
-    switch (widget.mode) {
-      case ChatListMode.normal:
-        title = currentFolderId != null ? (currentFolderAsync.whenData((folder) => folder?.title).value ?? '文件夹') : '梦蝶';
-        break;
-      case ChatListMode.templateSelection:
-        title = '从模板新建';
-        break;
-      case ChatListMode.templateManagement:
-        title = '管理模板';
-        break;
-    }
-
-    return AppBar(
-      leading: widget.mode != ChatListMode.normal || currentFolderId != null
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              tooltip: '返回',
-              onPressed: () {
-                if (currentFolderId != null) {
-                  final parentId = currentFolderAsync.whenData((folder) => folder?.parentFolderId).value;
-                  ref.read(currentFolderIdProvider.notifier).state = parentId;
-                } else if (widget.mode != ChatListMode.normal) {
-                  context.pop();
-                }
-              },
-            )
-          : null,
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Text(
-        title,
-        style: TextStyle(
-          shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
-          ],
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.select_all),
-          tooltip: '选择项目',
-          onPressed: () => _toggleMultiSelectMode(enable: true),
-        ),
-        IconButton(
-          icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
-          tooltip: _isGridView ? '切换到列表视图' : '切换到网格视图',
-          onPressed: () {
-            setState(() {
-              _isGridView = !_isGridView;
-              _saveViewMode(_isGridView); // 保存视图模式
-            });
-          },
-        ),
-        if (widget.mode == ChatListMode.normal || widget.mode == ChatListMode.templateManagement)
-          IconButton(
-            icon: const Icon(Icons.file_download_outlined),
-            tooltip: widget.mode == ChatListMode.normal ? '导入聊天' : '导入模板',
-            onPressed: () async {
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              final importType = widget.mode == ChatListMode.normal ? '聊天' : '模板';
-              scaffoldMessenger.showSnackBar(
-                SnackBar(content: Text('正在导入$importType...'), duration: const Duration(seconds: 10)),
-              );
-              try {
-                final count = await ref.read(chatExportImportServiceProvider).importChats(parentFolderId: currentFolderId);
-                if (!context.mounted) return;
-                scaffoldMessenger.hideCurrentSnackBar();
-                if (count > 0) {
-                  scaffoldMessenger.showSnackBar(SnackBar(content: Text('成功导入 $count 个$importType！')));
-                } else {
-                  scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入已取消或没有导入任何项目'), duration: Duration(seconds: 2)));
-                }
-              } catch (e) {
-                if (!context.mounted) return;
-                scaffoldMessenger.hideCurrentSnackBar();
-                scaffoldMessenger.showSnackBar(SnackBar(content: Text('导入$importType失败: $e'), backgroundColor: Colors.red));
-              }
-            },
-          ),
-        if (widget.mode == ChatListMode.normal)
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: '全局设置',
-            onPressed: () => context.push('/settings'),
-          ),
-      ],
-    );
-  }
-
-  /// 构建多选模式下的 AppBar
-  AppBar _buildMultiSelectAppBar(WidgetRef ref, int? currentFolderId) {
-    final allItems = ref.watch(chatListProvider((parentFolderId: currentFolderId, mode: widget.mode))).value ?? [];
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.close),
-        tooltip: '取消选择',
-        onPressed: () => _toggleMultiSelectMode(enable: false),
-      ),
-      title: Text(
-        '已选择 ${_selectedItemIds.length} 项',
-        style: TextStyle(
-          shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
-          ],
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.select_all),
-          tooltip: '全选',
-          onPressed: () => _selectAll(allItems),
-        ),
-        IconButton(
-          icon: const Icon(Icons.deselect),
-          tooltip: '全不选',
-          onPressed: _deselectAll,
-        ),
-        IconButton(
-          icon: const Icon(Icons.flip_to_back_outlined),
-          tooltip: '反选',
-          onPressed: () => _invertSelection(allItems),
-        ),
-        IconButton(
-          icon: const Icon(Icons.upload_file_outlined),
-          tooltip: '导出所选',
-          onPressed: _selectedItemIds.isEmpty ? null : _exportSelected,
-        ),
-        IconButton(
-          icon: const Icon(Icons.delete_outline),
-          tooltip: '删除所选',
-          onPressed: _selectedItemIds.isEmpty ? null : _showMultiDeleteConfirmationDialog,
-        ),
-      ],
-    );
-  }
 
 
   // --- 显示创建菜单 (根据是否在文件夹内调整) ---
@@ -1070,268 +869,5 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         }
       }
     }
-  }
-}
-
-// --- 封装的私有小部件 ---
-
-/// “返回上一级”的拖放目标小部件
-class _MoveUpTarget extends StatelessWidget {
-  final bool isListView;
-  const _MoveUpTarget({super.key, required this.isListView});
-
-  @override
-  Widget build(BuildContext context) {
-    if (isListView) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
-        color: Theme.of(context).hoverColor,
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.arrow_upward, size: 18),
-            SizedBox(width: 8),
-            Text('拖动到此处以上移'),
-          ],
-        ),
-      );
-    } else {
-      return GridTile(
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).hoverColor,
-            borderRadius: BorderRadius.circular(8.0),
-          ),
-          child: const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.arrow_upward, size: 24),
-              SizedBox(height: 8),
-              Text('移至上一级', style: TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
-      );
-    }
-  }
-}
-
-/// 列表视图中的聊天项小部件
-class _ChatListItem extends ConsumerWidget { // 转换为 ConsumerWidget
-  final Chat chat;
-  final bool isSelected;
-  final bool isMultiSelectMode;
-  final VoidCallback onTap;
-
-  const _ChatListItem({
-    required this.chat,
-    required this.isSelected,
-    required this.isMultiSelectMode,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) { // 添加 WidgetRef
-    // 优化：订阅 firstModelMessageProvider 的 FutureProvider
-    final firstModelMessageAsync = ref.watch(firstModelMessageProvider(chat.id));
-
-    return Container(
-      color: isSelected ? Theme.of(context).highlightColor : null,
-      child: InkWell(
-        onTap: onTap,
-        child: chat.isFolder
-            ? ListTile(
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(chat.title ?? '未命名文件夹'),
-                // 修正：为文件夹也添加时间戳判断，以防万一
-                subtitle: Text(
-                  chat.updatedAt.millisecondsSinceEpoch < 1000
-                      ? '文件夹' // 修正：不再显示“模板文件夹”，避免语义混淆
-                      : '文件夹 - ${DateFormat.yMd().add_Hm().format(chat.updatedAt)}',
-                ),
-                trailing: isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
-              )
-            : ListTile(
-                leading: _buildLeading(context, chat),
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 第一行：标题和时间
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            chat.title ?? '无标题聊天',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            // 标题加粗
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        // 使用毫秒数进行比较，避免时区问题 (允许1秒误差)
-                        if (chat.updatedAt.millisecondsSinceEpoch >= 1000)
-                          Text(
-                            DateFormat.yMd().add_jm().format(chat.updatedAt),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4), // 间距
-                    // 第二行：第一条模型消息预览
-                    Text(
-                      chat.updatedAt.millisecondsSinceEpoch < 1000
-                          ? '模板' // 如果是模板，显示“模板”
-                          // 使用 .when 处理 FutureProvider 的不同状态
-                          : firstModelMessageAsync.when(
-                              data: (message) => message?.displayText ?? '', // 数据加载成功
-                              loading: () => '...', // 加载中
-                              error: (err, st) => '!', // 加载出错
-                            ),
-                      // 消息内容与标题字号相同
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: chat.updatedAt.millisecondsSinceEpoch < 1000 ? Theme.of(context).colorScheme.primary : null,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-                trailing: isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
-              ),
-      ),
-    );
-  }
-
-  Widget _buildLeading(BuildContext context, Chat chat) {
-    final bool hasImage = chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty;
-    Widget leadingWidget;
-    if (hasImage) {
-      final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-      leadingWidget = CachedImageFromBase64(
-        base64String: chat.coverImageBase64!,
-        width: 50,
-        height: 50,
-        cacheWidth: (50 * pixelRatio).round(),
-        cacheHeight: (50 * pixelRatio).round(),
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50, color: Colors.grey),
-      );
-    } else {
-      leadingWidget = const Icon(Icons.chat_bubble_outline, size: 40, color: Colors.grey);
-    }
-    return CircleAvatar(
-      radius: 25,
-      backgroundColor: hasImage ? Colors.transparent : Theme.of(context).colorScheme.primaryContainer,
-      child: ClipOval(child: leadingWidget),
-    );
-  }
-}
-
-/// 网格视图中的聊天项小部件
-class _ChatGridItem extends ConsumerWidget { // 转换为 ConsumerWidget
-  final Chat chat;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _ChatGridItem({
-    required this.chat,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) { // 添加 WidgetRef
-    // 订阅第一条模型消息
-    // 优化：订阅 firstModelMessageProvider 的 FutureProvider
-    final firstModelMessageAsync = ref.watch(firstModelMessageProvider(chat.id));
-
-    Widget displayWidget;
-    if (chat.isFolder) {
-      displayWidget = Container(
-        color: Colors.amber.shade100,
-        child: Icon(Icons.folder_outlined, color: Colors.amber.shade800, size: 50),
-      );
-    } else {
-      if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
-        displayWidget = CachedImageFromBase64(
-          base64String: chat.coverImageBase64!,
-          fit: BoxFit.cover,
-          cacheWidth: 240, // 优化缓存尺寸
-          cacheHeight: 360, // 优化缓存尺寸
-          errorBuilder: (context, error, stackTrace) => Container(
-            color: Colors.grey.shade300,
-            child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
-          ),
-        );
-      } else {
-        displayWidget = Container(
-          color: Colors.grey.shade300,
-          child: const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 40),
-        );
-      }
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: GridTile(
-        footer: GridTileBar(
-          backgroundColor: Colors.black54,
-          title: Column( // 使用 Column 容纳标题和副标题
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                chat.title ?? (chat.isFolder ? '未命名文件夹' : '无标题'),
-                textAlign: TextAlign.center,
-                // 标题加粗
-                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              // 如果是模板，则不显示消息预览 (允许1秒误差)
-              if (!chat.isFolder && chat.updatedAt.millisecondsSinceEpoch >= 1000)
-                // 使用 .when 处理 FutureProvider 的不同状态
-                firstModelMessageAsync.when(
-                  data: (message) {
-                    if (message == null) return const SizedBox.shrink();
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 2.0),
-                      child: Text(
-                        message.displayText,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  },
-                  loading: () => const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  error: (e, s) => const Icon(Icons.error_outline, color: Colors.red, size: 14),
-                ),
-            ],
-          ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8.0),
-              child: displayWidget,
-            ),
-            if (isSelected)
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha((255 * 0.3).round()),
-                  borderRadius: BorderRadius.circular(8.0),
-                  border: Border.all(color: Theme.of(context).primaryColor, width: 2),
-                ),
-                child: Icon(Icons.check_circle, color: Colors.white.withAlpha((255 * 0.8).round()), size: 30),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }

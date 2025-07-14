@@ -26,16 +26,16 @@ class ApiConfigRepository {
     return driftConfig != null ? ApiConfigMapper.fromData(driftConfig) : null;
   }
 
-  Future<void> saveConfig(ApiConfig config, int userId, {bool forceRemoteWrite = false}) {
+  Future<void> saveConfig(ApiConfig config, int userId) {
     final companion = ApiConfigMapper.toCompanion(config);
-    return _dao.upsertApiConfig(companion, userId, forceRemoteWrite: forceRemoteWrite);
+    return _dao.upsertApiConfig(companion, userId);
   }
 
-  Future<void> deleteConfig(String id, int userId, {bool forceRemoteWrite = false}) =>
-      _dao.deleteApiConfig(id, userId, forceRemoteWrite: forceRemoteWrite);
+  Future<void> deleteConfig(String id, int userId) =>
+      _dao.deleteApiConfig(id, userId);
   
-  Future<void> clearAllConfigs(int userId, {bool forceRemoteWrite = false}) =>
-      _dao.clearAllApiConfigs(userId, forceRemoteWrite: forceRemoteWrite);
+  Future<void> clearAllConfigs(int userId) =>
+      _dao.clearAllApiConfigs(userId);
 
   // Data migration logic can be added here.
   // This method would be called once upon app initialization.

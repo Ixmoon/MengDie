@@ -9,13 +9,39 @@ import '../providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 import '../../data/models/enums.dart';
 import '../../data/models/app_constants.dart';
+import '../../data/database/sync/sync_service.dart';
  
- 
-class GlobalSettingsScreen extends ConsumerWidget {
+class GlobalSettingsScreen extends ConsumerStatefulWidget {
   const GlobalSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GlobalSettingsScreen> createState() => _GlobalSettingsScreenState();
+}
+
+class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
+
+  @override
+  void initState() {
+    super.initState();
+    // Entering the settings screen, pull the latest user settings from the cloud.
+    // We don't await this to avoid blocking the UI.
+    SyncService.instance.forcePullUsers().catchError((e, s) {
+      // Optionally handle or log the error, but don't block the user.
+    });
+  }
+
+  @override
+  void dispose() {
+    // Exiting the settings screen, push any changes to the cloud.
+    // We don't await this to avoid blocking the UI.
+    SyncService.instance.forcePushUsers().catchError((e, s) {
+      // Optionally handle or log the error, but don't block the user.
+    });
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -110,6 +136,11 @@ class GlobalSettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 30),
 
+                Text('数据同步', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 10),
+                _SyncSettingsWidget(),
+                const Divider(height: 30),
+
                Text('自动化', style: Theme.of(context).textTheme.titleLarge),
                const SizedBox(height: 10),
                _FeatureSettingsWidget(
@@ -194,6 +225,65 @@ class GlobalSettingsScreen extends ConsumerWidget {
          ),
      );
    }
+}
+
+class _SyncSettingsWidget extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_SyncSettingsWidget> createState() => _SyncSettingsWidgetState();
+}
+
+class _SyncSettingsWidgetState extends ConsumerState<_SyncSettingsWidget> {
+  late final TextEditingController _connectionStringController;
+
+  @override
+  void initState() {
+    super.initState();
+    final syncSettings = ref.read(syncSettingsProvider);
+    _connectionStringController = TextEditingController(text: syncSettings.connectionString);
+  }
+
+  @override
+  void dispose() {
+    _connectionStringController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final syncSettings = ref.watch(syncSettingsProvider);
+    final syncSettingsNotifier = ref.read(syncSettingsProvider.notifier);
+
+    return Column(
+      children: [
+        SwitchListTile(
+          title: const Text('启用远程同步'),
+          subtitle: const Text('将数据同步到远程 PostgreSQL 数据库'),
+          value: syncSettings.isEnabled,
+          onChanged: (value) {
+            syncSettingsNotifier.updateSettings(
+              syncSettings.copyWith(isEnabled: value),
+            );
+          },
+          secondary: const Icon(Icons.sync),
+        ),
+        if (syncSettings.isEnabled) ...[
+          const SizedBox(height: 15),
+          TextFormField(
+            controller: _connectionStringController,
+            decoration: const InputDecoration(
+              labelText: '数据库连接字符串',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              syncSettingsNotifier.updateSettings(
+                syncSettings.copyWith(connectionString: value),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
 }
  
  class _FeatureSettingsWidget extends ConsumerStatefulWidget {
@@ -314,6 +404,7 @@ class GlobalSettingsScreen extends ConsumerWidget {
              const Text('没有可用的 API 配置。请先在 API 配置管理中添加。', style: TextStyle(color: Colors.orange))
            else
              DropdownButtonFormField<String?>(
+               isExpanded: true, // 修复溢出
                value: widget.apiConfigId,
                decoration: InputDecoration(
                  labelText: '使用的 API 配置',
@@ -323,12 +414,14 @@ class GlobalSettingsScreen extends ConsumerWidget {
                items: [
                  const DropdownMenuItem<String?>(
                    value: null,
-                   child: Text('使用全局默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                   // 修复长文本溢出
+                   child: Text('使用全局默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey), overflow: TextOverflow.ellipsis),
                  ),
                  ...apiConfigs.map((ApiConfig config) {
                    return DropdownMenuItem<String?>(
                      value: config.id,
-                     child: Text(config.name),
+                     // 修复长文本溢出
+                     child: Text(config.name, overflow: TextOverflow.ellipsis),
                    );
                  }),
                ],

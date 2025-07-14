@@ -32,10 +32,7 @@ final _log = Logger('AppDatabase');
 
 @DriftDatabase(tables: [Chats, Messages, ApiConfigs, Users], daos: [ChatDao, MessageDao, ApiConfigDao, UserDao])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(connect()) {
-    // Pass the database instance itself to the SyncService for rollback capabilities.
-    SyncService.initialize(this, connectRemote);
-  }
+  AppDatabase() : super(connect());
 
   AppDatabase.forTesting(super.connection);
 
@@ -218,7 +215,11 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
-
+  Future<void> syncWithRemote() async {
+    // This method is now a proxy to the SyncService instance method.
+    // The actual logic is handled within SyncService itself.
+    await SyncService.instance.syncWithRemote();
+  }
 }
 
 // _openConnection function is now removed, using connect() from conditional import.

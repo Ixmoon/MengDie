@@ -43,26 +43,3 @@ class Users extends Table {
   /// Gemini API 密钥列表
   TextColumn get geminiApiKeys => text().map(const StringListConverter()).nullable()();
 }
-
-/// 类型转换器，用于在 List<int> 和数据库支持的 String 类型之间进行转换。
-///
-/// 数据库中存储的格式为 JSON 字符串，例如: "[1, 2, 3]"。
-class IntListConverter extends TypeConverter<List<int>, String> {
-  const IntListConverter();
-
-  @override
-  List<int> fromSql(String fromDb) {
-    if (fromDb.isEmpty) return [];
-    // 假设 fromDb 是一个 JSON 编码的列表字符串，例如 '[1,2,3]'
-    // 移除括号并按逗号分割
-    final parts = fromDb.substring(1, fromDb.length - 1).split(',');
-    // 将每个部分转换回整数
-    return parts.where((s) => s.isNotEmpty).map(int.parse).toList();
-  }
-
-  @override
-  String toSql(List<int> value) {
-    // 将整数列表转换为 JSON 格式的字符串
-    return '[${value.join(',')}]';
-  }
-}

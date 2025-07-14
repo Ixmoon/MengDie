@@ -1,9 +1,10 @@
 // lib/data/database/settings_service.dart
 
-/// Manages global settings for database operations, specifically for remote synchronization.
+/// Manages global, non-persistent settings for the current app session.
 ///
-/// This service provides global flags to enable or disable remote writes and reads.
-/// It follows a singleton pattern to ensure a single source of truth for these settings throughout the app.
+/// This service provides global flags and session-specific data.
+/// It follows a singleton pattern to ensure a single source of truth throughout the app.
+/// Note: For persistent settings, use providers that leverage SharedPreferences.
 class SettingsService {
   // Private constructor for the singleton pattern.
   SettingsService._();
@@ -11,15 +12,8 @@ class SettingsService {
   /// The single, shared instance of [SettingsService].
   static final SettingsService instance = SettingsService._();
 
-  /// Global flag to control whether write operations are synced to the remote database.
-  ///
-  /// Defaults to `false`. When `true`, write operations (insert, update, delete)
-  /// will attempt to sync to the remote server.
-  bool remoteWriteEnabled = false;
-
-  /// Global flag to control whether read operations can fetch data from the remote database.
-  ///
-  /// Defaults to `false`. When `true`, specific read operations can be instructed
-  /// to fetch the latest data from the remote server.
-  bool remoteReadEnabled = false;
+  /// The ID of the currently logged-in user.
+  /// This is crucial for ensuring that sync operations are performed for the correct user.
+  /// Defaults to 0, which should represent a "guest" or "logged-out" state.
+  int currentUserId = 0;
 }

@@ -902,89 +902,96 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           tooltip: '更多选项',
-          onSelected: (String result) async {
-            final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-            switch (result) {
-              case 'settings':
-                context.push('/chat/settings');
-                break;
-              case 'setCoverImage':
-                onSetCoverImage();
-                break;
-              case 'exportCoverImage':
-                onExportCoverImage();
-                break;
-              case 'removeCoverImage':
-                onRemoveCoverImage();
-                break;
-              case 'toggleOutputMode':
-                notifier.toggleOutputMode();
-                break;
-              case 'debug':
-                context.push('/chat/debug');
-                break;
-              case 'toggleBubbleTransparency':
-                notifier.toggleBubbleTransparency();
-                break;
-              case 'toggleBubbleWidth':
-                notifier.toggleBubbleWidthMode();
-                break;
-              case 'toggleMessageListHeight':
-                notifier.toggleMessageListHeightMode();
-                break;
-              case 'exportChat':
-                notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
-                try {
-                  final finalExportPath = await ref.read(chatExportImportServiceProvider).exportChat(chat.id);
-                  if (!context.mounted) return;
-                  if (finalExportPath != null) {
-                    notifier.showTopMessage('聊天已成功导出到: $finalExportPath', backgroundColor: Colors.green, duration: const Duration(seconds: 4));
-                  } else if (!kIsWeb) {
-                    notifier.showTopMessage('导出操作已取消或未能成功完成。', backgroundColor: Colors.orange, duration: const Duration(seconds: 3));
+          onSelected: (String result) {
+            // 使用 addPostFrameCallback 延迟执行，以避免在 PopupMenu 关闭动画期间
+            // 操作 context，从而导致 "deactivated widget" 错误。
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              // 检查 widget 是否仍然挂载在树上，确保安全。
+              if (!context.mounted) return;
+
+              final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+              switch (result) {
+                case 'settings':
+                  context.push('/chat/settings');
+                  break;
+                case 'setCoverImage':
+                  onSetCoverImage();
+                  break;
+                case 'exportCoverImage':
+                  onExportCoverImage();
+                  break;
+                case 'removeCoverImage':
+                  onRemoveCoverImage();
+                  break;
+                case 'toggleOutputMode':
+                  notifier.toggleOutputMode();
+                  break;
+                case 'debug':
+                  context.push('/chat/debug');
+                  break;
+                case 'toggleBubbleTransparency':
+                  notifier.toggleBubbleTransparency();
+                  break;
+                case 'toggleBubbleWidth':
+                  notifier.toggleBubbleWidthMode();
+                  break;
+                case 'toggleMessageListHeight':
+                  notifier.toggleMessageListHeightMode();
+                  break;
+                case 'exportChat':
+                  notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
+                  try {
+                    final finalExportPath = await ref.read(chatExportImportServiceProvider).exportChat(chat.id);
+                    if (!context.mounted) return;
+                    if (finalExportPath != null) {
+                      notifier.showTopMessage('聊天已成功导出到: $finalExportPath', backgroundColor: Colors.green, duration: const Duration(seconds: 4));
+                    } else if (!kIsWeb) {
+                      notifier.showTopMessage('导出操作已取消或未能成功完成。', backgroundColor: Colors.orange, duration: const Duration(seconds: 3));
+                    }
+                  } catch (e) {
+                    debugPrint("导出聊天时发生错误: $e");
+                    if (context.mounted) {
+                      notifier.showTopMessage('导出失败: $e', backgroundColor: Colors.red);
+                    }
+                  } finally {
+                    if (context.mounted && ref.read(chatStateNotifierProvider(chat.id)).topMessageText == '正在准备导出文件...') {
+                      notifier.clearTopMessage();
+                    }
                   }
-                } catch (e) {
-                  debugPrint("导出聊天时发生错误: $e");
-                  if (context.mounted) {
-                    notifier.showTopMessage('导出失败: $e', backgroundColor: Colors.red);
+                  break;
+                case 'cloneAsTemplate':
+                  try {
+                    final repo = ref.read(chatRepositoryProvider);
+                    // cloneChat 现在会自动处理用户绑定
+                    await repo.cloneChat(chat.id, asTemplate: true);
+                    if (!context.mounted) return;
+                    notifier.showTopMessage('已成功克隆为模板', backgroundColor: Colors.green);
+                    // 刷新模板列表
+                    ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+                    context.push('/list?mode=manage');
+                  } catch (e) {
+                    if (context.mounted) {
+                      notifier.showTopMessage('克隆为模板失败: $e', backgroundColor: Colors.red);
+                    }
                   }
-                } finally {
-                  if (context.mounted && ref.read(chatStateNotifierProvider(chat.id)).topMessageText == '正在准备导出文件...') {
-                    notifier.clearTopMessage();
+                  break;
+                case 'cloneAsChat':
+                  try {
+                    final repo = ref.read(chatRepositoryProvider);
+                    // cloneChat 现在会自动处理用户绑定
+                    final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
+                    if (!context.mounted) return;
+                    notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
+                    ref.read(activeChatIdProvider.notifier).state = newChatId;
+                    // 页面将通过 activeChatIdProvider 的变化自动更新
+                  } catch (e) {
+                    if (context.mounted) {
+                      notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
+                    }
                   }
-                }
-                break;
-              case 'cloneAsTemplate':
-                try {
-                  final repo = ref.read(chatRepositoryProvider);
-                  // cloneChat 现在会自动处理用户绑定
-                  await repo.cloneChat(chat.id, asTemplate: true);
-                  if (!context.mounted) return;
-                  notifier.showTopMessage('已成功克隆为模板', backgroundColor: Colors.green);
-                  // 刷新模板列表
-                  ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
-                  context.push('/list?mode=manage');
-                } catch (e) {
-                  if (context.mounted) {
-                    notifier.showTopMessage('克隆为模板失败: $e', backgroundColor: Colors.red);
-                  }
-                }
-                break;
-              case 'cloneAsChat':
-                try {
-                  final repo = ref.read(chatRepositoryProvider);
-                  // cloneChat 现在会自动处理用户绑定
-                  final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
-                  if (!context.mounted) return;
-                  notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
-                  ref.read(activeChatIdProvider.notifier).state = newChatId;
-                  // 页面将通过 activeChatIdProvider 的变化自动更新
-                } catch (e) {
-                  if (context.mounted) {
-                    notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
-                  }
-                }
-                break;
-            }
+                  break;
+              }
+            });
           },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
             buildPopupMenuItem(value: 'settings', icon: Icons.tune, label: '聊天设置'),

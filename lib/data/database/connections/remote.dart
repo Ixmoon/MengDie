@@ -9,12 +9,10 @@ import 'package:postgres/postgres.dart';
 /// acquire a remote database connection for synchronized transactions.
 ///
 /// The connection string should be securely managed and provided at runtime.
-Future<Connection> connectRemote() async {
-  // The connection string for the Neon database.
-  // It is recommended to load this from a secure configuration file or
-  // environment variables rather than hardcoding it.
-  const connectionString =
-      'postgresql://neondb_owner:npg_JNQZ0m8SazcH@ep-late-poetry-a16kyduc-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+Future<Connection> connectRemote(String connectionString) async {
+  if (connectionString.isEmpty) {
+    throw Exception("Remote connection string is empty. Cannot connect.");
+  }
 
   final uri = Uri.parse(connectionString);
   final endpoint = Endpoint(
@@ -22,7 +20,7 @@ Future<Connection> connectRemote() async {
     port: uri.port == 0 ? 5432 : uri.port, // Explicitly use standard port 5432 as a fallback
     database: uri.pathSegments.first,
     username: uri.userInfo.split(':').first,
-    password: uri.userInfo.split(':').last,
+    password: uri.userInfo.contains(':') ? uri.userInfo.split(':').last : null,
   );
 
   // Open the connection using Connection.open
