@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../type_converters.dart';
-import 'users.dart';
+
 
 // 统一的 API 配置表
 // 该表合并了 Gemini 和 OpenAI 的配置，并包含了各自的高级生成设置

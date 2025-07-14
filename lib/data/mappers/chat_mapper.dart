@@ -6,7 +6,6 @@ import '../models/context_config.dart' as domain_context;
 import '../models/xml_rule.dart' as domain_xml;
 
 import '../database/app_database.dart' as drift;
-import '../database/common_enums.dart' as drift;
 import '../database/models/drift_context_config.dart' as drift_context;
 import '../database/models/drift_xml_rule.dart' as drift_xml;
 

@@ -1,19 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
-
-import 'package:collection/collection.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logging/logging.dart';
+import 'package:flutter/foundation.dart'; // For debugPrint
 import 'package:postgres/postgres.dart';
 
 import '../app_database.dart';
 import '../../../ui/providers/settings_providers.dart';
-import '../common_enums.dart' as drift_enums;
-import '../../models/enums.dart';
-import '../connections/remote.dart';
-import '../models/drift_context_config.dart';
-import '../models/drift_xml_rule.dart';
 import '../settings_service.dart';
 import '../type_converters.dart';
 
@@ -108,7 +100,6 @@ class SyncService {
   final Future<Connection> Function() _remoteConnectionFactory;
   final ProviderContainer _providerContainer;
   late final AppDatabase _db;
-  final Logger _log = Logger('SyncService');
 
   SyncService._(this._remoteConnectionFactory, this._providerContainer);
 
@@ -116,7 +107,6 @@ class SyncService {
 
   static void initialize(AppDatabase db, Future<Connection> Function() remoteConnectionFactory, ProviderContainer providerContainer) {
     if (_instance != null) {
-      Logger('SyncService').warning("SyncService is already initialized.");
       return;
     }
     _instance = SyncService._(remoteConnectionFactory, providerContainer).._db = db;
@@ -179,17 +169,17 @@ class SyncService {
   Future<void> forcePushUsers() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
-      _log.info("Remote sync is disabled or connection string is empty. Skipping user push.");
+      debugPrint("Remote sync is disabled or connection string is empty. Skipping user push.");
       return;
     }
-    _log.info("Forcing push of all local users to remote...");
+    debugPrint("Forcing push of all local users to remote...");
     Connection? remoteConnection;
     try {
       remoteConnection = await _remoteConnectionFactory();
       final localUsers = await (_db.select(_db.users)).get();
 
       if (localUsers.isEmpty) {
-        _log.info("No local users found to push. Skipping.");
+        debugPrint("No local users found to push. Skipping.");
         return;
       }
 
@@ -238,9 +228,9 @@ class SyncService {
         rethrow;
       }
 
-      _log.info("User push completed successfully for ${localUsers.length} users.");
+      debugPrint("User push completed successfully for ${localUsers.length} users.");
     } catch (e, s) {
-      _log.severe('Force push of users failed.', e, s);
+      debugPrint('Force push of users failed.');
       rethrow;
     } finally {
       await remoteConnection?.close();
@@ -252,10 +242,10 @@ class SyncService {
   Future<void> forcePullUsers() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
-      _log.info("Remote sync is disabled or connection string is empty. Skipping user pull.");
+      debugPrint("Remote sync is disabled or connection string is empty. Skipping user pull.");
       return;
     }
-    _log.info("Forcing pull of all remote users to local...");
+    debugPrint("Forcing pull of all remote users to local...");
     Connection? remoteConnection;
     try {
       remoteConnection = await _remoteConnectionFactory();
@@ -278,7 +268,7 @@ class SyncService {
       }).toList();
 
       if (remoteUsers.isEmpty) {
-        _log.info("No remote users to pull.");
+        debugPrint("No remote users to pull.");
         return;
       }
 
@@ -291,9 +281,9 @@ class SyncService {
         );
       });
 
-      _log.info("User pull completed successfully for ${remoteUsers.length} users.");
+      debugPrint("User pull completed successfully for ${remoteUsers.length} users.");
     } catch (e, s) {
-      _log.severe('Force pull of users failed.', e, s);
+      debugPrint('Force pull of users failed.');
       rethrow;
     } finally {
       await remoteConnection?.close();
@@ -303,22 +293,22 @@ class SyncService {
   Future<void> syncWithRemote() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
-      _log.info("Remote sync is disabled or connection string is empty. Skipping.");
+      debugPrint("Remote sync is disabled or connection string is empty. Skipping.");
       return;
     }
-    _log.info("Starting efficient database synchronization...");
+    debugPrint("Starting efficient database synchronization...");
     
     Connection? remoteConnection;
     try {
       remoteConnection = await _remoteConnectionFactory();
       final userId = SettingsService.instance.currentUserId;
-      _log.info('Syncing data for userId: $userId');
+      debugPrint('Syncing data for userId: $userId');
 
       // --- Step 1 & 2: Fetch Metadata and Compute Actions ---
       // API Configs
       final localApiConfigMetas = await (_db.selectOnly(_db.apiConfigs)..addColumns([_db.apiConfigs.id, _db.apiConfigs.createdAt, _db.apiConfigs.updatedAt]))
         .get().then((rows) {
-        _log.info('Found ${rows.length} local api_config metas.');
+        debugPrint('Found ${rows.length} local api_config metas.');
         return rows.map((row) => _SyncMeta(id: row.read(_db.apiConfigs.id)!, createdAt: row.read(_db.apiConfigs.createdAt)!, updatedAt: row.read(_db.apiConfigs.updatedAt)!)).toList();
       });
       final remoteApiConfigMetas = await remoteConnection.execute('SELECT id, created_at, updated_at FROM api_configs')
@@ -328,14 +318,14 @@ class SyncService {
       // Chats
       final localChatMetas = await (_db.selectOnly(_db.chats)..addColumns([_db.chats.id, _db.chats.createdAt, _db.chats.updatedAt]))
         .get().then((rows) {
-        _log.info('Found ${rows.length} local chat metas.');
+        debugPrint('Found ${rows.length} local chat metas.');
         return rows.map((row) => _SyncMeta(id: row.read(_db.chats.id)!, createdAt: row.read(_db.chats.createdAt)!, updatedAt: row.read(_db.chats.updatedAt)!)).toList();
       });
       final remoteChatMetas = await remoteConnection.execute('SELECT id, created_at, updated_at FROM chats')
         .then((rows) => rows.map((row) => _SyncMeta(id: row[0] as int, createdAt: row[1] as DateTime, updatedAt: row[2] as DateTime)).toList());
       final chatActions = _computeSyncActions(localMetas: localChatMetas, remoteMetas: remoteChatMetas);
-      _log.info('API Config Actions: ${apiConfigActions.toCreateRemotely.length} to create, ${apiConfigActions.toPush.length} to push.');
-      _log.info('Chat Actions: ${chatActions.toCreateRemotely.length} to create, ${chatActions.toPush.length} to push.');
+      debugPrint('API Config Actions: ${apiConfigActions.toCreateRemotely.length} to create, ${apiConfigActions.toPush.length} to push.');
+      debugPrint('Chat Actions: ${chatActions.toCreateRemotely.length} to create, ${chatActions.toPush.length} to push.');
 
       // --- Step 3: Fetch Full Data for Actions ---
       // Combine items to be pushed (updated) and created remotely.
@@ -344,7 +334,7 @@ class SyncService {
 
       final apiConfigsToPush = apiConfigIdsToPush.isNotEmpty ? await (_db.select(_db.apiConfigs)..where((t) => t.id.isIn(apiConfigIdsToPush.cast<String>()))).get() : <ApiConfig>[];
       final chatsToPush = chatIdsToPush.isNotEmpty ? await (_db.select(_db.chats)..where((t) => t.id.isIn(chatIdsToPush.cast<int>()))).get() : <ChatData>[];
-      _log.info('Will push ${apiConfigsToPush.length} api_configs and ${chatsToPush.length} chats.');
+      debugPrint('Will push ${apiConfigsToPush.length} api_configs and ${chatsToPush.length} chats.');
       
       // Combine items to be pulled (updated) and created locally.
       final apiConfigIdsToPull = {...apiConfigActions.toPull, ...apiConfigActions.toCreateLocally}.toList();
@@ -370,7 +360,7 @@ class SyncService {
       try {
         // Push API Configs one-by-one for robustness
         if (apiConfigsToPush.isNotEmpty) {
-          _log.info('Executing push for ${apiConfigsToPush.length} api_configs...');
+          debugPrint('Executing push for ${apiConfigsToPush.length} api_configs...');
           for (final config in apiConfigsToPush) {
             await remoteConnection.execute(
               Sql.named('''
@@ -409,7 +399,7 @@ class SyncService {
 
         // Push Chats and their Messages (ATOMIC) one-by-one
         if (chatsToPush.isNotEmpty) {
-          _log.info('Executing push for ${chatsToPush.length} chats...');
+          debugPrint('Executing push for ${chatsToPush.length} chats...');
           for (final chat in chatsToPush) {
             // Insert/Update the chat itself
             await remoteConnection.execute(
@@ -439,8 +429,6 @@ class SyncService {
                 'context_config': const ContextConfigConverter().toSql(chat.contextConfig),
                 'xml_rules': const XmlRuleListConverter().toSql(chat.xmlRules),
                 'api_config_id': chat.apiConfigId,
-                'api_type': chat.apiType?.name,
-                'generation_config': const JsonMapConverter().toSql(chat.generationConfig),
                 'enable_preprocessing': chat.enablePreprocessing,
                 'preprocessing_prompt': chat.preprocessingPrompt,
                 'context_summary': chat.contextSummary,
@@ -517,10 +505,10 @@ class SyncService {
       });
 
     } catch (e, s) {
-      _log.severe('Synchronization failed.', e, s);
+      debugPrint('Synchronization failed.');
     } finally {
       await remoteConnection?.close();
     }
-    _log.info("Database synchronization finished.");
+    debugPrint("Database synchronization finished.");
   }
 }

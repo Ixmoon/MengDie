@@ -19,10 +19,6 @@ class Messages extends Table {
  
   // Stores the XML content from secondary generation
   TextColumn get secondaryXmlContent => text().nullable()();
-
-  // Timestamps for synchronization
-  DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime()();
  
   // autoIncrement() on id column automatically makes it the primary key.
 }

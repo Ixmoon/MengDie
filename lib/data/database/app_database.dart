@@ -1,9 +1,7 @@
 
 import 'package:drift/drift.dart';
-import 'package:logging/logging.dart';
 
 import 'connections/native.dart' if (dart.library.html) 'connections/web.dart';
-import 'connections/remote.dart';
 import 'sync/sync_service.dart';
 
 // Import tables
@@ -28,8 +26,6 @@ import '../models/enums.dart';
 
 part 'app_database.g.dart'; // Drift will generate this file
 
-final _log = Logger('AppDatabase');
-
 @DriftDatabase(tables: [Chats, Messages, ApiConfigs, Users], daos: [ChatDao, MessageDao, ApiConfigDao, UserDao])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(connect());
@@ -40,18 +36,7 @@ class AppDatabase extends _$AppDatabase {
   // the transaction() method directly to ensure a proper transaction context.
 
   @override
-  int get schemaVersion => 29; // Latest schema version.
-
-  @override
-  MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async {
-      await m.createAll();
-    },
-    onUpgrade: (m, from, to) async {
-      // All migration logic is removed as it's no longer needed for new installations.
-      // For existing users, the database will be at the latest version.
-    },
-  );
+  int get schemaVersion => 1; // Latest schema version.
 
   Future<void> syncWithRemote() async {
     // This method is now a proxy to the SyncService instance method.

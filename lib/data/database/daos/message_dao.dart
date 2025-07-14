@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 import '../app_database.dart';
-import '../common_enums.dart';
 import '../tables/messages.dart';
 
 part 'message_dao.g.dart';
