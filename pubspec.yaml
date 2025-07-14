@@ -25,7 +25,7 @@ dependencies:
   provider: ^6.1.5
   drift: ^2.26.0
   sqlite3_flutter_libs: ^0.5.22 # For native platforms
-  path_provider: ^2.1.3 # For finding the database path
+  path_provider: ^2.1.5 # For finding the database path
   path: ^1.9.0 # For path manipulation
   drift_sqflite: ^2.0.1 # Drift sqflite for mobile if needed later (alternative to sqlite3_flutter_libs)
   # For web, drift uses sql.js automatically, no direct dependency needed unless specific config
@@ -34,7 +34,6 @@ dependencies:
   reorderable_grid_view: ^2.2.8
   image: ^4.1.7             # 用于图像处理 (生成、读写)
   file_picker: ^10.1.2       # 用于选择文件 (导入)
-  permission_handler: ^12.0.0+1 # 用于请求存储权限
   exif: ^3.2.0              # 用于读写图片 EXIF 元数据
   share_plus: ^11.0.0       # (可选) 用于分享导出的文件 (已升级以解决依赖冲突)
   dio: ^5.4.0               # 添加 dio 用于 HTTP 请求
@@ -43,6 +42,7 @@ dependencies:
   archive: ^4.0.7           # For creating ZIP archives
   postgres: ^3.0.0          # For Neon database connection
   retry: ^3.1.2             # For retry mechanism in sync service
+  permission_handler: ^12.0.1
   # For real persistence (replace in-memory history):
   # hive: ^latest
   # hive_flutter: ^latest

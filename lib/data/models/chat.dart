@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'context_config.dart';
 import 'xml_rule.dart';
+import 'enums.dart';
 
 /// 用于标识聊天模板的特殊时间戳。
 /// 使用一个极早的时间来避免与真实的用户数据冲突。
@@ -29,6 +30,10 @@ class Chat {
   final String? secondaryXmlPrompt;
   final String? secondaryXmlApiConfigId;
   final String? continuePrompt;
+  final bool enableHelpMeReply;
+  final String? helpMeReplyPrompt;
+  final String? helpMeReplyApiConfigId;
+  final HelpMeReplyTriggerMode helpMeReplyTriggerMode;
 
   const Chat({
     this.id = 0,
@@ -52,6 +57,10 @@ class Chat {
     this.secondaryXmlPrompt,
     this.secondaryXmlApiConfigId,
     this.continuePrompt,
+    this.enableHelpMeReply = false,
+    this.helpMeReplyPrompt,
+    this.helpMeReplyApiConfigId,
+    this.helpMeReplyTriggerMode = HelpMeReplyTriggerMode.manual,
   });
 
   Chat copyWith(Map<String, dynamic> changes) {
@@ -78,6 +87,10 @@ class Chat {
       secondaryXmlPrompt: changes.containsKey('secondaryXmlPrompt') ? changes['secondaryXmlPrompt'] as String? : secondaryXmlPrompt,
       secondaryXmlApiConfigId: changes.containsKey('secondaryXmlApiConfigId') ? changes['secondaryXmlApiConfigId'] as String? : secondaryXmlApiConfigId,
       continuePrompt: changes.containsKey('continuePrompt') ? changes['continuePrompt'] as String? : continuePrompt,
+      enableHelpMeReply: changes['enableHelpMeReply'] as bool? ?? enableHelpMeReply,
+      helpMeReplyPrompt: changes.containsKey('helpMeReplyPrompt') ? changes['helpMeReplyPrompt'] as String? : helpMeReplyPrompt,
+      helpMeReplyApiConfigId: changes.containsKey('helpMeReplyApiConfigId') ? changes['helpMeReplyApiConfigId'] as String? : helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: changes['helpMeReplyTriggerMode'] as HelpMeReplyTriggerMode? ?? helpMeReplyTriggerMode,
     );
   }
 }

@@ -14,24 +14,27 @@ import 'package:exif/exif.dart'; // 读写 EXIF
 import '../../data/models/export_import_dtos.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
+import '../../ui/providers/auth_providers.dart';
+import '../../ui/providers/repository_providers.dart';
 
 // --- Service Provider ---
 final chatExportImportServiceProvider = Provider<ChatExportImportService>((ref) {
   // 依赖 ChatRepository 和 MessageRepository
   final chatRepo = ref.watch(chatRepositoryProvider);
   final messageRepo = ref.watch(messageRepositoryProvider);
-  return ChatExportImportService(chatRepo, messageRepo);
+  return ChatExportImportService(ref, chatRepo, messageRepo);
 });
 
 // --- Chat Export/Import Service Implementation ---
 class ChatExportImportService {
+  final Ref _ref;
   final ChatRepository _chatRepository;
   final MessageRepository _messageRepository;
   // static const _jsonExifTag = 'UserComment'; // 不再使用 UserComment
   static const int _jsonExifTagId = 0x010e; // 使用 ImageDescription Tag ID
   static const String _jsonExifJsonKey = 'Image ImageDescription'; // exif 库中 ImageDescription 的键
 
-  ChatExportImportService(this._chatRepository, this._messageRepository);
+  ChatExportImportService(this._ref, this._chatRepository, this._messageRepository);
 
   Future<void> _ensurePermissions() async {
     if (kIsWeb) return; // Web 不需要这些权限
@@ -161,7 +164,7 @@ class ChatExportImportService {
       await FilePicker.platform.saveFile(
         dialogTitle: '保存 ZIP 文件',
         fileName: suggestedFileName,
-        bytes: Uint8List.fromList(zipBytes),
+        bytes: Uint8List.fromList(zipBytes!),
       );
       debugPrint("ChatExportImportService: Web ZIP export initiated.");
       return null;
@@ -169,7 +172,7 @@ class ChatExportImportService {
       String? finalSavePath = await FilePicker.platform.saveFile(
         dialogTitle: '保存 ZIP 文件',
         fileName: suggestedFileName,
-        bytes: Uint8List.fromList(zipBytes),
+        bytes: Uint8List.fromList(zipBytes!),
       );
       if (finalSavePath != null) {
         debugPrint("ChatExportImportService: ZIP 文件已成功导出到: $finalSavePath");
@@ -261,6 +264,7 @@ class ChatExportImportService {
       // 填充时间戳
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
+      orderIndex: chat.orderIndex, // 导出排序信息
     );
 
     final jsonString = jsonEncode(chatDto.toJson());
@@ -305,6 +309,8 @@ class ChatExportImportService {
       }
 
       int successCount = 0;
+      final bool isBatchImport = result.files.length > 1 || (result.files.length == 1 && result.files.first.name.toLowerCase().endsWith('.zip'));
+
       for (final file in result.files) {
         if (file.bytes == null) {
           debugPrint("ChatExportImportService: 文件 ${file.name} 的数据为空，跳过。");
@@ -314,12 +320,12 @@ class ChatExportImportService {
         final fileName = file.name.toLowerCase();
         try {
           if (fileName.endsWith('.zip')) {
-            // 将 parentFolderId 传递给 ZIP 导入逻辑
+            // ZIP 文件总是被视为批量导入
             final count = await _importFromZip(file.bytes!, parentFolderId);
             successCount += count;
           } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
-            // 将 parentFolderId 传递给单个图片导入逻辑
-            await _importFromImage(file.bytes!, parentFolderId);
+            // 根据 isBatchImport 标志决定如何导入图片
+            await _importFromImage(file.bytes!, parentFolderId, isBatch: isBatchImport);
             successCount++;
           }
         } catch (e, s) {
@@ -358,8 +364,8 @@ class ChatExportImportService {
           // Get or create the folder ID for the parent path, relative to the baseParentFolderId
           final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds, baseParentFolderId);
 
-          // Import the chat from the image file content
-          await _importFromImage(file.content, parentFolderId);
+          // ZIP 包内的文件总是作为批量导入的一部分，保留其排序信息
+          await _importFromImage(file.content, parentFolderId, isBatch: true);
           successCount++;
         } catch (e, s) {
           debugPrint("ChatExportImportService: 从 ZIP 中的文件 ${file.name} 导入失败: $e\n$s");
@@ -377,7 +383,6 @@ class ChatExportImportService {
     }
 
     // Path doesn't exist, we need to create it, and possibly its parents first
-    // Path doesn't exist, we need to create it, and possibly its parents first
     final pathParts = path.split('/');
     // 起始的父ID是基础父ID
     int? currentParentId = baseParentFolderId;
@@ -391,6 +396,7 @@ class ChatExportImportService {
         // This folder part doesn't exist, create it under the current parent
         debugPrint("ChatExportImportService: 正在创建文件夹: $currentPath in parent $currentParentId");
         final folderDto = ChatExportDto.createFolder(title: part);
+        // importChat 现在会自动处理用户绑定
         final newFolderId = await _chatRepository.importChat(folderDto, parentFolderId: currentParentId);
         createdFolderIds[currentPath] = newFolderId;
         currentParentId = newFolderId;
@@ -402,7 +408,7 @@ class ChatExportImportService {
     return currentParentId;
   }
 
-  Future<void> _importFromImage(Uint8List imageBytes, int? parentFolderId) async {
+  Future<void> _importFromImage(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
     final exifData = await readExifFromBytes(imageBytes);
     if (exifData.isEmpty) {
       throw Exception("无法读取图片的元数据。");
@@ -452,7 +458,7 @@ class ChatExportImportService {
       throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
     }
 
-    if (jsonString.isEmpty) {
+    if (jsonString == null || jsonString.isEmpty) {
       throw Exception("未能从图片中恢复有效的聊天数据。");
     }
 
@@ -469,10 +475,14 @@ class ChatExportImportService {
       importedCoverImageBase64String = base64Encode(imageBytes);
     }
 
+    // 如果不是批量导入（即单个文件导入），则强制将 orderIndex 设为 null 以实现置顶。
+    // 否则，保留从文件中解析出的 orderIndex。
     final finalChatDto = chatDtoFromJson.copyWith(
       coverImageBase64: importedCoverImageBase64String,
+      orderIndex: isBatch ? chatDtoFromJson.orderIndex : null,
     );
     
+    // importChat 现在会自动处理用户绑定
     await _chatRepository.importChat(finalChatDto, parentFolderId: parentFolderId);
   }
 }

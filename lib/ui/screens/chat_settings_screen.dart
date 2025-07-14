@@ -12,6 +12,7 @@ import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 const String defaultContinuePrompt = '请根据你上一次的回复继续补充或续写。';
 const String defaultPreprocessingPrompt = '根据对话以及之前的总结（如果有）进行详细的总结概括，尤其要分析并保留关键的信息，进行有条理的归纳。';
 const String defaultSecondaryXmlPrompt = '使用<Summary><summary id=“”></summary></Summary>对最新一轮对话进行总结，已有内容无需重复总结，如果新的内容较少，直接回复<Summary>略</Summary>即可。';
+const String defaultHelpMeReplyPrompt = '假如你是我，请根据以上对话，为我设想三个不同的回复，并使用序号1. 2. 3.分别标注。（不要包含任何其他非序号的回复内容。）';
 
 
 // 本文件包含用于配置单个聊天会话设置的屏幕界面。
@@ -155,11 +156,6 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         final scaffoldMessenger = ScaffoldMessenger.of(context);
         final navigator = Navigator.of(context);
 
-        // 显示正在保存的提示
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('正在保存设置...'), duration: Duration(seconds: 1)),
-        );
-
         try {
           await notifier.saveSettings();
         } catch (e) {
@@ -232,6 +228,8 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         ),
         const Divider(height: 30),
         _AutomationSettings(chatId: chatId),
+        const Divider(height: 30),
+        _HelpMeReplySettings(chatId: chatId),
       ],
     );
   }
@@ -392,23 +390,32 @@ class _ApiProviderSettings extends ConsumerWidget {
     final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
- 
+
+    // 修复：确保提供给 Dropdown 的项目列表中的值是唯一的，并且当前值有效。
+    // 1. 通过 ID 去重，防止因重复 ID 导致断言失败。
+    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    // 2. 创建一个有效的 ID 集合，用于快速查找。
+    final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
+    // 3. 检查当前聊天的 apiConfigId 是否在有效列表中，如果不是，则设为 null 以避免崩溃。
+    final safeApiConfigId = validConfigIds.contains(chat.apiConfigId) ? chat.apiConfigId : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionTitle('API 提供者'),
         const SizedBox(height: 15),
-        if (apiConfigs.isEmpty)
+        if (uniqueApiConfigs.isEmpty)
           const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
         else
-          DropdownButtonFormField<String>(
-            value: chat.apiConfigId,
+          DropdownButtonFormField<String?>(
+            value: safeApiConfigId,
             decoration: InputDecoration(
               labelText: '聊天 API 配置',
               border: const OutlineInputBorder(),
-              hintText: '默认: ${apiConfigs.first.name}',
+              hintText: '默认: ${uniqueApiConfigs.first.name}',
             ),
-            items: apiConfigs.map((config) => DropdownMenuItem(
+            // 使用去重后的列表构建项目
+            items: uniqueApiConfigs.map((config) => DropdownMenuItem(
               value: config.id,
               child: Text(config.name),
             )).toList(),
@@ -571,6 +578,10 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
     final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
     final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
     final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+
+    // 修复：确保下拉菜单数据源的健壮性
+    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
  
     // The controller is the source of truth during user input.
     // The previous ref.listen was causing a bug where the last character could not be deleted.
@@ -630,7 +641,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
          Padding(
            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: DropdownButtonFormField<String?>(
-              value: chat.preprocessingApiConfigId,
+              value: validConfigIds.contains(chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
               decoration: InputDecoration(
                 labelText: '用于总结的 API 配置',
                 border: const OutlineInputBorder(),
@@ -641,7 +652,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   value: null,
                   child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
                 ),
-                ...apiConfigs.map((config) => DropdownMenuItem(
+                ...uniqueApiConfigs.map((config) => DropdownMenuItem(
                   value: config.id,
                   child: Text(config.name),
                 )),
@@ -699,7 +710,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
          Padding(
            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: DropdownButtonFormField<String?>(
-              value: chat.secondaryXmlApiConfigId,
+              value: validConfigIds.contains(chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
               decoration: InputDecoration(
                 labelText: '用于附加XML的 API 配置',
                 border: const OutlineInputBorder(),
@@ -710,7 +721,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   value: null,
                   child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
                 ),
-                ...apiConfigs.map((config) => DropdownMenuItem(
+                ...uniqueApiConfigs.map((config) => DropdownMenuItem(
                   value: config.id,
                   child: Text(config.name),
                 )),
@@ -718,6 +729,143 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'secondaryXmlApiConfigId': value})),
             ),
          ),
+      ],
+    );
+  }
+}
+
+class _HelpMeReplySettings extends ConsumerStatefulWidget {
+  final int chatId;
+  const _HelpMeReplySettings({required this.chatId});
+
+  @override
+  ConsumerState<_HelpMeReplySettings> createState() => _HelpMeReplySettingsState();
+}
+
+class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
+  late final TextEditingController _promptController;
+
+  @override
+  void initState() {
+    super.initState();
+    final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
+    _promptController = TextEditingController(text: chat.helpMeReplyPrompt ?? '');
+  }
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
+    final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
+    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+
+    // 修复：确保下拉菜单数据源的健壮性
+    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle('帮我回复'),
+        const SizedBox(height: 10),
+        SwitchListTile(
+          title: const Text('启用“帮我回复”'),
+          subtitle: const Text('根据对话上下文，生成多个回复选项'),
+          value: chat.enableHelpMeReply,
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enableHelpMeReply': value})),
+        ),
+        if (chat.enableHelpMeReply)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  controller: _promptController,
+                  decoration: InputDecoration(
+                    labelText: '“帮我回复”提示词',
+                    hintText: defaultHelpMeReplyPrompt,
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.fullscreen),
+                      tooltip: '全屏编辑',
+                      onPressed: () async {
+                        final newText = await Navigator.of(context).push<String>(
+                          MaterialPageRoute(
+                            builder: (context) => FullScreenTextEditorScreen(
+                              initialText: _promptController.text,
+                              title: '编辑“帮我回复”提示词',
+                              defaultValue: defaultHelpMeReplyPrompt,
+                            ),
+                          ),
+                        );
+                        if (newText != null) {
+                          _promptController.text = newText;
+                          notifier.updateSettings((c) => c.copyWith({
+                            'helpMeReplyPrompt': newText.isEmpty ? null : newText,
+                          }));
+                        }
+                      },
+                    ),
+                  ),
+                  maxLines: 3,
+                  minLines: 1,
+                  onChanged: (value) {
+                    notifier.updateSettings((c) => c.copyWith({
+                      'helpMeReplyPrompt': value.isEmpty ? null : value,
+                    }));
+                  },
+                ),
+                const SizedBox(height: 15),
+                if (apiConfigs.isEmpty)
+                  const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
+                else
+                  DropdownButtonFormField<String?>(
+                    value: validConfigIds.contains(chat.helpMeReplyApiConfigId) ? chat.helpMeReplyApiConfigId : null,
+                    decoration: InputDecoration(
+                      labelText: '用于“帮我回复”的 API 配置',
+                      border: const OutlineInputBorder(),
+                      hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.helpMeReplyApiConfigId)?.name ?? 'N/A'}',
+                    ),
+                    items: [
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                      ),
+                      ...uniqueApiConfigs.map((config) => DropdownMenuItem(
+                        value: config.id,
+                        child: Text(config.name),
+                      )),
+                    ],
+                    onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'helpMeReplyApiConfigId': value})),
+                  ),
+                const SizedBox(height: 15),
+                Text('触发模式', style: Theme.of(context).textTheme.bodyLarge),
+                const SizedBox(height: 8),
+                SegmentedButton<HelpMeReplyTriggerMode>(
+                  segments: const [
+                    ButtonSegment<HelpMeReplyTriggerMode>(value: HelpMeReplyTriggerMode.manual, label: Text('手动'), icon: Icon(Icons.touch_app_rounded)),
+                    ButtonSegment<HelpMeReplyTriggerMode>(value: HelpMeReplyTriggerMode.auto, label: Text('自动'), icon: Icon(Icons.play_arrow_rounded)),
+                  ],
+                  selected: {chat.helpMeReplyTriggerMode},
+                  onSelectionChanged: (newSelection) {
+                    notifier.updateSettings((c) => c.copyWith({'helpMeReplyTriggerMode': newSelection.first}));
+                  },
+                  showSelectedIcon: false,
+                  style: ButtonStyle(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

@@ -1,19 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'; // for kDebugMode
 import 'package:flutter/material.dart'; // for Scaffold
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
 import '../data/models/enums.dart'; // 导入枚举
+import 'providers/auth_providers.dart';
 // 导入需要导航到的屏幕
 import 'screens/main_screen.dart';
 import 'screens/startup_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/global_settings_screen.dart';
 import 'screens/api_configs_screen.dart'; // 统一的 API 配置屏幕
 import 'screens/gemini_api_keys_screen.dart'; // 新增
 import 'screens/chat_screen.dart';
 import 'screens/chat_settings_screen.dart';
-import 'screens/chat_gallery_screen.dart';
 import 'screens/chat_debug_screen.dart';
 
 // 本文件包含应用的路由配置。
@@ -32,11 +35,16 @@ final _shellNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/',
+    initialLocation: '/', // 总是从启动页开始
     debugLogDiagnostics: kDebugMode,
+    // refreshListenable 和 redirect 已被移除，所有重定向逻辑现在由 StartupScreen 处理
     routes: [
       GoRoute(
-        path: '/',
+        path: '/login', // 登录页
+        builder: (context, state) => const LoginScreen(),
+      ),
+       GoRoute(
+        path: '/', // 启动页，现在作为 ShellRoute 的父级
         builder: (context, state) => const StartupScreen(),
       ),
       ShellRoute(
@@ -88,11 +96,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                 builder: (context, state) => const ChatSettingsScreen(),
               ),
               GoRoute(
-                path: 'gallery',
-                parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
-                builder: (context, state) => const ChatGalleryScreen(),
-              ),
-              GoRoute(
                 path: 'debug',
                 parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatDebugScreen(),
@@ -127,3 +130,28 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
+/// 一个将 Stream 转换为 ChangeNotifier 的辅助类。
+///
+/// GoRouter 的 `refreshListenable` 需要一个 `Listenable` (如 `ChangeNotifier`)。
+/// 这个类可以监听任何 Stream (比如 Riverpod provider 的 stream)，
+/// 并在 Stream 发出新事件时调用 `notifyListeners()`，从而触发 GoRouter 的重定向逻辑。
+class GoRouterRefreshStream extends ChangeNotifier {
+  /// 创建一个 GoRouterRefreshStream。
+  ///
+  /// 需要传入一个 Stream，构造函数会自动订阅它。
+  GoRouterRefreshStream(Stream<dynamic> stream) {
+    _subscription = stream.asBroadcastStream().listen((_) => notifyListeners());
+  }
+
+  late final StreamSubscription<dynamic> _subscription;
+
+  /// 清理资源。
+  ///
+  /// 当这个对象不再需要时，调用此方法以取消 Stream 订阅，防止内存泄漏。
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}

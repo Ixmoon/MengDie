@@ -63,6 +63,15 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
         .getSingleOrNull();
   }
 
+  Future<MessageData?> findFirstModelMessage(int chatId) {
+    return (select(messages)
+          ..where((t) => t.chatId.equals(chatId))
+          ..where((t) => t.role.equals("model"))
+          ..orderBy([(t) => OrderingTerm(expression: t.timestamp, mode: OrderingMode.asc)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
   Future<int> saveMessage(MessagesCompanion message, {bool forceRemoteWrite = false}) async {
     final messageId = await into(messages).insert(message, mode: InsertMode.insertOrReplace);
 

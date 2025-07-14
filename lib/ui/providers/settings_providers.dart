@@ -1,52 +1,54 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../data/models/enums.dart'; // 导入主题设置枚举
 
-// SharedPreferences 中用于存储主题设置的键
-const String _themeModeKey = 'app_theme_mode';
+import '../../data/models/enums.dart';
+import '../../data/models/user.dart';
+import 'auth_providers.dart';
+import 'repository_providers.dart';
 
-// --- 主题设置状态 ---
-// 定义主题设置的状态类，这里只包含一个 ThemeModeSetting
-class ThemeSettingState {
-  final ThemeModeSetting themeMode;
-  ThemeSettingState(this.themeMode);
-}
+// 本文件提供应用中与设置相关的 Provider。
+//
+// 主要分为两部分：
+// 1. ThemeModeNotifier: 管理应用的主题（浅色、深色、跟随系统），并将其持久化到 SharedPreferences。
+//    这是一个独立于用户的设备级设置。
+// 2. GlobalSettings Provider: 管理所有与用户账户绑定的全局设置。
+//    这些设置从当前登录用户的数据库记录中加载，并在修改后写回数据库。
+//    对于游客模式，它会提供一套临时的默认设置。
 
-// --- ThemeModeNotifier ---
-// StateNotifier 用于管理和持久化主题设置
+
+// --- 主题设置 (设备级) ---
+
+const String _themeModeKey = 'app_theme_mode'; // SharedPreferences Key
+
+/// 管理和持久化应用主题的 Notifier。
 class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
-  // SharedPreferences 现在是可空的，并且是 late final
   late final SharedPreferences? _prefs;
 
   ThemeModeNotifier() : super(ThemeModeSetting.system);
 
-  // 提供一个异步的初始化方法
+  /// 异步初始化，加载 SharedPreferences 并读取已存的主题设置。
   Future<void> init() async {
-    // 等待 SharedPreferences 加载完成
     _prefs = await SharedPreferences.getInstance();
-    // 从 SharedPreferences 加载主题设置并更新状态
     _loadThemeMode();
   }
 
-  // 从 SharedPreferences 加载主题设置
   void _loadThemeMode() {
     final prefs = _prefs;
-    if (prefs == null) return; // 如果 prefs 未初始化，则不执行任何操作
+    if (prefs == null) return;
 
     final themeModeString = prefs.getString(_themeModeKey);
     if (themeModeString != null) {
       try {
         state = ThemeModeSetting.values.firstWhere((e) => e.toString() == themeModeString);
       } catch (e) {
-        state = ThemeModeSetting.system; // 如果解析失败，返回默认值
+        state = ThemeModeSetting.system;
       }
     } else {
-      state = ThemeModeSetting.system; // 默认值为跟随系统
+      state = ThemeModeSetting.system;
     }
   }
 
-  // 更新主题设置并持久化到 SharedPreferences
+  /// 更新主题设置并将其持久化到 SharedPreferences。
   Future<void> setThemeMode(ThemeModeSetting newMode) async {
     if (state != newMode) {
       state = newMode;
@@ -58,144 +60,71 @@ class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
   }
 }
 
-// --- themeModeProvider ---
-// 提供 ThemeModeNotifier 实例的 StateNotifierProvider
-// 不再直接依赖 sharedPreferencesProvider，而是在 Notifier 内部处理
+/// 提供 ThemeModeNotifier 实例的全局 Provider。
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
   final notifier = ThemeModeNotifier();
-  notifier.init(); // 调用异步初始化
-  return notifier;
-});
-
-// --- 全局应用设置 ---
-
-// SharedPreferences Keys
-const String _enableAutoTitleGenerationKey = 'global_enable_auto_title_generation';
-const String _titleGenerationPromptKey = 'global_title_generation_prompt';
-const String _titleGenerationApiConfigIdKey = 'global_title_generation_api_config_id';
-const String _enableResumeKey = 'global_enable_resume';
-const String _resumePromptKey = 'global_resume_prompt';
-const String _resumeApiConfigIdKey = 'global_resume_api_config_id';
-const String _enableHelpMeReplyKey = 'global_enable_help_me_reply';
-const String _helpMeReplyPromptKey = 'global_help_me_reply_prompt';
-const String _helpMeReplyApiConfigIdKey = 'global_help_me_reply_api_config_id';
-const String _helpMeReplyTriggerModeKey = 'global_help_me_reply_trigger_mode';
-
-
-const String defaultTitleGenerationPrompt = '根据对话，为本次聊天生成一个简洁的、不超过10个字的标题。（你的回复内容只能是纯标题，不能包含任何其他内容）';
-const String defaultResumePrompt = '继续生成被中断的回复，请直接从最后一个字甚至是符号后继续，不要包含任何其他内容。';
-const String defaultHelpMeReplyPrompt = '假如你是我，请根据以上对话，为我设想三个不同的回复，并使用序号1. 2. 3.分别标注。（不要包含任何其他非序号的回复内容。）';
-
-
-@immutable
-class GlobalSettings {
-  final bool enableAutoTitleGeneration;
-  final String titleGenerationPrompt;
-  final String? titleGenerationApiConfigId;
-
-  final bool enableResume;
-  final String resumePrompt;
-  final String? resumeApiConfigId;
-
-  final bool enableHelpMeReply;
-  final String helpMeReplyPrompt;
-  final String? helpMeReplyApiConfigId;
-  final String helpMeReplyTriggerMode; // 'manual' or 'auto'
-
-  const GlobalSettings({
-    this.enableAutoTitleGeneration = false,
-    this.titleGenerationPrompt = defaultTitleGenerationPrompt,
-    this.titleGenerationApiConfigId,
-    this.enableResume = false,
-    this.resumePrompt = defaultResumePrompt,
-    this.resumeApiConfigId,
-    this.enableHelpMeReply = false,
-    this.helpMeReplyPrompt = defaultHelpMeReplyPrompt,
-    this.helpMeReplyApiConfigId,
-    this.helpMeReplyTriggerMode = 'manual',
-  });
-
-  GlobalSettings copyWith(Map<String, dynamic> updates) {
-    return GlobalSettings(
-      enableAutoTitleGeneration: updates.containsKey('enableAutoTitleGeneration') ? updates['enableAutoTitleGeneration'] : enableAutoTitleGeneration,
-      titleGenerationPrompt: updates.containsKey('titleGenerationPrompt') ? updates['titleGenerationPrompt'] : titleGenerationPrompt,
-      titleGenerationApiConfigId: updates.containsKey('titleGenerationApiConfigId') ? updates['titleGenerationApiConfigId'] : titleGenerationApiConfigId,
-      enableResume: updates.containsKey('enableResume') ? updates['enableResume'] : enableResume,
-      resumePrompt: updates.containsKey('resumePrompt') ? updates['resumePrompt'] : resumePrompt,
-      resumeApiConfigId: updates.containsKey('resumeApiConfigId') ? updates['resumeApiConfigId'] : resumeApiConfigId,
-      enableHelpMeReply: updates.containsKey('enableHelpMeReply') ? updates['enableHelpMeReply'] : enableHelpMeReply,
-      helpMeReplyPrompt: updates.containsKey('helpMeReplyPrompt') ? updates['helpMeReplyPrompt'] : helpMeReplyPrompt,
-      helpMeReplyApiConfigId: updates.containsKey('helpMeReplyApiConfigId') ? updates['helpMeReplyApiConfigId'] : helpMeReplyApiConfigId,
-      helpMeReplyTriggerMode: updates.containsKey('helpMeReplyTriggerMode') ? updates['helpMeReplyTriggerMode'] : helpMeReplyTriggerMode,
-    );
-  }
-}
-
-class GlobalSettingsNotifier extends StateNotifier<GlobalSettings> {
-  late final SharedPreferences? _prefs;
-
-  GlobalSettingsNotifier() : super(const GlobalSettings());
-
-  Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-    _loadSettings();
-  }
-
-  void _loadSettings() {
-    final prefs = _prefs;
-    if (prefs == null) return;
-
-    state = GlobalSettings(
-      enableAutoTitleGeneration: prefs.getBool(_enableAutoTitleGenerationKey) ?? false,
-      titleGenerationPrompt: prefs.getString(_titleGenerationPromptKey) ?? defaultTitleGenerationPrompt,
-      titleGenerationApiConfigId: prefs.getString(_titleGenerationApiConfigIdKey),
-      enableResume: prefs.getBool(_enableResumeKey) ?? false,
-      resumePrompt: prefs.getString(_resumePromptKey) ?? defaultResumePrompt,
-      resumeApiConfigId: prefs.getString(_resumeApiConfigIdKey),
-      enableHelpMeReply: prefs.getBool(_enableHelpMeReplyKey) ?? false,
-      helpMeReplyPrompt: prefs.getString(_helpMeReplyPromptKey) ?? defaultHelpMeReplyPrompt,
-      helpMeReplyApiConfigId: prefs.getString(_helpMeReplyApiConfigIdKey),
-      helpMeReplyTriggerMode: prefs.getString(_helpMeReplyTriggerModeKey) ?? 'manual',
-    );
-  }
-
-  Future<void> updateSettings(GlobalSettings newSettings) async {
-    final prefs = _prefs;
-    if (prefs == null) return;
-    
-    // Only update state if it has changed to avoid unnecessary rebuilds
-    if (state != newSettings) {
-      state = newSettings;
-      await prefs.setBool(_enableAutoTitleGenerationKey, newSettings.enableAutoTitleGeneration);
-      await prefs.setString(_titleGenerationPromptKey, newSettings.titleGenerationPrompt);
-      if (newSettings.titleGenerationApiConfigId != null) {
-        await prefs.setString(_titleGenerationApiConfigIdKey, newSettings.titleGenerationApiConfigId!);
-      } else {
-        await prefs.remove(_titleGenerationApiConfigIdKey);
-      }
-
-      await prefs.setBool(_enableResumeKey, newSettings.enableResume);
-      await prefs.setString(_resumePromptKey, newSettings.resumePrompt);
-      if (newSettings.resumeApiConfigId != null) {
-        await prefs.setString(_resumeApiConfigIdKey, newSettings.resumeApiConfigId!);
-      } else {
-        await prefs.remove(_resumeApiConfigIdKey);
-      }
-
-      await prefs.setBool(_enableHelpMeReplyKey, newSettings.enableHelpMeReply);
-      await prefs.setString(_helpMeReplyPromptKey, newSettings.helpMeReplyPrompt);
-      if (newSettings.helpMeReplyApiConfigId != null) {
-        await prefs.setString(_helpMeReplyApiConfigIdKey, newSettings.helpMeReplyApiConfigId!);
-      } else {
-        await prefs.remove(_helpMeReplyApiConfigIdKey);
-      }
-      await prefs.setString(_helpMeReplyTriggerModeKey, newSettings.helpMeReplyTriggerMode);
-    }
-  }
-}
-
-final globalSettingsProvider = StateNotifierProvider<GlobalSettingsNotifier, GlobalSettings>((ref) {
-  final notifier = GlobalSettingsNotifier();
   notifier.init();
   return notifier;
 });
+
+
+// --- 全局应用设置 (用户级) ---
+
+/// 从当前认证状态派生出全局设置。
+///
+/// 这个 Provider 监听 `authProvider`。
+/// - 如果用户已登录，它会提供该用户的设置。
+/// - 如果是游客模式，它会提供一个临时的、默认的设置实例。
+///
+/// 这种设计将设置与用户状态紧密绑定，取代了之前基于 SharedPreferences 的实现。
+final globalSettingsProvider = Provider<User>((ref) {
+  // 监听 authProvider 的状态
+  final authState = ref.watch(authProvider);
+
+  // 如果有当前登录的用户，则返回该用户的设置
+  if (authState.currentUser != null) {
+    return authState.currentUser!;
+  }
+  
+  // 如果是游客模式或用户未登录，返回一个临时的游客用户实例
+  return User.guest();
+});
+
+/// 全局设置操作的封装
+///
+/// 这个 Provider 提供了一个方便的接口来更新当前用户的全局设置。
+/// 它内部封装了与 UserRepository 的交互逻辑。
+final globalSettingsActionsProvider = Provider((ref) {
+  return GlobalSettingsActions(ref);
+});
+
+class GlobalSettingsActions {
+  final Ref _ref;
+
+  GlobalSettingsActions(this._ref);
+
+  /// 更新当前登录用户的设置。
+  ///
+  /// [newSettings] 包含更新后字段的 User 对象。
+  /// 如果当前是游客模式，此操作将不执行任何数据库写入。
+  Future<void> updateSettings(User newSettings) async {
+    final userRepo = _ref.read(userRepositoryProvider);
+    final currentUser = _ref.read(authProvider).currentUser;
+
+    // 仅当用户登录时才执行更新
+    if (currentUser != null) {
+      // 确保我们是基于最新的用户状态进行更新
+      final updatedUser = currentUser.copyWith(
+        enableAutoTitleGeneration: newSettings.enableAutoTitleGeneration,
+        titleGenerationPrompt: newSettings.titleGenerationPrompt,
+        titleGenerationApiConfigId: newSettings.titleGenerationApiConfigId,
+        clearTitleGenerationApiConfigId: newSettings.titleGenerationApiConfigId == null,
+        enableResume: newSettings.enableResume,
+        resumePrompt: newSettings.resumePrompt,
+        resumeApiConfigId: newSettings.resumeApiConfigId,
+        clearResumeApiConfigId: newSettings.resumeApiConfigId == null,
+      );
+      await userRepo.updateUserSettings(updatedUser);
+    }
+  }
+}

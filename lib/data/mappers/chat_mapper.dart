@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../models/chat.dart' as domain;
+import '../models/enums.dart' as domain_enums;
 import '../models/context_config.dart' as domain_context;
 import '../models/xml_rule.dart' as domain_xml;
 
@@ -54,7 +55,7 @@ class ChatMapper {
       coverImageBase64: data.coverImageBase64,
       backgroundImagePath: data.backgroundImagePath,
       orderIndex: data.orderIndex,
-      isFolder: data.isFolder,
+      isFolder: data.isFolder ?? false,
       parentFolderId: data.parentFolderId,
       apiConfigId: data.apiConfigId,
       contextConfig: ContextConfigMapper.fromDrift(data.contextConfig),
@@ -67,6 +68,11 @@ class ChatMapper {
       secondaryXmlPrompt: data.secondaryXmlPrompt,
       secondaryXmlApiConfigId: data.secondaryXmlApiConfigId,
       continuePrompt: data.continuePrompt,
+      // 映射 "帮我回复" 功能字段
+      enableHelpMeReply: data.enableHelpMeReply ?? false,
+      helpMeReplyPrompt: data.helpMeReplyPrompt,
+      helpMeReplyApiConfigId: data.helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: data.helpMeReplyTriggerMode ?? domain_enums.HelpMeReplyTriggerMode.manual,
     );
   }
 
@@ -85,9 +91,9 @@ class ChatMapper {
       apiConfigId: Value(chat.apiConfigId),
       contextConfig: Value(ContextConfigMapper.toDrift(chat.contextConfig)),
       xmlRules: Value(chat.xmlRules.map(XmlRuleMapper.toDrift).toList()),
-      // Provide a default empty map for the legacy generation_config field
-      // to satisfy the NOT NULL constraint during database operations.
-      generationConfig: const Value({}),
+      // The legacy `generation_config` field is kept for migration but no longer
+      // used. It's set to null as it's a nullable column now.
+      generationConfig: const Value(null),
       apiType: Value(apiType), // Use the provided apiType
       enablePreprocessing: Value(chat.enablePreprocessing),
       preprocessingPrompt: Value(chat.preprocessingPrompt),
@@ -97,6 +103,11 @@ class ChatMapper {
       secondaryXmlPrompt: Value(chat.secondaryXmlPrompt),
       secondaryXmlApiConfigId: Value(chat.secondaryXmlApiConfigId),
       continuePrompt: Value(chat.continuePrompt),
+      // 映射 "帮我回复" 功能字段
+      enableHelpMeReply: Value(chat.enableHelpMeReply),
+      helpMeReplyPrompt: Value(chat.helpMeReplyPrompt),
+      helpMeReplyApiConfigId: Value(chat.helpMeReplyApiConfigId),
+      helpMeReplyTriggerMode: Value(chat.helpMeReplyTriggerMode),
     );
   }
 }

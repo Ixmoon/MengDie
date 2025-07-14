@@ -11,31 +11,31 @@ class ApiConfigRepository {
 
   // --- Unified API Config Methods ---
 
-  Future<List<ApiConfig>> getAllConfigs() async {
-    final driftConfigs = await _dao.getAllApiConfigs();
+  Future<List<ApiConfig>> getAllConfigs(int userId) async {
+    final driftConfigs = await _dao.getAllApiConfigs(userId);
     return driftConfigs.map(ApiConfigMapper.fromData).toList();
   }
 
-  Stream<List<ApiConfig>> watchAllConfigs() {
-    return _dao.watchAllApiConfigs().map((driftConfigs) =>
+  Stream<List<ApiConfig>> watchAllConfigs(int userId) {
+    return _dao.watchAllApiConfigs(userId).map((driftConfigs) =>
         driftConfigs.map(ApiConfigMapper.fromData).toList());
   }
 
-  Future<ApiConfig?> getConfigById(String id) async {
-    final driftConfig = await _dao.getApiConfigById(id);
+  Future<ApiConfig?> getConfigById(String id, int userId) async {
+    final driftConfig = await _dao.getApiConfigById(id, userId);
     return driftConfig != null ? ApiConfigMapper.fromData(driftConfig) : null;
   }
 
-  Future<void> saveConfig(ApiConfig config, {bool forceRemoteWrite = false}) {
+  Future<void> saveConfig(ApiConfig config, int userId, {bool forceRemoteWrite = false}) {
     final companion = ApiConfigMapper.toCompanion(config);
-    return _dao.upsertApiConfig(companion, forceRemoteWrite: forceRemoteWrite);
+    return _dao.upsertApiConfig(companion, userId, forceRemoteWrite: forceRemoteWrite);
   }
 
-  Future<void> deleteConfig(String id, {bool forceRemoteWrite = false}) =>
-      _dao.deleteApiConfig(id, forceRemoteWrite: forceRemoteWrite);
+  Future<void> deleteConfig(String id, int userId, {bool forceRemoteWrite = false}) =>
+      _dao.deleteApiConfig(id, userId, forceRemoteWrite: forceRemoteWrite);
   
-  Future<void> clearAllConfigs({bool forceRemoteWrite = false}) =>
-      _dao.clearAllApiConfigs(forceRemoteWrite: forceRemoteWrite);
+  Future<void> clearAllConfigs(int userId, {bool forceRemoteWrite = false}) =>
+      _dao.clearAllApiConfigs(userId, forceRemoteWrite: forceRemoteWrite);
 
   // Data migration logic can be added here.
   // This method would be called once upon app initialization.

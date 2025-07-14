@@ -5,7 +5,7 @@ import 'package:flutter/material.dart'; // Added for Color type
 import '../../data/models/chat.dart';
 import '../../data/models/message.dart';
 import '../../data/models/enums.dart';
-import '../../data/repositories/chat_repository.dart';
+import 'repository_providers.dart';
 import '../../data/repositories/message_repository.dart';
 import '../../service/llmapi/llm_service.dart'; // Import the generic LLM service and types
 import '../../service/llmapi/llm_models.dart'; // Import the new generic LLM models
@@ -13,7 +13,10 @@ import '../../service/process/context_xml_service.dart'; // Import the new servi
 import 'package:collection/collection.dart'; // Import for lastWhereOrNull
 import '../../service/process/xml_processor.dart'; // Added import
 import 'settings_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPreferences
 import 'api_key_provider.dart';
+import 'auth_providers.dart';
+import '../screens/chat_settings_screen.dart' show defaultHelpMeReplyPrompt;
  
  
 import '../../data/models/api_config.dart';
@@ -72,11 +75,19 @@ final chatListProvider =
     StreamProvider.family<List<Chat>, ChatListProviderParams>((ref, params) {
   try {
     final repo = ref.watch(chatRepositoryProvider);
-    debugPrint(
-        "chatListProvider(folderId: ${params.parentFolderId}, mode: ${params.mode}): 正在监听聊天/文件夹。");
+    final authState = ref.watch(authProvider);
 
-    // 监听原始数据流
-    final sourceStream = repo.watchChatsInFolder(params.parentFolderId);
+    debugPrint(
+        "chatListProvider(folderId: ${params.parentFolderId}, mode: ${params.mode}, user: ${authState.currentUser?.username ?? 'Guest'}): 正在监听。");
+
+    // 最终修复：不再区分游客和普通用户，统一调用 watchChatsForUser。
+    // watchChatsForUser 方法内部已经包含了处理游客和“孤儿”聊天的逻辑。
+    if (authState.currentUser == null) {
+      // 如果在认证完成前（例如启动时），返回一个空流。
+      return Stream.value([]);
+    }
+
+    final sourceStream = repo.watchChatsForUser(authState.currentUser!.id, params.parentFolderId);
 
     // 根据模式和时间戳过滤数据流
     return sourceStream.map((chats) {
@@ -143,23 +154,11 @@ final lastModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
 });
 
 // --- 新增：第一条模型消息 Provider (用于列表预览) ---
-final firstModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
-  final messagesAsyncValue = ref.watch(chatMessagesProvider(chatId));
-  return messagesAsyncValue.when(
-    data: (messages) {
-      try {
-        // 使用 firstWhereOrNull 高效查找第一条模型消息
-        return messages.firstWhereOrNull((msg) => msg.role == MessageRole.model);
-      } catch (e) {
-        return null; // 容错处理
-      }
-    },
-    loading: () => null, // 加载时返回 null
-    error: (error, stack) {
-      debugPrint("firstModelMessageProvider($chatId): 消息流错误: $error");
-      return null; // 出错时返回 null
-    },
-  );
+// 优化：从 StreamProvider 改为 FutureProvider，避免为每个列表项建立实时监听。
+// 这将显著降低应用启动时的数据库负载。
+final firstModelMessageProvider = FutureProvider.family<Message?, int>((ref, chatId) {
+  // 直接调用 repository 的一次性查询方法
+  return ref.watch(messageRepositoryProvider).getFirstModelMessage(chatId);
 });
 
 
@@ -271,7 +270,18 @@ class ChatScreenState {
 
 // --- 聊天屏幕状态 StateNotifierProvider ---
 final chatStateNotifierProvider = StateNotifierProvider.family<ChatStateNotifier, ChatScreenState, int>(
-  (ref, chatId) => ChatStateNotifier(ref, chatId),
+  (ref, chatId) {
+    // 异步获取 SharedPreferences 实例
+    final prefsFuture = SharedPreferences.getInstance();
+    // 创建 Notifier，并通过 FutureBuilder 在准备好后进行初始化
+    final notifier = ChatStateNotifier(ref, chatId);
+    prefsFuture.then((prefs) {
+      if (notifier.mounted) {
+        notifier.init(prefs);
+      }
+    });
+    return notifier;
+  },
 );
 
 // --- Constants ---
@@ -286,7 +296,20 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   Timer? _topMessageTimer; // Timer for top messages
   bool _isFinalizing = false; // Flag to prevent reentry into _finalizeStreamedMessage
 
+  late SharedPreferences _prefs;
+
   ChatStateNotifier(this._ref, this._chatId) : super(const ChatScreenState());
+
+  /// 初始化 StateNotifier，从 SharedPreferences 加载持久化设置。
+  void init(SharedPreferences prefs) {
+    _prefs = prefs;
+    state = state.copyWith(
+      isStreamMode: _prefs.getBool('chat_${_chatId}_is_stream_mode') ?? true,
+      isBubbleTransparent: _prefs.getBool('chat_${_chatId}_is_bubble_transparent') ?? false,
+      isBubbleHalfWidth: _prefs.getBool('chat_${_chatId}_is_bubble_half_width') ?? false,
+      isAutoHeightEnabled: _prefs.getBool('chat_${_chatId}_is_auto_height_enabled') ?? false,
+    );
+  }
 
   // --- API Config Resolution Logic ---
   /// 【公共方法】根据优先级解析出最终有效的 API 配置对象。
@@ -367,33 +390,38 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   // --- End Top Message Logic ---
 
   void toggleOutputMode() {
-    state = state.copyWith(isStreamMode: !state.isStreamMode);
-    // Example of using the new showTopMessage for feedback
-    showTopMessage('输出模式已切换为: ${state.isStreamMode ? "流式" : "一次性"}');
-    debugPrint("Chat ($_chatId) 输出模式切换为: ${state.isStreamMode ? "流式" : "一次性"}");
+    final newValue = !state.isStreamMode;
+    state = state.copyWith(isStreamMode: newValue);
+    _prefs.setBool('chat_${_chatId}_is_stream_mode', newValue);
+    showTopMessage('输出模式已切换为: ${newValue ? "流式" : "一次性"}');
+    debugPrint("Chat ($_chatId) 输出模式切换为: ${newValue ? "流式" : "一次性"}");
   }
 
   void toggleBubbleTransparency() {
-    state = state.copyWith(isBubbleTransparent: !state.isBubbleTransparent);
-    showTopMessage('气泡已切换为: ${state.isBubbleTransparent ? "半透明" : "不透明"}');
-    debugPrint("Chat ($_chatId) 气泡透明度切换为: ${state.isBubbleTransparent}");
+    final newValue = !state.isBubbleTransparent;
+    state = state.copyWith(isBubbleTransparent: newValue);
+    _prefs.setBool('chat_${_chatId}_is_bubble_transparent', newValue);
+    showTopMessage('气泡已切换为: ${newValue ? "半透明" : "不透明"}');
+    debugPrint("Chat ($_chatId) 气泡透明度切换为: $newValue");
   }
 
   void toggleBubbleWidthMode() {
-    state = state.copyWith(isBubbleHalfWidth: !state.isBubbleHalfWidth);
-    showTopMessage('气泡宽度已切换为: ${state.isBubbleHalfWidth ? "半宽" : "全宽"}');
-    debugPrint("Chat ($_chatId) 气泡宽度模式切换为: ${state.isBubbleHalfWidth ? "半宽" : "全宽"}");
+    final newValue = !state.isBubbleHalfWidth;
+    state = state.copyWith(isBubbleHalfWidth: newValue);
+    _prefs.setBool('chat_${_chatId}_is_bubble_half_width', newValue);
+    showTopMessage('气泡宽度已切换为: ${newValue ? "半宽" : "全宽"}');
+    debugPrint("Chat ($_chatId) 气泡宽度模式切换为: ${newValue ? "半宽" : "全宽"}");
   }
 
   void toggleMessageListHeightMode() {
-    final newAutoHeightState = !state.isAutoHeightEnabled;
+    final newValue = !state.isAutoHeightEnabled;
     state = state.copyWith(
-      isAutoHeightEnabled: newAutoHeightState,
-      // When turning off, force full height. When turning on, force half height.
-      isMessageListHalfHeight: newAutoHeightState,
+      isAutoHeightEnabled: newValue,
+      isMessageListHalfHeight: newValue,
     );
-    showTopMessage('智能半高模式已: ${newAutoHeightState ? "开启" : "关闭"}');
-    debugPrint("Chat ($_chatId) 智能半高模式切换为: $newAutoHeightState");
+    _prefs.setBool('chat_${_chatId}_is_auto_height_enabled', newValue);
+    showTopMessage('智能半高模式已: ${newValue ? "开启" : "关闭"}');
+    debugPrint("Chat ($_chatId) 智能半高模式切换为: $newValue");
   }
 
   void setMessageListHeightMode(bool isHalfHeight) {
@@ -865,8 +893,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
    if (chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false)) {
      tasks.add(_executePreprocessing(chat));
    }
-   final globalSettings = _ref.read(globalSettingsProvider);
-   if (globalSettings.enableHelpMeReply && globalSettings.helpMeReplyTriggerMode == 'auto') {
+   if (chat.enableHelpMeReply && chat.helpMeReplyTriggerMode == HelpMeReplyTriggerMode.auto) {
      tasks.add(generateHelpMeReply());
    }
 
@@ -1438,12 +1465,18 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     // This happens only on successful completion.
     Message? finalMessageToSave;
     if (!hasError) {
-       finalMessageToSave = Message(
-         chatId: messageToFinalize.chatId,
-         role: messageToFinalize.role,
-         parts: messageToFinalize.parts,
-         timestamp: messageToFinalize.timestamp,
-       );
+      if (messageToFinalize.id > 0) {
+        // This is an update to an existing message.
+        finalMessageToSave = messageToFinalize;
+      } else {
+        // This is a new message. Create a new object without the temporary negative ID.
+        finalMessageToSave = Message(
+          chatId: messageToFinalize.chatId,
+          role: messageToFinalize.role,
+          parts: messageToFinalize.parts,
+          timestamp: messageToFinalize.timestamp,
+        );
+      }
     }
 
     // 2. The primary response (stream) is "done". Turn off its specific lock.
@@ -1649,19 +1682,23 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
         return;
       }
 
-      final globalSettings = _ref.read(globalSettingsProvider);
-      if (!globalSettings.enableHelpMeReply) {
-        if (onSuggestionsReady != null) showTopMessage('“帮我回复”功能已禁用', backgroundColor: Colors.orange);
-        return;
-      }
+     final chat = _ref.read(currentChatProvider(_chatId)).value;
+     if (chat == null) {
+       if (onSuggestionsReady != null) showTopMessage('无法获取聊天设置', backgroundColor: Colors.red);
+       return;
+     }
+     if (!chat.enableHelpMeReply) {
+       if (onSuggestionsReady != null) showTopMessage('“帮我回复”功能在此聊天中已禁用', backgroundColor: Colors.orange);
+       return;
+     }
 
-      // 5. Execute the action
-      try {
-        final apiConfig = getEffectiveApiConfig(specificConfigId: globalSettings.helpMeReplyApiConfigId);
-        final generatedText = await _executeSpecialAction(
-          prompt: globalSettings.helpMeReplyPrompt,
-          apiConfig: apiConfig,
-          actionType: _SpecialActionType.helpMeReply,
+     // 5. Execute the action
+     try {
+       final apiConfig = getEffectiveApiConfig(specificConfigId: chat.helpMeReplyApiConfigId);
+       final generatedText = await _executeSpecialAction(
+         prompt: chat.helpMeReplyPrompt ?? defaultHelpMeReplyPrompt,
+         apiConfig: apiConfig,
+         actionType: _SpecialActionType.helpMeReply,
           targetMessage: lastMessage,
         );
 
@@ -1729,16 +1766,16 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
  /// It ensures consistent context building (always demoting the chat's system prompt)
  /// and centralizes API call logic, returning a Future with the result.
  Future<String> _executeSpecialAction({
-   required String prompt,
-   required ApiConfig apiConfig, // 重构：直接接收配置对象
-   required _SpecialActionType actionType,
-   required Message targetMessage,
-  }) async {
-    const maxRetries = 3;
-    final chat = _ref.read(currentChatProvider(_chatId)).value;
-    if (chat == null) {
-      throw Exception('无法执行操作：聊天数据未加载');
-    }
+  required String prompt,
+  required ApiConfig apiConfig, // 重构：直接接收配置对象
+  required _SpecialActionType actionType,
+  required Message targetMessage,
+}) async {
+  const maxRetries = 3;
+  final chat = _ref.read(currentChatProvider(_chatId)).value;
+  if (chat == null) {
+    throw Exception('无法执行操作：聊天数据未加载');
+  }
 
    final contextXmlService = _ref.read(contextXmlServiceProvider);
    final llmService = _ref.read(llmServiceProvider);

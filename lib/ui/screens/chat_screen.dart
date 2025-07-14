@@ -8,13 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/rendering.dart'; // For ScrollDirection
 
 import 'package:go_router/go_router.dart'; // For navigation
+import 'package:image_picker/image_picker.dart';
 // import 'package:isar/isar.dart'; // Removed Isar import
 import 'package:mime/mime.dart'; // For mime type lookup
 import 'package:shared_preferences/shared_preferences.dart'; // 导入 shared_preferences
 
 // 导入模型、Provider、仓库、服务和 Widget
 import '../../data/models/models.dart';
-import '../../data/repositories/chat_repository.dart';
+import '../providers/repository_providers.dart';
 import '../providers/chat_state_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/message_bubble.dart';
@@ -23,7 +24,24 @@ import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../providers/settings_providers.dart'; // 导入全局设置
 import '../providers/api_key_provider.dart';
   
-  // 本文件包含单个聊天会话的屏幕界面。
+  // 本文件包含了应用的核心聊天界面。
+//
+// 主要功能和组件包括：
+// 1. **ChatScreen**: 使用 PageView 实现的可左右滑动的聊天容器，用于在同一文件夹内的聊天之间切换。
+// 2. **ChatPageContent**: 单个聊天页面的完整内容，包括消息列表、输入框和应用栏。
+// 3. **_ChatAppBar**: 顶部的应用栏，显示聊天标题并提供一个包含多种操作的弹出菜单，
+//    例如：聊天设置、封面管理（设置/导出/移除）、输出模式切换、导出聊天等。
+// 4. **_MessageList**: 显示聊天消息的列表，支持无限滚动加载和消息项的交互。
+// 5. **_ChatInputBar**: 底部的输入区域，支持文本和文件附件的发送。
+// 6. **封面图片管理**: 提供了从菜单直接设置、导出和移除聊天背景封面的功能。
+//
+// 文件结构：
+// - `ChatScreen` (StatefulWidget): 作为 PageView 的宿主，管理页面切换逻辑。
+// - `_ChatPageContentState` (State): 管理单个聊天页面的状态和核心业务逻辑，
+//   如消息发送、编辑、删除、图片处理等。
+// - `_ChatAppBar` (StatelessWidget): 接收回调函数以处理菜单操作。
+// - `_MessageList` (StatefulWidget): 负责消息的展示和相关UI逻辑。
+// - `_ChatInputBar` (StatefulWidget): 负责用户输入的处理。
   
 // --- 聊天屏幕 ---
 // 使用 ConsumerStatefulWidget 以便访问 Ref 并管理本地状态（控制器、滚动等）。
@@ -588,16 +606,12 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
 
   Future<void> _forkChatFromMessage(Message message, List<Message> allMessages) async {
     final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+    // forkChat 现在会自动处理用户绑定
     final newChatId = await notifier.forkChat(message);
 
     if (mounted && newChatId != null) {
-      final chat = ref.read(currentChatProvider(widget.chatId)).value;
-      if (chat != null) {
-        // Invalidate the list provider to ensure it fetches the new chat
-        ref.invalidate(chatListProvider((parentFolderId: chat.parentFolderId, mode: ChatListMode.normal)));
-      }
       ref.read(activeChatIdProvider.notifier).state = newChatId;
-      // No need to context.go('/chat'), as the PageView will react to the activeChatId change.
+      // 页面将通过 activeChatIdProvider 的变化自动更新
     }
   }
 
@@ -607,6 +621,73 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
 
   Future<void> _deleteMessage(Message messageToDelete, List<Message> allMessages) async {
     await ref.read(chatStateNotifierProvider(widget.chatId).notifier).deleteMessage(messageToDelete.id);
+  }
+
+  // --- 业务逻辑：选择并设置封面图片 (Base64) ---
+  Future<void> _pickAndSetCoverImageBase64(ImageSource source) async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(source: source);
+      if (image == null) {
+        debugPrint("图片选择已取消。");
+        return;
+      }
+
+      final Uint8List imageBytes = await image.readAsBytes();
+      final String newBase64String = base64Encode(imageBytes);
+
+      final chat = ref.read(currentChatProvider(widget.chatId)).value;
+      if (chat != null) {
+        final chatToUpdate = chat.copyWith({'coverImageBase64': newBase64String});
+        await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
+        if (mounted) {
+          ref.read(chatStateNotifierProvider(widget.chatId).notifier).showTopMessage('封面图片已更新', backgroundColor: Colors.green);
+        }
+      }
+    } catch (e) {
+      debugPrint("设置封面图片 (Base64) 时出错: $e");
+      if (mounted) {
+        ref.read(chatStateNotifierProvider(widget.chatId).notifier).showTopMessage('图片处理失败: $e', backgroundColor: Colors.red);
+      }
+    }
+  }
+
+  // --- 业务逻辑：导出封面图片 ---
+  Future<void> _exportImage() async {
+    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+    final chat = ref.read(currentChatProvider(widget.chatId)).value;
+    final String? base64String = chat?.coverImageBase64;
+
+    if (base64String == null || base64String.isEmpty) {
+      notifier.showTopMessage('没有可导出的图片', backgroundColor: Colors.orange);
+      return;
+    }
+
+    try {
+      final Uint8List imageBytes = base64Decode(base64String);
+      final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_${widget.chatId}';
+      final suggestedFileName = 'cover_$sanitizedTitle.jpg';
+      
+      // 使用 file_picker 保存文件
+      final String? savePath = await FilePicker.platform.saveFile(
+        dialogTitle: '请选择封面保存位置',
+        fileName: suggestedFileName,
+        bytes: imageBytes,
+      );
+
+      if (mounted) {
+        if (savePath != null) {
+          notifier.showTopMessage('封面已保存到: $savePath', backgroundColor: Colors.green);
+        } else {
+          notifier.showTopMessage('已取消保存', backgroundColor: Colors.orange);
+        }
+      }
+    } catch (e) {
+      debugPrint("导出封面时出错: $e");
+      if (mounted) {
+        notifier.showTopMessage('导出封面失败: $e', backgroundColor: Colors.red);
+      }
+    }
   }
 
   void _scrollToBottom({bool animate = true}) {
@@ -681,6 +762,18 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
               appBar: _ChatAppBar(
                 chat: chat,
                 buildPopupMenuItem: _buildPopupMenuItem,
+                onSetCoverImage: () => _pickAndSetCoverImageBase64(ImageSource.gallery),
+                onExportCoverImage: _exportImage,
+                onRemoveCoverImage: () async {
+                  final chatToUpdate = ref.read(currentChatProvider(widget.chatId)).value;
+                  if (chatToUpdate != null) {
+                    final updatedChat = chatToUpdate.copyWith({'coverImageBase64': null});
+                    await ref.read(chatRepositoryProvider).saveChat(updatedChat);
+                    if (mounted) {
+                      ref.read(chatStateNotifierProvider(widget.chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);
+                    }
+                  }
+                },
               ),
               body: SafeArea(
                 child: Column(
@@ -762,10 +855,16 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
     required String label,
     bool enabled,
   }) buildPopupMenuItem;
+  final VoidCallback onSetCoverImage;
+  final VoidCallback onExportCoverImage;
+  final VoidCallback onRemoveCoverImage;
 
   const _ChatAppBar({
     required this.chat,
     required this.buildPopupMenuItem,
+    required this.onSetCoverImage,
+    required this.onExportCoverImage,
+    required this.onRemoveCoverImage,
   });
 
   @override
@@ -809,8 +908,14 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'settings':
                 context.push('/chat/settings');
                 break;
-              case 'gallery':
-                context.push('/chat/gallery');
+              case 'setCoverImage':
+                onSetCoverImage();
+                break;
+              case 'exportCoverImage':
+                onExportCoverImage();
+                break;
+              case 'removeCoverImage':
+                onRemoveCoverImage();
                 break;
               case 'toggleOutputMode':
                 notifier.toggleOutputMode();
@@ -851,9 +956,12 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'cloneAsTemplate':
                 try {
                   final repo = ref.read(chatRepositoryProvider);
+                  // cloneChat 现在会自动处理用户绑定
                   await repo.cloneChat(chat.id, asTemplate: true);
                   if (!context.mounted) return;
                   notifier.showTopMessage('已成功克隆为模板', backgroundColor: Colors.green);
+                  // 刷新模板列表
+                  ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
                   context.push('/list?mode=manage');
                 } catch (e) {
                   if (context.mounted) {
@@ -864,11 +972,12 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'cloneAsChat':
                 try {
                   final repo = ref.read(chatRepositoryProvider);
+                  // cloneChat 现在会自动处理用户绑定
                   final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
                   if (!context.mounted) return;
                   notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
                   ref.read(activeChatIdProvider.notifier).state = newChatId;
-                  // 不需要go,因为activeChatId改变会自动触发页面切换
+                  // 页面将通过 activeChatIdProvider 的变化自动更新
                 } catch (e) {
                   if (context.mounted) {
                     notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
@@ -879,7 +988,20 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
           },
           itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
             buildPopupMenuItem(value: 'settings', icon: Icons.tune, label: '聊天设置'),
-            buildPopupMenuItem(value: 'gallery', icon: Icons.photo_library_outlined, label: '封面与背景'),
+            const PopupMenuDivider(),
+            buildPopupMenuItem(value: 'setCoverImage', icon: Icons.photo_library_outlined, label: '设置封面'),
+            buildPopupMenuItem(
+              value: 'exportCoverImage',
+              icon: Icons.upload_file_outlined,
+              label: '导出封面',
+              enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+            ),
+            buildPopupMenuItem(
+              value: 'removeCoverImage',
+              icon: Icons.delete_outline,
+              label: '移除封面',
+              enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+            ),
             const PopupMenuDivider(),
             buildPopupMenuItem(value: 'toggleOutputMode', icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble, label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出'),
             buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
@@ -1004,8 +1126,11 @@ class _MessageListState extends ConsumerState<_MessageList> {
 
               if (!canPerformAction) return const SizedBox.shrink();
 
+              final chat = ref.watch(currentChatProvider(widget.chatId)).value;
               final globalSettings = ref.watch(globalSettingsProvider);
               final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+
+              if (chat == null) return const SizedBox.shrink();
 
               List<Widget> buttons = [];
 
@@ -1039,7 +1164,7 @@ class _MessageListState extends ConsumerState<_MessageList> {
               }
 
               // Help Me Reply / Cancel Button
-              if (globalSettings.enableHelpMeReply) {
+              if (chat.enableHelpMeReply) {
                 buttons.add(const SizedBox(width: 8));
                 if (chatState.isGeneratingSuggestions) {
                   // Show a contextual cancel button
@@ -1175,15 +1300,21 @@ class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with Sin
     } else if (allSuggestionPages.isEmpty) {
       contentWidget = const Center(child: Text('没有可用的建议。'));
     } else {
-      contentWidget = Column(
-        mainAxisSize: MainAxisSize.min, // Crucial for AlertDialog content sizing
-        children: currentSuggestions.map((s) => ListTile(
-          title: Text(s),
-          onTap: () {
-            widget.onSuggestionSelected(s);
-            Navigator.of(context).pop();
-          },
-        )).toList(),
+      contentWidget = Container(
+        width: double.maxFinite, // 让ListView.builder正确工作
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6, // 限制最大高度
+        ),
+        child: ListView( // 使用ListView替代Column以获得滚动能力
+          shrinkWrap: true, // 使ListView的高度适应其内容
+          children: currentSuggestions.map((s) => ListTile(
+            title: Text(s),
+            onTap: () {
+              widget.onSuggestionSelected(s);
+              Navigator.of(context).pop();
+            },
+          )).toList(),
+        ),
       );
     }
 

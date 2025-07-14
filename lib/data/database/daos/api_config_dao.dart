@@ -13,20 +13,29 @@ class ApiConfigDao extends DatabaseAccessor<AppDatabase> with _$ApiConfigDaoMixi
 
   // --- Unified API Config Operations ---
 
-  // Get all configs
-  Future<List<ApiConfig>> getAllApiConfigs() => select(apiConfigs).get();
-
-  // Watch all configs
-  Stream<List<ApiConfig>> watchAllApiConfigs() => select(apiConfigs).watch();
-
-  // Get a single config by ID
-  Future<ApiConfig?> getApiConfigById(String id) {
-    return (select(apiConfigs)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  // Get all configs for a specific user
+  Future<List<ApiConfig>> getAllApiConfigs(int userId) {
+    return (select(apiConfigs)..where((tbl) => tbl.userId.equals(userId))).get();
   }
 
-  // Insert or update a config
-  Future<void> upsertApiConfig(ApiConfigsCompanion companion, {bool forceRemoteWrite = false}) async {
-    await into(apiConfigs).insertOnConflictUpdate(companion);
+  // Watch all configs for a specific user
+  Stream<List<ApiConfig>> watchAllApiConfigs(int userId) {
+    return (select(apiConfigs)..where((tbl) => tbl.userId.equals(userId))).watch();
+  }
+
+  // Get a single config by ID, ensuring it belongs to the user
+  Future<ApiConfig?> getApiConfigById(String id, int userId) {
+    return (select(apiConfigs)
+          ..where((tbl) => tbl.id.equals(id))
+          ..where((tbl) => tbl.userId.equals(userId)))
+        .getSingleOrNull();
+  }
+
+  // Insert or update a config for a specific user
+  Future<void> upsertApiConfig(ApiConfigsCompanion companion, int userId, {bool forceRemoteWrite = false}) async {
+    // Ensure the companion has the correct userId before upserting
+    final companionWithUser = companion.copyWith(userId: Value(userId));
+    await into(apiConfigs).insertOnConflictUpdate(companionWithUser);
 
     SyncService.instance.backgroundWrite(
       force: forceRemoteWrite,
@@ -64,12 +73,15 @@ class ApiConfigDao extends DatabaseAccessor<AppDatabase> with _$ApiConfigDaoMixi
     );
   }
 
-  // Delete a config by ID
-  Future<int> deleteApiConfig(String id, {bool forceRemoteWrite = false}) async {
-    final configToDelete = await getApiConfigById(id);
+  // Delete a config by ID for a specific user
+  Future<int> deleteApiConfig(String id, int userId, {bool forceRemoteWrite = false}) async {
+    final configToDelete = await getApiConfigById(id, userId);
     if (configToDelete == null) return 0;
 
-    final count = await (delete(apiConfigs)..where((tbl) => tbl.id.equals(id))).go();
+    final count = await (delete(apiConfigs)
+          ..where((tbl) => tbl.id.equals(id))
+          ..where((tbl) => tbl.userId.equals(userId)))
+        .go();
 
     if (count > 0) {
       SyncService.instance.backgroundWrite(
@@ -88,12 +100,12 @@ class ApiConfigDao extends DatabaseAccessor<AppDatabase> with _$ApiConfigDaoMixi
     return count;
   }
 
-  // Clear all configs (use with caution)
-  Future<void> clearAllApiConfigs({bool forceRemoteWrite = false}) async {
-    final allConfigs = await getAllApiConfigs();
+  // Clear all configs for a specific user
+  Future<void> clearAllApiConfigs(int userId, {bool forceRemoteWrite = false}) async {
+    final allConfigs = await getAllApiConfigs(userId);
     if (allConfigs.isEmpty) return;
 
-    await delete(apiConfigs).go();
+    await (delete(apiConfigs)..where((tbl) => tbl.userId.equals(userId))).go();
 
     SyncService.instance.backgroundWrite(
       force: forceRemoteWrite,

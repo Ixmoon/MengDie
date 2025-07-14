@@ -1,10 +1,15 @@
 import 'package:drift/drift.dart';
+
 import '../type_converters.dart';
+import 'users.dart';
 
 // 统一的 API 配置表
 // 该表合并了 Gemini 和 OpenAI 的配置，并包含了各自的高级生成设置
 @DataClassName('ApiConfig')
 class ApiConfigs extends Table {
+  // --- Foreign Key ---
+  IntColumn get userId => integer().nullable()(); // Made nullable for safer migration
+
   // --- 通用字段 ---
   TextColumn get id => text().clientDefault(() => 'temp_id')();
   TextColumn get name => text()(); // 配置名称，对用户可见
@@ -14,11 +19,11 @@ class ApiConfigs extends Table {
   TextColumn get baseUrl => text().nullable()(); // Base URL (主要用于 OpenAI 兼容 API)
 
   // --- 高级生成设置 (从 DriftGenerationConfig 迁移) ---
-  BoolColumn get useCustomTemperature => boolean().withDefault(const Constant(false))();
+  BoolColumn get useCustomTemperature => boolean().nullable()();
   RealColumn get temperature => real().nullable()();
-  BoolColumn get useCustomTopP => boolean().withDefault(const Constant(false))();
+  BoolColumn get useCustomTopP => boolean().nullable()();
   RealColumn get topP => real().nullable()();
-  BoolColumn get useCustomTopK => boolean().withDefault(const Constant(false))();
+  BoolColumn get useCustomTopK => boolean().nullable()();
   IntColumn get topK => integer().nullable()();
   IntColumn get maxOutputTokens => integer().nullable()();
   TextColumn get stopSequences => text().map(const StringListConverter()).nullable()();
@@ -28,8 +33,8 @@ class ApiConfigs extends Table {
   TextColumn get reasoningEffort => text().map(const OpenAIReasoningEffortConverter()).nullable()();
 
   // --- 时间戳 ---
-  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

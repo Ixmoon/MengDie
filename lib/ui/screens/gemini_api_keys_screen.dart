@@ -65,7 +65,7 @@ class GeminiApiKeysScreen extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final key = keys[index];
                       return ListTile(
-                        title: Text('****${key.substring(key.length - 4)}'),
+                        title: Text(key.length > 4 ? '****${key.substring(key.length - 4)}' : key),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.redAccent),
                           onPressed: () => apiKeyNotifier.deleteGeminiKey(key),

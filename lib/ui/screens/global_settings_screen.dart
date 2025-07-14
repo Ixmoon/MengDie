@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/auth_providers.dart';
 import '../providers/settings_providers.dart';
 import '../../data/models/api_config.dart';
 import '../providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 import '../../data/models/enums.dart';
+import '../../data/models/app_constants.dart';
  
  
 class GlobalSettingsScreen extends ConsumerWidget {
@@ -118,95 +120,81 @@ class GlobalSettingsScreen extends ConsumerWidget {
                  prompt: ref.watch(globalSettingsProvider.select((s) => s.titleGenerationPrompt)),
                  apiConfigId: ref.watch(globalSettingsProvider.select((s) => s.titleGenerationApiConfigId)),
                  onEnableChanged: (value) {
-                   final notifier = ref.read(globalSettingsProvider.notifier);
-                   notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'enableAutoTitleGeneration': value}));
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(enableAutoTitleGeneration: value));
                  },
                  onPromptChanged: (value) {
-                   final notifier = ref.read(globalSettingsProvider.notifier);
-                   notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({
-                     'titleGenerationPrompt': value,
-                   }));
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(titleGenerationPrompt: value));
                  },
                  onApiConfigChanged: (value) {
-                   final notifier = ref.read(globalSettingsProvider.notifier);
-                   notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'titleGenerationApiConfigId': value}));
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(titleGenerationApiConfigId: value, clearTitleGenerationApiConfigId: value == null));
                  },
                ),
                const Divider(height: 30),
                 _FeatureSettingsWidget(
-                  title: '中断恢复',
-                  subtitle: '当模型消息中断时，提供恢复按钮',
-                  icon: Icons.replay_circle_filled_rounded,
-                  isEnabled: ref.watch(globalSettingsProvider.select((s) => s.enableResume)),
-                  prompt: ref.watch(globalSettingsProvider.select((s) => s.resumePrompt)),
-                  apiConfigId: ref.watch(globalSettingsProvider.select((s) => s.resumeApiConfigId)),
-                  onEnableChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'enableResume': value}));
-                  },
-                  onPromptChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({
-                      'resumePrompt': value,
-                    }));
-                  },
-                  onApiConfigChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'resumeApiConfigId': value}));
-                  },
+                 title: '中断恢复',
+                 subtitle: '当模型消息中断时，提供恢复按钮',
+                 icon: Icons.replay_circle_filled_rounded,
+                 isEnabled: ref.watch(globalSettingsProvider.select((s) => s.enableResume)),
+                 prompt: ref.watch(globalSettingsProvider.select((s) => s.resumePrompt)),
+                 apiConfigId: ref.watch(globalSettingsProvider.select((s) => s.resumeApiConfigId)),
+                 onEnableChanged: (value) {
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(enableResume: value));
+                 },
+                 onPromptChanged: (value) {
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(resumePrompt: value));
+                 },
+                 onApiConfigChanged: (value) {
+                   final actions = ref.read(globalSettingsActionsProvider);
+                   final currentSettings = ref.read(globalSettingsProvider);
+                   actions.updateSettings(currentSettings.copyWith(resumeApiConfigId: value, clearResumeApiConfigId: value == null));
+                 },
                 ),
                 const Divider(height: 30),
-                 _FeatureSettingsWidget(
-                   title: '帮我回复',
-                  subtitle: '根据对话上下文，生成多个回复选项',
-                  icon: Icons.quickreply_rounded,
-                  isEnabled: ref.watch(globalSettingsProvider.select((s) => s.enableHelpMeReply)),
-                  prompt: ref.watch(globalSettingsProvider.select((s) => s.helpMeReplyPrompt)),
-                  apiConfigId: ref.watch(globalSettingsProvider.select((s) => s.helpMeReplyApiConfigId)),
-                  onEnableChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'enableHelpMeReply': value}));
-                  },
-                  onPromptChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({
-                      'helpMeReplyPrompt': value,
-                    }));
-                  },
-                  onApiConfigChanged: (value) {
-                    final notifier = ref.read(globalSettingsProvider.notifier);
-                    notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'helpMeReplyApiConfigId': value}));
-                  },
-                  additionalWidgets: [
-                    const SizedBox(height: 15),
-                    Text('触发模式', style: Theme.of(context).textTheme.bodyLarge),
-                    const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment<String>(value: 'manual', label: Text('手动'), icon: Icon(Icons.touch_app_rounded)),
-                        ButtonSegment<String>(value: 'auto', label: Text('自动'), icon: Icon(Icons.play_arrow_rounded)),
-                      ],
-                      selected: {ref.watch(globalSettingsProvider.select((s) => s.helpMeReplyTriggerMode))},
-                      onSelectionChanged: (newSelection) {
-                        final notifier = ref.read(globalSettingsProvider.notifier);
-                        notifier.updateSettings(ref.read(globalSettingsProvider).copyWith({'helpMeReplyTriggerMode': newSelection.first}));
+                Text('账户', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 10),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final authState = ref.watch(authProvider);
+                    // 无论是注册用户还是游客，都需要一个登出/切换账户的选项。
+                    // 唯一的区别是显示的文本。
+                    final bool isGuest = authState.isGuestMode;
+
+                    return ListTile(
+                      leading: Icon(isGuest ? Icons.login : Icons.logout),
+                      title: Text(isGuest ? '登录或注册' : '登出'),
+                      subtitle: Text(isGuest ? '当前为游客模式' : '当前用户: ${authState.currentUser?.username ?? ""}'),
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onTap: () {
+                        // 对于游客和注册用户，操作是相同的：
+                        // 1. 清除当前会话（无论是游客还是注册用户）。
+                        // 2. 返回到登录页面。
+                        ref.read(authProvider.notifier).logout();
+                        context.go('/login');
                       },
-                      showSelectedIcon: false,
-                      style: ButtonStyle(
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                        shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      shape: RoundedRectangleBorder(
+                        side: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
                ],
              ),
            ),
          ),
-      );
-    }
- }
+     );
+   }
+}
  
  class _FeatureSettingsWidget extends ConsumerStatefulWidget {
    final String title;
@@ -267,8 +255,6 @@ class GlobalSettingsScreen extends ConsumerWidget {
          return defaultTitleGenerationPrompt;
        case '中断恢复':
          return defaultResumePrompt;
-       case '帮我回复':
-         return defaultHelpMeReplyPrompt;
        default:
          return null;
      }

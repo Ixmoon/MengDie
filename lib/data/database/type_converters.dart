@@ -70,28 +70,33 @@ class MessageRoleConverter extends TypeConverter<MessageRole, String> {
 }
 
 // For List<String>
-class StringListConverter extends TypeConverter<List<String>?, String?> {
+class StringListConverter extends TypeConverter<List<String>, String> {
   const StringListConverter();
 
   @override
-  List<String>? fromSql(String? fromDb) {
-    if (fromDb == null || fromDb.isEmpty) {
-      return null;
+  List<String> fromSql(String fromDb) {
+    // If the data from the database is empty, return an empty list.
+    if (fromDb.isEmpty) {
+      return [];
     }
     try {
+      // Try to decode it as a JSON list.
       final List<dynamic> jsonData = json.decode(fromDb) as List<dynamic>;
       return jsonData.map((item) => item as String).toList();
     } catch (e) {
-      // Handle potential old data that was stored as comma-separated.
-      return fromDb.split(',');
+      // Handle potential old data that was stored as a single string or comma-separated.
+      // This makes the migration more robust.
+      if (fromDb.startsWith('[') && fromDb.endsWith(']')) {
+        final content = fromDb.substring(1, fromDb.length - 1);
+        return content.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      }
+      return [fromDb];
     }
   }
 
   @override
-  String? toSql(List<String>? value) {
-    if (value == null || value.isEmpty) {
-      return null;
-    }
+  String toSql(List<String> value) {
+    // Always encode to a JSON string. An empty list becomes '[]'.
     return json.encode(value);
   }
 }
@@ -134,6 +139,22 @@ class OpenAIReasoningEffortConverter extends TypeConverter<OpenAIReasoningEffort
 
   @override
   String? toSql(OpenAIReasoningEffort? value) {
+    return value?.name;
+  }
+}
+
+// For HelpMeReplyTriggerMode enum
+class HelpMeReplyTriggerModeConverter extends TypeConverter<HelpMeReplyTriggerMode?, String?> {
+  const HelpMeReplyTriggerModeConverter();
+
+  @override
+  HelpMeReplyTriggerMode? fromSql(String? fromDb) {
+    if (fromDb == null) return null;
+    return HelpMeReplyTriggerMode.values.firstWhere((e) => e.name == fromDb, orElse: () => HelpMeReplyTriggerMode.manual);
+  }
+
+  @override
+  String? toSql(HelpMeReplyTriggerMode? value) {
     return value?.name;
   }
 }

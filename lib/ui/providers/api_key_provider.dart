@@ -7,7 +7,9 @@ import '../../data/models/api_config.dart'; // Use the new domain model
 import '../../data/models/enums.dart'; // Use the pure enums
 import '../../data/repositories/api_config_repository.dart';
 import '../../data/repositories/chat_repository.dart' hide chatRepositoryProvider;
-import 'repository_providers.dart' show apiConfigRepositoryProvider, chatRepositoryProvider;
+import '../../data/repositories/user_repository.dart';
+import 'auth_providers.dart';
+import 'repository_providers.dart' show apiConfigRepositoryProvider, chatRepositoryProvider, userRepositoryProvider;
 
 // --- State ---
 @immutable
@@ -45,18 +47,28 @@ class ApiKeyState {
 
 // --- Notifier ---
 class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
-  final ApiConfigRepository _repository;
+  final ApiConfigRepository _apiConfigRepository;
   final ChatRepository _chatRepository;
-  static const _geminiKeysPrefKey = 'gemini_api_keys';
-  static const _migrationV11PrefKey = 'migrated_chat_configs_to_v11';
+  final UserRepository _userRepository;
+  final Ref _ref;
 
-  ApiKeyNotifier(this._repository, this._chatRepository) : super(const ApiKeyState());
+  static const _geminiKeysPrefKey = 'gemini_api_keys'; // For migration
+  static const _geminiKeysMigratedPrefKey = 'gemini_keys_migrated_to_db';
+  static const _migrationV11PrefKey = 'migrated_chat_configs_to_v11';
+  
+  int? get _userId => _ref.read(authProvider).currentUser?.id;
+
+  ApiKeyNotifier(this._apiConfigRepository, this._chatRepository, this._userRepository, this._ref) : super(const ApiKeyState());
 
   Future<void> init() async {
-    await _loadConfigs();
-    await loadGeminiKeys();
+    _ref.listen<AuthState>(authProvider, (previous, next) {
+      // If the user logs in, logs out, or the user object itself changes, reload all data.
+      if (previous?.currentUser != next.currentUser) {
+        _loadAllUserData();
+      }
+    }, fireImmediately: true);
+    
     await _migrateOldChatDataIfNeeded();
-    debugPrint("ApiKeyNotifier initialized with ${state.apiConfigs.length} API configs and ${state.geminiApiKeys.length} Gemini keys.");
   }
 
   Future<void> saveConfig({
@@ -103,15 +115,19 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       reasoningEffort: reasoningEffort,
     );
 
-    await _repository.saveConfig(config);
+    if (_userId == null) {
+      return;
+    }
+    await _apiConfigRepository.saveConfig(config, _userId!);
     await _loadConfigs();
-    debugPrint("Saved API config: $name");
   }
 
   Future<void> deleteConfig(String id) async {
-    await _repository.deleteConfig(id);
+    if (_userId == null) {
+      return;
+    }
+    await _apiConfigRepository.deleteConfig(id, _userId!);
     await _loadConfigs();
-    debugPrint("Deleted API config ID: $id");
   }
 
   ApiConfig? getConfigById(String? id) {
@@ -124,44 +140,46 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
   }
 
   Future<void> _loadConfigs() async {
-    final configs = await _repository.getAllConfigs();
+    if (_userId == null) {
+      state = state.copyWith(apiConfigs: [], clearError: true);
+      return;
+    }
+    final configs = await _apiConfigRepository.getAllConfigs(_userId!);
     state = state.copyWith(apiConfigs: configs, clearError: true);
   }
 
-  Future<void> loadGeminiKeys() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> keys = [];
-    final dynamic storedKeys = prefs.get(_geminiKeysPrefKey);
-
-    if (storedKeys is List) {
-      keys = storedKeys.map((e) => e.toString()).toList();
-    } else if (storedKeys is String) {
-      if (storedKeys.isNotEmpty) {
-        keys = [storedKeys];
-      }
+  Future<void> _loadGeminiKeys() async {
+    final currentUser = _ref.read(authProvider).currentUser;
+    if (currentUser != null) {
+      state = state.copyWith(geminiApiKeys: currentUser.geminiApiKeys, geminiApiKeyIndex: 0);
+    } else {
+      state = state.copyWith(geminiApiKeys: [], geminiApiKeyIndex: 0);
     }
-    state = state.copyWith(geminiApiKeys: keys, geminiApiKeyIndex: 0);
   }
 
   Future<void> addGeminiKey(String key) async {
-    if (key.isEmpty || state.geminiApiKeys.contains(key)) return;
-    final newKeys = [...state.geminiApiKeys, key];
-    state = state.copyWith(geminiApiKeys: newKeys);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_geminiKeysPrefKey, newKeys);
+    final currentUser = _ref.read(authProvider).currentUser;
+    if (key.isEmpty || currentUser == null || currentUser.geminiApiKeys.contains(key)) return;
+    
+    final newKeys = [...currentUser.geminiApiKeys, key];
+    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
+    // The listener on authProvider will now handle the state refresh automatically.
   }
 
   Future<void> deleteGeminiKey(String key) async {
-    final newKeys = state.geminiApiKeys.where((k) => k != key).toList();
-    state = state.copyWith(geminiApiKeys: newKeys);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_geminiKeysPrefKey, newKeys);
+    final currentUser = _ref.read(authProvider).currentUser;
+    if (currentUser == null) return;
+
+    // The user object from the authProvider is guaranteed to have a non-null list.
+    final newKeys = currentUser.geminiApiKeys.where((k) => k != key).toList();
+    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
   }
 
   Future<void> clearAllGeminiKeys() async {
-    state = state.copyWith(geminiApiKeys: []);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_geminiKeysPrefKey);
+    final currentUser = _ref.read(authProvider).currentUser;
+    if (currentUser == null) return;
+    
+    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: []));
   }
 
   String? getNextGeminiApiKey() {
@@ -175,13 +193,46 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
   }
 
   // --- Data Migration ---
+  Future<void> _loadAllUserData() async {
+    await _loadConfigs();
+    await _loadGeminiKeys();
+    await _migrateGeminiKeysFromPrefs(); // Run migration after user is loaded
+  }
+
+  Future<void> _migrateGeminiKeysFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_geminiKeysMigratedPrefKey) ?? false) {
+      return;
+    }
+
+    final currentUser = _ref.read(authProvider).currentUser;
+    if (currentUser == null || currentUser.isGuestMode) {
+      return;
+    }
+
+    List<String> oldKeys = [];
+    final dynamic storedKeys = prefs.get(_geminiKeysPrefKey);
+    if (storedKeys is List) {
+      oldKeys = storedKeys.map((e) => e.toString()).toList();
+    } else if (storedKeys is String && storedKeys.isNotEmpty) {
+      oldKeys = [storedKeys];
+    }
+
+    if (oldKeys.isNotEmpty) {
+      final newKeys = {...currentUser.geminiApiKeys, ...oldKeys}.toList();
+      await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
+      await prefs.remove(_geminiKeysPrefKey); // Clean up old key
+    }
+    
+    await prefs.setBool(_geminiKeysMigratedPrefKey, true);
+  }
+
   Future<void> _migrateOldChatDataIfNeeded() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.getBool(_migrationV11PrefKey) ?? false) {
       return;
     }
 
-    debugPrint("Starting one-time data migration for chat generation configs...");
     try {
       final oldChats = await _chatRepository.getRawChatsForMigration();
       for (final oldChat in oldChats) {
@@ -213,9 +264,9 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       }
       
       await prefs.setBool(_migrationV11PrefKey, true);
-      debugPrint("One-time data migration completed successfully.");
     } catch (e) {
-      debugPrint("Error during one-time data migration: $e");
+      // Errors in one-time migrations should not crash the app.
+      // They can be logged to a more persistent store if needed.
     }
   }
 }
@@ -224,7 +275,8 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 final apiKeyNotifierProvider = StateNotifierProvider<ApiKeyNotifier, ApiKeyState>((ref) {
   final apiConfigRepo = ref.watch(apiConfigRepositoryProvider);
   final chatRepo = ref.watch(chatRepositoryProvider);
-  final notifier = ApiKeyNotifier(apiConfigRepo, chatRepo);
+  final userRepo = ref.watch(userRepositoryProvider);
+  final notifier = ApiKeyNotifier(apiConfigRepo, chatRepo, userRepo, ref);
   notifier.init();
   return notifier;
 });

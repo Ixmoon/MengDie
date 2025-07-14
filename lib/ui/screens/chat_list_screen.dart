@@ -9,9 +9,11 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖�
 import '../../data/models/models.dart';
 import '../providers/chat_state_providers.dart';
 import '../providers/repository_providers.dart';
+import '../providers/auth_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
+import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPreferences
 // import '../widgets/chat_list_item.dart'; // 不再直接使用 ChatListItem
 
 // 本文件包含显示聊天列表的主屏幕。
@@ -65,6 +67,26 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   bool _isReordering = false;
   // 当前被拖动的项目ID，用于在多选拖动时隐藏其他选中项
   int? _draggedItemId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadViewMode();
+  }
+
+  // --- 新增：加载视图模式 ---
+  Future<void> _loadViewMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isGridView = prefs.getBool('chat_list_is_grid_view') ?? false;
+    });
+  }
+
+  // --- 新增：保存视图模式 ---
+  Future<void> _saveViewMode(bool isGridView) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('chat_list_is_grid_view', isGridView);
+  }
 
   // --- 切换多选模式 ---
   void _toggleMultiSelectMode({bool? enable, int? initialSelectionId}) {
@@ -547,66 +569,62 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final currentFolderId = ref.watch(currentFolderIdProvider);
     final chatListProviderInstance = chatListProvider((parentFolderId: currentFolderId, mode: widget.mode));
     final chatListAsync = ref.watch(chatListProviderInstance);
-    final currentFolderAsync = ref.watch(currentChatProvider(currentFolderId ?? -1));
+    // 优化：仅在文件夹内（currentFolderId != null）时才订阅 currentChatProvider，
+    // 从而避免在根目录时创建不必要的 currentChatProvider(-1) 监听。
+    final currentFolderAsync = currentFolderId != null
+        ? ref.watch(currentChatProvider(currentFolderId))
+        : const AsyncValue<Chat?>.data(null);
 
-    // 最终修复方案：使用 ref.listen 隔离状态，并显式处理导航
-    // 1. 监听文件夹ID的变化。当用户导航到新文件夹时，主动重置本地状态。
-    ref.listen<int?>(currentFolderIdProvider, (previous, next) {
-      if (previous != next) {
-        setState(() {
-          _localChats = null; // 清空本地缓存，强制显示加载指示器
-        });
-      }
-    });
+    // 关键修复: 统一数据源逻辑，避免在 .when() 的不同分支中构建列表。
+    // 这样可以确保在任何时候都只有一个列表widget实例，从而解决GlobalKey冲突。
+    Widget body;
+    
+    // 1. 确定要显示的数据
+    // 在拖拽时，使用本地缓存 `_localChats` 进行乐观更新。
+    // 在其他时候，如果 provider 有数据，则使用它；如果 provider 正在加载但我们有旧数据，也使用旧数据以避免闪烁。
+    final List<Chat>? chatsForDisplay = _isReordering ? _localChats : (chatListAsync.value ?? _localChats);
 
-    // 2. 监听列表数据的变化。
-    ref.listen(chatListProviderInstance, (previous, next) {
-      // 仅当有新数据，并且当前不处于拖动排序状态时，才更新本地状态。
-      if (next.hasValue && !_isReordering) {
-        setState(() {
-          _localChats = next.value;
-        });
+    // 2. 仅在非拖拽且有新数据时更新本地缓存
+    if (!_isReordering && chatListAsync.hasValue) {
+      _localChats = chatListAsync.value;
+    }
+
+    // 3. 根据状态构建 body
+    if (chatsForDisplay != null) {
+      // 如果有任何可显示的数据（新的或旧的），则构建列表
+      if (chatsForDisplay.isEmpty && currentFolderId == null) {
+        switch (widget.mode) {
+          case ChatListMode.normal:
+            body = const Center(child: Text('点击右下角 + 开始新聊天'));
+            break;
+          case ChatListMode.templateSelection:
+            body = const Center(child: Text('没有可用的模板'));
+            break;
+          case ChatListMode.templateManagement:
+            body = const Center(child: Text('没有可用的模板，点击右下角 + 新建'));
+            break;
+        }
+      } else if (chatsForDisplay.isEmpty && currentFolderId != null) {
+        body = const Center(child: Text('此文件夹为空'));
+      } else {
+        body = _isGridView
+            ? _buildGridView(chatsForDisplay, ref)
+            : _buildListView(chatsForDisplay, ref);
       }
-    });
+    } else if (chatListAsync.isLoading) {
+      // 如果没有任何可显示的数据，并且正在加载，则显示加载指示器
+      body = const Center(child: CircularProgressIndicator());
+    } else if (chatListAsync.hasError) {
+      // 如果没有任何可显示的数据，并且出错，则显示错误信息
+      body = Center(child: Text('无法加载列表: ${chatListAsync.error}'));
+    } else {
+      // 默认情况（例如，初始状态，没有数据也没有错误）
+      body = const Center(child: Text('没有内容'));
+    }
 
     return Scaffold(
       appBar: _buildAppBar(context, ref, currentFolderId, currentFolderAsync),
-      body: chatListAsync.when(
-        data: (chatsFromProvider) {
-          // 2. 关键：_localChats 只在首次加载时被初始化。
-          //    之后，它的更新完全由 `_handleReorder` (乐观更新) 和 `ref.listen` (外部数据同步) 控制。
-          //    这使得 _localChats 成为 UI 的稳定数据源。
-          _localChats ??= List.from(chatsFromProvider);
-          final chatsForDisplay = _localChats!;
-
-          if (chatsForDisplay.isEmpty && currentFolderId == null) {
-            switch (widget.mode) {
-              case ChatListMode.normal:
-                return const Center(child: Text('点击右下角 + 开始新聊天'));
-              case ChatListMode.templateSelection:
-                return const Center(child: Text('没有可用的模板'));
-              case ChatListMode.templateManagement:
-                return const Center(child: Text('没有可用的模板，点击右下角 + 新建'));
-            }
-          } else if (chatsForDisplay.isEmpty && currentFolderId != null) {
-            return const Center(child: Text('此文件夹为空'));
-          }
-
-          return _isGridView
-              ? _buildGridView(chatsForDisplay, ref)
-              : _buildListView(chatsForDisplay, ref);
-        },
-        loading: () {
-          // 3. 优化体验：在重新加载时，如果已有旧数据，则继续显示，避免白屏。
-          if (_localChats != null) {
-            return _isGridView
-                ? _buildGridView(_localChats!, ref)
-                : _buildListView(_localChats!, ref);
-          }
-          return const Center(child: CircularProgressIndicator());
-        },
-        error: (error, stack) => Center(child: Text('无法加载列表: $error')),
-      ),
+      body: body,
       floatingActionButton: widget.mode == ChatListMode.templateSelection
         ? null
         : FloatingActionButton(
@@ -827,6 +845,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           onPressed: () {
             setState(() {
               _isGridView = !_isGridView;
+              _saveViewMode(_isGridView); // 保存视图模式
             });
           },
         ),
@@ -960,9 +979,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     parentFolderId: currentFolderId,
                     createdAt: kTemplateTimestamp, // 使用常量
                     updatedAt: kTemplateTimestamp, // 使用常量
+                    orderIndex: null, // 确保新模板置顶
                   );
                   try {
                     final repo = ref.read(chatRepositoryProvider);
+                    // saveChat 现在会自动处理用户绑定
                     await repo.saveChat(newChat);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('空白模板已创建')));
@@ -1033,6 +1054,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         final isTemplateMode = widget.mode == ChatListMode.templateManagement;
         
         // 调用仓库中新增的、更清晰的方法来创建文件夹
+        // addFolder (通过 saveChat) 现在会自动处理用户绑定
         await repo.addFolder(
           title: folderName,
           isTemplate: isTemplateMode,
@@ -1110,8 +1132,8 @@ class _ChatListItem extends ConsumerWidget { // 转换为 ConsumerWidget
 
   @override
   Widget build(BuildContext context, WidgetRef ref) { // 添加 WidgetRef
-    // 订阅第一条模型消息
-    final firstModelMessage = ref.watch(firstModelMessageProvider(chat.id));
+    // 优化：订阅 firstModelMessageProvider 的 FutureProvider
+    final firstModelMessageAsync = ref.watch(firstModelMessageProvider(chat.id));
 
     return Container(
       color: isSelected ? Theme.of(context).highlightColor : null,
@@ -1161,7 +1183,12 @@ class _ChatListItem extends ConsumerWidget { // 转换为 ConsumerWidget
                     Text(
                       chat.updatedAt.millisecondsSinceEpoch < 1000
                           ? '模板' // 如果是模板，显示“模板”
-                          : (firstModelMessage?.displayText ?? ''), // 否则显示第一条模型消息, 无消息则为空
+                          // 使用 .when 处理 FutureProvider 的不同状态
+                          : firstModelMessageAsync.when(
+                              data: (message) => message?.displayText ?? '', // 数据加载成功
+                              loading: () => '...', // 加载中
+                              error: (err, st) => '!', // 加载出错
+                            ),
                       // 消息内容与标题字号相同
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: chat.updatedAt.millisecondsSinceEpoch < 1000 ? Theme.of(context).colorScheme.primary : null,
@@ -1217,7 +1244,8 @@ class _ChatGridItem extends ConsumerWidget { // 转换为 ConsumerWidget
   @override
   Widget build(BuildContext context, WidgetRef ref) { // 添加 WidgetRef
     // 订阅第一条模型消息
-    final firstModelMessage = ref.watch(firstModelMessageProvider(chat.id));
+    // 优化：订阅 firstModelMessageProvider 的 FutureProvider
+    final firstModelMessageAsync = ref.watch(firstModelMessageProvider(chat.id));
 
     Widget displayWidget;
     if (chat.isFolder) {
@@ -1263,17 +1291,25 @@ class _ChatGridItem extends ConsumerWidget { // 转换为 ConsumerWidget
                 overflow: TextOverflow.ellipsis,
               ),
               // 如果是模板，则不显示消息预览 (允许1秒误差)
-              if (!chat.isFolder && chat.updatedAt.millisecondsSinceEpoch >= 1000 && firstModelMessage != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  firstModelMessage.displayText,
-                  textAlign: TextAlign.center,
-                  // 调整消息预览字体大小与标题一致
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              if (!chat.isFolder && chat.updatedAt.millisecondsSinceEpoch >= 1000)
+                // 使用 .when 处理 FutureProvider 的不同状态
+                firstModelMessageAsync.when(
+                  data: (message) {
+                    if (message == null) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        message.displayText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  error: (e, s) => const Icon(Icons.error_outline, color: Colors.red, size: 14),
                 ),
-              ],
             ],
           ),
         ),

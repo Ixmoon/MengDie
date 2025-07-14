@@ -15,19 +15,29 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // 导入应用配置和核心 Provider
 import 'ui/theme.dart'; // 导入主题配置
 import 'ui/router.dart'; // 导入路由配置
+import 'ui/providers/auth_providers.dart';
 import 'ui/providers/settings_providers.dart'; // 导入主题设置 Provider
 
 // --- 应用主函数 ---
 // 将 main 函数修改为 async 以便在启动前执行异步操作
-void main() {
+void main() async {
 	// 确保 Flutter 绑定已初始化。
 	WidgetsFlutterBinding.ensureInitialized();
 
+	// 创建一个 ProviderContainer 以便在 runApp 之前访问 Provider。
+	final container = ProviderContainer();
+
+	// 在应用启动时尝试自动登录。
+	// 这是实现登录持久化的关键步骤。
+	await container.read(authProvider.notifier).tryAutoLogin();
+
 	// 运行 Flutter 应用。
-	// ProviderScope 是 Riverpod 的根，使 Provider 在整个应用中可用。
+	// 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，
+	// 确保 Provider 的状态在整个应用生命周期内保持一致。
 	runApp(
-		const ProviderScope(
-			child: MyApp(),
+		UncontrolledProviderScope(
+			container: container,
+			child: const MyApp(),
 		),
 	);
 }

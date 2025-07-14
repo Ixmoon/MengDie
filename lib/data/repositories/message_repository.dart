@@ -36,6 +36,11 @@ class MessageRepository {
     return messageData != null ? MessageMapper.fromData(messageData) : null;
   }
 
+  Future<Message?> getFirstModelMessage(int chatId) async {
+    final messageData = await _messageDao.findFirstModelMessage(chatId);
+    return messageData != null ? MessageMapper.fromData(messageData) : null;
+  }
+
   Future<List<Message>> getLastNMessagesForChat(int chatId, int n) async {
     if (n <= 0) return [];
     final messageDataList = await _messageDao.getLastNMessagesForChat(chatId, n);

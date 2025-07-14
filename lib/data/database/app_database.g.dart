@@ -62,12 +62,11 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       const VerificationMeta('isFolder');
   @override
   late final GeneratedColumn<bool> isFolder = GeneratedColumn<bool>(
-      'is_folder', aliasedName, false,
+      'is_folder', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("is_folder" IN (0, 1))'),
-      defaultValue: const Constant(false));
+          GeneratedColumn.constraintIsAlways('CHECK ("is_folder" IN (0, 1))'));
   static const VerificationMeta _parentFolderIdMeta =
       const VerificationMeta('parentFolderId');
   @override
@@ -158,6 +157,34 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   late final GeneratedColumn<String> continuePrompt = GeneratedColumn<String>(
       'continue_prompt', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _enableHelpMeReplyMeta =
+      const VerificationMeta('enableHelpMeReply');
+  @override
+  late final GeneratedColumn<bool> enableHelpMeReply = GeneratedColumn<bool>(
+      'enable_help_me_reply', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("enable_help_me_reply" IN (0, 1))'));
+  static const VerificationMeta _helpMeReplyPromptMeta =
+      const VerificationMeta('helpMeReplyPrompt');
+  @override
+  late final GeneratedColumn<String> helpMeReplyPrompt =
+      GeneratedColumn<String>('help_me_reply_prompt', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _helpMeReplyApiConfigIdMeta =
+      const VerificationMeta('helpMeReplyApiConfigId');
+  @override
+  late final GeneratedColumn<String> helpMeReplyApiConfigId =
+      GeneratedColumn<String>('help_me_reply_api_config_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  late final GeneratedColumnWithTypeConverter<HelpMeReplyTriggerMode?, String>
+      helpMeReplyTriggerMode = GeneratedColumn<String>(
+              'help_me_reply_trigger_mode', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<HelpMeReplyTriggerMode?>(
+              $ChatsTable.$converterhelpMeReplyTriggerMode);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -182,7 +209,11 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         enableSecondaryXml,
         secondaryXmlPrompt,
         secondaryXmlApiConfigId,
-        continuePrompt
+        continuePrompt,
+        enableHelpMeReply,
+        helpMeReplyPrompt,
+        helpMeReplyApiConfigId,
+        helpMeReplyTriggerMode
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -303,6 +334,25 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           continuePrompt.isAcceptableOrUnknown(
               data['continue_prompt']!, _continuePromptMeta));
     }
+    if (data.containsKey('enable_help_me_reply')) {
+      context.handle(
+          _enableHelpMeReplyMeta,
+          enableHelpMeReply.isAcceptableOrUnknown(
+              data['enable_help_me_reply']!, _enableHelpMeReplyMeta));
+    }
+    if (data.containsKey('help_me_reply_prompt')) {
+      context.handle(
+          _helpMeReplyPromptMeta,
+          helpMeReplyPrompt.isAcceptableOrUnknown(
+              data['help_me_reply_prompt']!, _helpMeReplyPromptMeta));
+    }
+    if (data.containsKey('help_me_reply_api_config_id')) {
+      context.handle(
+          _helpMeReplyApiConfigIdMeta,
+          helpMeReplyApiConfigId.isAcceptableOrUnknown(
+              data['help_me_reply_api_config_id']!,
+              _helpMeReplyApiConfigIdMeta));
+    }
     return context;
   }
 
@@ -329,7 +379,7 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       orderIndex: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}order_index']),
       isFolder: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}is_folder'])!,
+          .read(DriftSqlType.bool, data['${effectivePrefix}is_folder']),
       parentFolderId: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}parent_folder_id']),
       contextConfig: $ChatsTable.$convertercontextConfig.fromSql(
@@ -364,6 +414,16 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           data['${effectivePrefix}secondary_xml_api_config_id']),
       continuePrompt: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}continue_prompt']),
+      enableHelpMeReply: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}enable_help_me_reply']),
+      helpMeReplyPrompt: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}help_me_reply_prompt']),
+      helpMeReplyApiConfigId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}help_me_reply_api_config_id']),
+      helpMeReplyTriggerMode: $ChatsTable.$converterhelpMeReplyTriggerMode
+          .fromSql(attachedDatabase.typeMapping.read(DriftSqlType.string,
+              data['${effectivePrefix}help_me_reply_trigger_mode'])),
     );
   }
 
@@ -382,6 +442,9 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       NullAwareTypeConverter.wrap($converterapiType);
   static TypeConverter<Map<String, dynamic>?, String?>
       $convertergenerationConfig = const JsonMapConverter();
+  static TypeConverter<HelpMeReplyTriggerMode?, String?>
+      $converterhelpMeReplyTriggerMode =
+      const HelpMeReplyTriggerModeConverter();
 }
 
 class ChatData extends DataClass implements Insertable<ChatData> {
@@ -393,7 +456,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final String? coverImageBase64;
   final String? backgroundImagePath;
   final int? orderIndex;
-  final bool isFolder;
+  final bool? isFolder;
   final int? parentFolderId;
   final DriftContextConfig contextConfig;
   final List<DriftXmlRule> xmlRules;
@@ -408,6 +471,10 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final String? secondaryXmlPrompt;
   final String? secondaryXmlApiConfigId;
   final String? continuePrompt;
+  final bool? enableHelpMeReply;
+  final String? helpMeReplyPrompt;
+  final String? helpMeReplyApiConfigId;
+  final HelpMeReplyTriggerMode? helpMeReplyTriggerMode;
   const ChatData(
       {required this.id,
       this.title,
@@ -417,7 +484,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       this.coverImageBase64,
       this.backgroundImagePath,
       this.orderIndex,
-      required this.isFolder,
+      this.isFolder,
       this.parentFolderId,
       required this.contextConfig,
       required this.xmlRules,
@@ -431,7 +498,11 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       this.enableSecondaryXml,
       this.secondaryXmlPrompt,
       this.secondaryXmlApiConfigId,
-      this.continuePrompt});
+      this.continuePrompt,
+      this.enableHelpMeReply,
+      this.helpMeReplyPrompt,
+      this.helpMeReplyApiConfigId,
+      this.helpMeReplyTriggerMode});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -453,7 +524,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
     if (!nullToAbsent || orderIndex != null) {
       map['order_index'] = Variable<int>(orderIndex);
     }
-    map['is_folder'] = Variable<bool>(isFolder);
+    if (!nullToAbsent || isFolder != null) {
+      map['is_folder'] = Variable<bool>(isFolder);
+    }
     if (!nullToAbsent || parentFolderId != null) {
       map['parent_folder_id'] = Variable<int>(parentFolderId);
     }
@@ -502,6 +575,21 @@ class ChatData extends DataClass implements Insertable<ChatData> {
     if (!nullToAbsent || continuePrompt != null) {
       map['continue_prompt'] = Variable<String>(continuePrompt);
     }
+    if (!nullToAbsent || enableHelpMeReply != null) {
+      map['enable_help_me_reply'] = Variable<bool>(enableHelpMeReply);
+    }
+    if (!nullToAbsent || helpMeReplyPrompt != null) {
+      map['help_me_reply_prompt'] = Variable<String>(helpMeReplyPrompt);
+    }
+    if (!nullToAbsent || helpMeReplyApiConfigId != null) {
+      map['help_me_reply_api_config_id'] =
+          Variable<String>(helpMeReplyApiConfigId);
+    }
+    if (!nullToAbsent || helpMeReplyTriggerMode != null) {
+      map['help_me_reply_trigger_mode'] = Variable<String>($ChatsTable
+          .$converterhelpMeReplyTriggerMode
+          .toSql(helpMeReplyTriggerMode));
+    }
     return map;
   }
 
@@ -524,7 +612,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       orderIndex: orderIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(orderIndex),
-      isFolder: Value(isFolder),
+      isFolder: isFolder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(isFolder),
       parentFolderId: parentFolderId == null && nullToAbsent
           ? const Value.absent()
           : Value(parentFolderId),
@@ -563,6 +653,18 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       continuePrompt: continuePrompt == null && nullToAbsent
           ? const Value.absent()
           : Value(continuePrompt),
+      enableHelpMeReply: enableHelpMeReply == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enableHelpMeReply),
+      helpMeReplyPrompt: helpMeReplyPrompt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(helpMeReplyPrompt),
+      helpMeReplyApiConfigId: helpMeReplyApiConfigId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(helpMeReplyApiConfigId),
+      helpMeReplyTriggerMode: helpMeReplyTriggerMode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(helpMeReplyTriggerMode),
     );
   }
 
@@ -579,7 +681,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       backgroundImagePath:
           serializer.fromJson<String?>(json['backgroundImagePath']),
       orderIndex: serializer.fromJson<int?>(json['orderIndex']),
-      isFolder: serializer.fromJson<bool>(json['isFolder']),
+      isFolder: serializer.fromJson<bool?>(json['isFolder']),
       parentFolderId: serializer.fromJson<int?>(json['parentFolderId']),
       contextConfig:
           serializer.fromJson<DriftContextConfig>(json['contextConfig']),
@@ -602,6 +704,13 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       secondaryXmlApiConfigId:
           serializer.fromJson<String?>(json['secondaryXmlApiConfigId']),
       continuePrompt: serializer.fromJson<String?>(json['continuePrompt']),
+      enableHelpMeReply: serializer.fromJson<bool?>(json['enableHelpMeReply']),
+      helpMeReplyPrompt:
+          serializer.fromJson<String?>(json['helpMeReplyPrompt']),
+      helpMeReplyApiConfigId:
+          serializer.fromJson<String?>(json['helpMeReplyApiConfigId']),
+      helpMeReplyTriggerMode: serializer
+          .fromJson<HelpMeReplyTriggerMode?>(json['helpMeReplyTriggerMode']),
     );
   }
   @override
@@ -616,7 +725,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'coverImageBase64': serializer.toJson<String?>(coverImageBase64),
       'backgroundImagePath': serializer.toJson<String?>(backgroundImagePath),
       'orderIndex': serializer.toJson<int?>(orderIndex),
-      'isFolder': serializer.toJson<bool>(isFolder),
+      'isFolder': serializer.toJson<bool?>(isFolder),
       'parentFolderId': serializer.toJson<int?>(parentFolderId),
       'contextConfig': serializer.toJson<DriftContextConfig>(contextConfig),
       'xmlRules': serializer.toJson<List<DriftXmlRule>>(xmlRules),
@@ -634,6 +743,12 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'secondaryXmlApiConfigId':
           serializer.toJson<String?>(secondaryXmlApiConfigId),
       'continuePrompt': serializer.toJson<String?>(continuePrompt),
+      'enableHelpMeReply': serializer.toJson<bool?>(enableHelpMeReply),
+      'helpMeReplyPrompt': serializer.toJson<String?>(helpMeReplyPrompt),
+      'helpMeReplyApiConfigId':
+          serializer.toJson<String?>(helpMeReplyApiConfigId),
+      'helpMeReplyTriggerMode':
+          serializer.toJson<HelpMeReplyTriggerMode?>(helpMeReplyTriggerMode),
     };
   }
 
@@ -646,7 +761,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           Value<String?> coverImageBase64 = const Value.absent(),
           Value<String?> backgroundImagePath = const Value.absent(),
           Value<int?> orderIndex = const Value.absent(),
-          bool? isFolder,
+          Value<bool?> isFolder = const Value.absent(),
           Value<int?> parentFolderId = const Value.absent(),
           DriftContextConfig? contextConfig,
           List<DriftXmlRule>? xmlRules,
@@ -660,7 +775,12 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           Value<bool?> enableSecondaryXml = const Value.absent(),
           Value<String?> secondaryXmlPrompt = const Value.absent(),
           Value<String?> secondaryXmlApiConfigId = const Value.absent(),
-          Value<String?> continuePrompt = const Value.absent()}) =>
+          Value<String?> continuePrompt = const Value.absent(),
+          Value<bool?> enableHelpMeReply = const Value.absent(),
+          Value<String?> helpMeReplyPrompt = const Value.absent(),
+          Value<String?> helpMeReplyApiConfigId = const Value.absent(),
+          Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode =
+              const Value.absent()}) =>
       ChatData(
         id: id ?? this.id,
         title: title.present ? title.value : this.title,
@@ -675,7 +795,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
             ? backgroundImagePath.value
             : this.backgroundImagePath,
         orderIndex: orderIndex.present ? orderIndex.value : this.orderIndex,
-        isFolder: isFolder ?? this.isFolder,
+        isFolder: isFolder.present ? isFolder.value : this.isFolder,
         parentFolderId:
             parentFolderId.present ? parentFolderId.value : this.parentFolderId,
         contextConfig: contextConfig ?? this.contextConfig,
@@ -707,6 +827,18 @@ class ChatData extends DataClass implements Insertable<ChatData> {
             : this.secondaryXmlApiConfigId,
         continuePrompt:
             continuePrompt.present ? continuePrompt.value : this.continuePrompt,
+        enableHelpMeReply: enableHelpMeReply.present
+            ? enableHelpMeReply.value
+            : this.enableHelpMeReply,
+        helpMeReplyPrompt: helpMeReplyPrompt.present
+            ? helpMeReplyPrompt.value
+            : this.helpMeReplyPrompt,
+        helpMeReplyApiConfigId: helpMeReplyApiConfigId.present
+            ? helpMeReplyApiConfigId.value
+            : this.helpMeReplyApiConfigId,
+        helpMeReplyTriggerMode: helpMeReplyTriggerMode.present
+            ? helpMeReplyTriggerMode.value
+            : this.helpMeReplyTriggerMode,
       );
   ChatData copyWithCompanion(ChatsCompanion data) {
     return ChatData(
@@ -763,6 +895,18 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       continuePrompt: data.continuePrompt.present
           ? data.continuePrompt.value
           : this.continuePrompt,
+      enableHelpMeReply: data.enableHelpMeReply.present
+          ? data.enableHelpMeReply.value
+          : this.enableHelpMeReply,
+      helpMeReplyPrompt: data.helpMeReplyPrompt.present
+          ? data.helpMeReplyPrompt.value
+          : this.helpMeReplyPrompt,
+      helpMeReplyApiConfigId: data.helpMeReplyApiConfigId.present
+          ? data.helpMeReplyApiConfigId.value
+          : this.helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: data.helpMeReplyTriggerMode.present
+          ? data.helpMeReplyTriggerMode.value
+          : this.helpMeReplyTriggerMode,
     );
   }
 
@@ -791,7 +935,11 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           ..write('enableSecondaryXml: $enableSecondaryXml, ')
           ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
           ..write('secondaryXmlApiConfigId: $secondaryXmlApiConfigId, ')
-          ..write('continuePrompt: $continuePrompt')
+          ..write('continuePrompt: $continuePrompt, ')
+          ..write('enableHelpMeReply: $enableHelpMeReply, ')
+          ..write('helpMeReplyPrompt: $helpMeReplyPrompt, ')
+          ..write('helpMeReplyApiConfigId: $helpMeReplyApiConfigId, ')
+          ..write('helpMeReplyTriggerMode: $helpMeReplyTriggerMode')
           ..write(')'))
         .toString();
   }
@@ -820,7 +968,11 @@ class ChatData extends DataClass implements Insertable<ChatData> {
         enableSecondaryXml,
         secondaryXmlPrompt,
         secondaryXmlApiConfigId,
-        continuePrompt
+        continuePrompt,
+        enableHelpMeReply,
+        helpMeReplyPrompt,
+        helpMeReplyApiConfigId,
+        helpMeReplyTriggerMode
       ]);
   @override
   bool operator ==(Object other) =>
@@ -848,7 +1000,11 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           other.enableSecondaryXml == this.enableSecondaryXml &&
           other.secondaryXmlPrompt == this.secondaryXmlPrompt &&
           other.secondaryXmlApiConfigId == this.secondaryXmlApiConfigId &&
-          other.continuePrompt == this.continuePrompt);
+          other.continuePrompt == this.continuePrompt &&
+          other.enableHelpMeReply == this.enableHelpMeReply &&
+          other.helpMeReplyPrompt == this.helpMeReplyPrompt &&
+          other.helpMeReplyApiConfigId == this.helpMeReplyApiConfigId &&
+          other.helpMeReplyTriggerMode == this.helpMeReplyTriggerMode);
 }
 
 class ChatsCompanion extends UpdateCompanion<ChatData> {
@@ -860,7 +1016,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<String?> coverImageBase64;
   final Value<String?> backgroundImagePath;
   final Value<int?> orderIndex;
-  final Value<bool> isFolder;
+  final Value<bool?> isFolder;
   final Value<int?> parentFolderId;
   final Value<DriftContextConfig> contextConfig;
   final Value<List<DriftXmlRule>> xmlRules;
@@ -875,6 +1031,10 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<String?> secondaryXmlPrompt;
   final Value<String?> secondaryXmlApiConfigId;
   final Value<String?> continuePrompt;
+  final Value<bool?> enableHelpMeReply;
+  final Value<String?> helpMeReplyPrompt;
+  final Value<String?> helpMeReplyApiConfigId;
+  final Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode;
   const ChatsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -899,6 +1059,10 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.secondaryXmlPrompt = const Value.absent(),
     this.secondaryXmlApiConfigId = const Value.absent(),
     this.continuePrompt = const Value.absent(),
+    this.enableHelpMeReply = const Value.absent(),
+    this.helpMeReplyPrompt = const Value.absent(),
+    this.helpMeReplyApiConfigId = const Value.absent(),
+    this.helpMeReplyTriggerMode = const Value.absent(),
   });
   ChatsCompanion.insert({
     this.id = const Value.absent(),
@@ -924,6 +1088,10 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.secondaryXmlPrompt = const Value.absent(),
     this.secondaryXmlApiConfigId = const Value.absent(),
     this.continuePrompt = const Value.absent(),
+    this.enableHelpMeReply = const Value.absent(),
+    this.helpMeReplyPrompt = const Value.absent(),
+    this.helpMeReplyApiConfigId = const Value.absent(),
+    this.helpMeReplyTriggerMode = const Value.absent(),
   })  : createdAt = Value(createdAt),
         updatedAt = Value(updatedAt),
         contextConfig = Value(contextConfig),
@@ -952,6 +1120,10 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     Expression<String>? secondaryXmlPrompt,
     Expression<String>? secondaryXmlApiConfigId,
     Expression<String>? continuePrompt,
+    Expression<bool>? enableHelpMeReply,
+    Expression<String>? helpMeReplyPrompt,
+    Expression<String>? helpMeReplyApiConfigId,
+    Expression<String>? helpMeReplyTriggerMode,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -984,6 +1156,12 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       if (secondaryXmlApiConfigId != null)
         'secondary_xml_api_config_id': secondaryXmlApiConfigId,
       if (continuePrompt != null) 'continue_prompt': continuePrompt,
+      if (enableHelpMeReply != null) 'enable_help_me_reply': enableHelpMeReply,
+      if (helpMeReplyPrompt != null) 'help_me_reply_prompt': helpMeReplyPrompt,
+      if (helpMeReplyApiConfigId != null)
+        'help_me_reply_api_config_id': helpMeReplyApiConfigId,
+      if (helpMeReplyTriggerMode != null)
+        'help_me_reply_trigger_mode': helpMeReplyTriggerMode,
     });
   }
 
@@ -996,7 +1174,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<String?>? coverImageBase64,
       Value<String?>? backgroundImagePath,
       Value<int?>? orderIndex,
-      Value<bool>? isFolder,
+      Value<bool?>? isFolder,
       Value<int?>? parentFolderId,
       Value<DriftContextConfig>? contextConfig,
       Value<List<DriftXmlRule>>? xmlRules,
@@ -1010,7 +1188,11 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<bool?>? enableSecondaryXml,
       Value<String?>? secondaryXmlPrompt,
       Value<String?>? secondaryXmlApiConfigId,
-      Value<String?>? continuePrompt}) {
+      Value<String?>? continuePrompt,
+      Value<bool?>? enableHelpMeReply,
+      Value<String?>? helpMeReplyPrompt,
+      Value<String?>? helpMeReplyApiConfigId,
+      Value<HelpMeReplyTriggerMode?>? helpMeReplyTriggerMode}) {
     return ChatsCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -1037,6 +1219,12 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       secondaryXmlApiConfigId:
           secondaryXmlApiConfigId ?? this.secondaryXmlApiConfigId,
       continuePrompt: continuePrompt ?? this.continuePrompt,
+      enableHelpMeReply: enableHelpMeReply ?? this.enableHelpMeReply,
+      helpMeReplyPrompt: helpMeReplyPrompt ?? this.helpMeReplyPrompt,
+      helpMeReplyApiConfigId:
+          helpMeReplyApiConfigId ?? this.helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode:
+          helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
     );
   }
 
@@ -1119,6 +1307,21 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     if (continuePrompt.present) {
       map['continue_prompt'] = Variable<String>(continuePrompt.value);
     }
+    if (enableHelpMeReply.present) {
+      map['enable_help_me_reply'] = Variable<bool>(enableHelpMeReply.value);
+    }
+    if (helpMeReplyPrompt.present) {
+      map['help_me_reply_prompt'] = Variable<String>(helpMeReplyPrompt.value);
+    }
+    if (helpMeReplyApiConfigId.present) {
+      map['help_me_reply_api_config_id'] =
+          Variable<String>(helpMeReplyApiConfigId.value);
+    }
+    if (helpMeReplyTriggerMode.present) {
+      map['help_me_reply_trigger_mode'] = Variable<String>($ChatsTable
+          .$converterhelpMeReplyTriggerMode
+          .toSql(helpMeReplyTriggerMode.value));
+    }
     return map;
   }
 
@@ -1147,7 +1350,11 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
           ..write('enableSecondaryXml: $enableSecondaryXml, ')
           ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
           ..write('secondaryXmlApiConfigId: $secondaryXmlApiConfigId, ')
-          ..write('continuePrompt: $continuePrompt')
+          ..write('continuePrompt: $continuePrompt, ')
+          ..write('enableHelpMeReply: $enableHelpMeReply, ')
+          ..write('helpMeReplyPrompt: $helpMeReplyPrompt, ')
+          ..write('helpMeReplyApiConfigId: $helpMeReplyApiConfigId, ')
+          ..write('helpMeReplyTriggerMode: $helpMeReplyTriggerMode')
           ..write(')'))
         .toString();
   }
@@ -1560,6 +1767,11 @@ class $ApiConfigsTable extends ApiConfigs
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ApiConfigsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+      'user_id', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -1597,12 +1809,11 @@ class $ApiConfigsTable extends ApiConfigs
       const VerificationMeta('useCustomTemperature');
   @override
   late final GeneratedColumn<bool> useCustomTemperature = GeneratedColumn<bool>(
-      'use_custom_temperature', aliasedName, false,
+      'use_custom_temperature', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("use_custom_temperature" IN (0, 1))'),
-      defaultValue: const Constant(false));
+          'CHECK ("use_custom_temperature" IN (0, 1))'));
   static const VerificationMeta _temperatureMeta =
       const VerificationMeta('temperature');
   @override
@@ -1613,12 +1824,11 @@ class $ApiConfigsTable extends ApiConfigs
       const VerificationMeta('useCustomTopP');
   @override
   late final GeneratedColumn<bool> useCustomTopP = GeneratedColumn<bool>(
-      'use_custom_top_p', aliasedName, false,
+      'use_custom_top_p', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("use_custom_top_p" IN (0, 1))'),
-      defaultValue: const Constant(false));
+          'CHECK ("use_custom_top_p" IN (0, 1))'));
   static const VerificationMeta _topPMeta = const VerificationMeta('topP');
   @override
   late final GeneratedColumn<double> topP = GeneratedColumn<double>(
@@ -1628,12 +1838,11 @@ class $ApiConfigsTable extends ApiConfigs
       const VerificationMeta('useCustomTopK');
   @override
   late final GeneratedColumn<bool> useCustomTopK = GeneratedColumn<bool>(
-      'use_custom_top_k', aliasedName, false,
+      'use_custom_top_k', aliasedName, true,
       type: DriftSqlType.bool,
       requiredDuringInsert: false,
       defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("use_custom_top_k" IN (0, 1))'),
-      defaultValue: const Constant(false));
+          'CHECK ("use_custom_top_k" IN (0, 1))'));
   static const VerificationMeta _topKMeta = const VerificationMeta('topK');
   @override
   late final GeneratedColumn<int> topK = GeneratedColumn<int>(
@@ -1651,7 +1860,7 @@ class $ApiConfigsTable extends ApiConfigs
               'stop_sequences', aliasedName, true,
               type: DriftSqlType.string, requiredDuringInsert: false)
           .withConverter<List<String>?>(
-              $ApiConfigsTable.$converterstopSequences);
+              $ApiConfigsTable.$converterstopSequencesn);
   static const VerificationMeta _enableReasoningEffortMeta =
       const VerificationMeta('enableReasoningEffort');
   @override
@@ -1672,20 +1881,17 @@ class $ApiConfigsTable extends ApiConfigs
       const VerificationMeta('createdAt');
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime,
-      requiredDuringInsert: false,
-      defaultValue: currentDateAndTime);
+      'created_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, false,
-      type: DriftSqlType.dateTime,
-      requiredDuringInsert: false,
-      defaultValue: currentDateAndTime);
+      'updated_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
+        userId,
         id,
         name,
         apiType,
@@ -1715,6 +1921,10 @@ class $ApiConfigsTable extends ApiConfigs
       {bool isInserting = false}) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(_userIdMeta,
+          userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta));
+    }
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
@@ -1799,6 +2009,8 @@ class $ApiConfigsTable extends ApiConfigs
   ApiConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ApiConfig(
+      userId: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}user_id']),
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
@@ -1813,20 +2025,20 @@ class $ApiConfigsTable extends ApiConfigs
       baseUrl: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}base_url']),
       useCustomTemperature: attachedDatabase.typeMapping.read(
-          DriftSqlType.bool, data['${effectivePrefix}use_custom_temperature'])!,
+          DriftSqlType.bool, data['${effectivePrefix}use_custom_temperature']),
       temperature: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}temperature']),
       useCustomTopP: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_p'])!,
+          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_p']),
       topP: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}top_p']),
       useCustomTopK: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_k'])!,
+          .read(DriftSqlType.bool, data['${effectivePrefix}use_custom_top_k']),
       topK: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}top_k']),
       maxOutputTokens: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}max_output_tokens']),
-      stopSequences: $ApiConfigsTable.$converterstopSequences.fromSql(
+      stopSequences: $ApiConfigsTable.$converterstopSequencesn.fromSql(
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}stop_sequences'])),
       enableReasoningEffort: attachedDatabase.typeMapping.read(
@@ -1835,9 +2047,9 @@ class $ApiConfigsTable extends ApiConfigs
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}reasoning_effort'])),
       createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at']),
       updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
     );
   }
 
@@ -1848,53 +2060,60 @@ class $ApiConfigsTable extends ApiConfigs
 
   static TypeConverter<LlmType, String> $converterapiType =
       const LlmTypeConverter();
-  static TypeConverter<List<String>?, String?> $converterstopSequences =
+  static TypeConverter<List<String>, String> $converterstopSequences =
       const StringListConverter();
+  static TypeConverter<List<String>?, String?> $converterstopSequencesn =
+      NullAwareTypeConverter.wrap($converterstopSequences);
   static TypeConverter<OpenAIReasoningEffort?, String?>
       $converterreasoningEffort = const OpenAIReasoningEffortConverter();
 }
 
 class ApiConfig extends DataClass implements Insertable<ApiConfig> {
+  final int? userId;
   final String id;
   final String name;
   final LlmType apiType;
   final String model;
   final String? apiKey;
   final String? baseUrl;
-  final bool useCustomTemperature;
+  final bool? useCustomTemperature;
   final double? temperature;
-  final bool useCustomTopP;
+  final bool? useCustomTopP;
   final double? topP;
-  final bool useCustomTopK;
+  final bool? useCustomTopK;
   final int? topK;
   final int? maxOutputTokens;
   final List<String>? stopSequences;
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   const ApiConfig(
-      {required this.id,
+      {this.userId,
+      required this.id,
       required this.name,
       required this.apiType,
       required this.model,
       this.apiKey,
       this.baseUrl,
-      required this.useCustomTemperature,
+      this.useCustomTemperature,
       this.temperature,
-      required this.useCustomTopP,
+      this.useCustomTopP,
       this.topP,
-      required this.useCustomTopK,
+      this.useCustomTopK,
       this.topK,
       this.maxOutputTokens,
       this.stopSequences,
       this.enableReasoningEffort,
       this.reasoningEffort,
-      required this.createdAt,
-      required this.updatedAt});
+      this.createdAt,
+      this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<int>(userId);
+    }
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     {
@@ -1908,15 +2127,21 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
     if (!nullToAbsent || baseUrl != null) {
       map['base_url'] = Variable<String>(baseUrl);
     }
-    map['use_custom_temperature'] = Variable<bool>(useCustomTemperature);
+    if (!nullToAbsent || useCustomTemperature != null) {
+      map['use_custom_temperature'] = Variable<bool>(useCustomTemperature);
+    }
     if (!nullToAbsent || temperature != null) {
       map['temperature'] = Variable<double>(temperature);
     }
-    map['use_custom_top_p'] = Variable<bool>(useCustomTopP);
+    if (!nullToAbsent || useCustomTopP != null) {
+      map['use_custom_top_p'] = Variable<bool>(useCustomTopP);
+    }
     if (!nullToAbsent || topP != null) {
       map['top_p'] = Variable<double>(topP);
     }
-    map['use_custom_top_k'] = Variable<bool>(useCustomTopK);
+    if (!nullToAbsent || useCustomTopK != null) {
+      map['use_custom_top_k'] = Variable<bool>(useCustomTopK);
+    }
     if (!nullToAbsent || topK != null) {
       map['top_k'] = Variable<int>(topK);
     }
@@ -1925,7 +2150,7 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
     }
     if (!nullToAbsent || stopSequences != null) {
       map['stop_sequences'] = Variable<String>(
-          $ApiConfigsTable.$converterstopSequences.toSql(stopSequences));
+          $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences));
     }
     if (!nullToAbsent || enableReasoningEffort != null) {
       map['enable_reasoning_effort'] = Variable<bool>(enableReasoningEffort);
@@ -1934,13 +2159,19 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       map['reasoning_effort'] = Variable<String>(
           $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort));
     }
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || createdAt != null) {
+      map['created_at'] = Variable<DateTime>(createdAt);
+    }
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     return map;
   }
 
   ApiConfigsCompanion toCompanion(bool nullToAbsent) {
     return ApiConfigsCompanion(
+      userId:
+          userId == null && nullToAbsent ? const Value.absent() : Value(userId),
       id: Value(id),
       name: Value(name),
       apiType: Value(apiType),
@@ -1950,13 +2181,19 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       baseUrl: baseUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(baseUrl),
-      useCustomTemperature: Value(useCustomTemperature),
+      useCustomTemperature: useCustomTemperature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTemperature),
       temperature: temperature == null && nullToAbsent
           ? const Value.absent()
           : Value(temperature),
-      useCustomTopP: Value(useCustomTopP),
+      useCustomTopP: useCustomTopP == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTopP),
       topP: topP == null && nullToAbsent ? const Value.absent() : Value(topP),
-      useCustomTopK: Value(useCustomTopK),
+      useCustomTopK: useCustomTopK == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTopK),
       topK: topK == null && nullToAbsent ? const Value.absent() : Value(topK),
       maxOutputTokens: maxOutputTokens == null && nullToAbsent
           ? const Value.absent()
@@ -1970,8 +2207,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       reasoningEffort: reasoningEffort == null && nullToAbsent
           ? const Value.absent()
           : Value(reasoningEffort),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
+      createdAt: createdAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
     );
   }
 
@@ -1979,6 +2220,7 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       {ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ApiConfig(
+      userId: serializer.fromJson<int?>(json['userId']),
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       apiType: serializer.fromJson<LlmType>(json['apiType']),
@@ -1986,11 +2228,11 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       apiKey: serializer.fromJson<String?>(json['apiKey']),
       baseUrl: serializer.fromJson<String?>(json['baseUrl']),
       useCustomTemperature:
-          serializer.fromJson<bool>(json['useCustomTemperature']),
+          serializer.fromJson<bool?>(json['useCustomTemperature']),
       temperature: serializer.fromJson<double?>(json['temperature']),
-      useCustomTopP: serializer.fromJson<bool>(json['useCustomTopP']),
+      useCustomTopP: serializer.fromJson<bool?>(json['useCustomTopP']),
       topP: serializer.fromJson<double?>(json['topP']),
-      useCustomTopK: serializer.fromJson<bool>(json['useCustomTopK']),
+      useCustomTopK: serializer.fromJson<bool?>(json['useCustomTopK']),
       topK: serializer.fromJson<int?>(json['topK']),
       maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
       stopSequences: serializer.fromJson<List<String>?>(json['stopSequences']),
@@ -1998,67 +2240,74 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           serializer.fromJson<bool?>(json['enableReasoningEffort']),
       reasoningEffort:
           serializer.fromJson<OpenAIReasoningEffort?>(json['reasoningEffort']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'userId': serializer.toJson<int?>(userId),
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'apiType': serializer.toJson<LlmType>(apiType),
       'model': serializer.toJson<String>(model),
       'apiKey': serializer.toJson<String?>(apiKey),
       'baseUrl': serializer.toJson<String?>(baseUrl),
-      'useCustomTemperature': serializer.toJson<bool>(useCustomTemperature),
+      'useCustomTemperature': serializer.toJson<bool?>(useCustomTemperature),
       'temperature': serializer.toJson<double?>(temperature),
-      'useCustomTopP': serializer.toJson<bool>(useCustomTopP),
+      'useCustomTopP': serializer.toJson<bool?>(useCustomTopP),
       'topP': serializer.toJson<double?>(topP),
-      'useCustomTopK': serializer.toJson<bool>(useCustomTopK),
+      'useCustomTopK': serializer.toJson<bool?>(useCustomTopK),
       'topK': serializer.toJson<int?>(topK),
       'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
       'stopSequences': serializer.toJson<List<String>?>(stopSequences),
       'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
       'reasoningEffort':
           serializer.toJson<OpenAIReasoningEffort?>(reasoningEffort),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
   }
 
   ApiConfig copyWith(
-          {String? id,
+          {Value<int?> userId = const Value.absent(),
+          String? id,
           String? name,
           LlmType? apiType,
           String? model,
           Value<String?> apiKey = const Value.absent(),
           Value<String?> baseUrl = const Value.absent(),
-          bool? useCustomTemperature,
+          Value<bool?> useCustomTemperature = const Value.absent(),
           Value<double?> temperature = const Value.absent(),
-          bool? useCustomTopP,
+          Value<bool?> useCustomTopP = const Value.absent(),
           Value<double?> topP = const Value.absent(),
-          bool? useCustomTopK,
+          Value<bool?> useCustomTopK = const Value.absent(),
           Value<int?> topK = const Value.absent(),
           Value<int?> maxOutputTokens = const Value.absent(),
           Value<List<String>?> stopSequences = const Value.absent(),
           Value<bool?> enableReasoningEffort = const Value.absent(),
           Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
-          DateTime? createdAt,
-          DateTime? updatedAt}) =>
+          Value<DateTime?> createdAt = const Value.absent(),
+          Value<DateTime?> updatedAt = const Value.absent()}) =>
       ApiConfig(
+        userId: userId.present ? userId.value : this.userId,
         id: id ?? this.id,
         name: name ?? this.name,
         apiType: apiType ?? this.apiType,
         model: model ?? this.model,
         apiKey: apiKey.present ? apiKey.value : this.apiKey,
         baseUrl: baseUrl.present ? baseUrl.value : this.baseUrl,
-        useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
+        useCustomTemperature: useCustomTemperature.present
+            ? useCustomTemperature.value
+            : this.useCustomTemperature,
         temperature: temperature.present ? temperature.value : this.temperature,
-        useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+        useCustomTopP:
+            useCustomTopP.present ? useCustomTopP.value : this.useCustomTopP,
         topP: topP.present ? topP.value : this.topP,
-        useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+        useCustomTopK:
+            useCustomTopK.present ? useCustomTopK.value : this.useCustomTopK,
         topK: topK.present ? topK.value : this.topK,
         maxOutputTokens: maxOutputTokens.present
             ? maxOutputTokens.value
@@ -2071,11 +2320,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
         reasoningEffort: reasoningEffort.present
             ? reasoningEffort.value
             : this.reasoningEffort,
-        createdAt: createdAt ?? this.createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
+        createdAt: createdAt.present ? createdAt.value : this.createdAt,
+        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
   ApiConfig copyWithCompanion(ApiConfigsCompanion data) {
     return ApiConfig(
+      userId: data.userId.present ? data.userId.value : this.userId,
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       apiType: data.apiType.present ? data.apiType.value : this.apiType,
@@ -2115,6 +2365,7 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   @override
   String toString() {
     return (StringBuffer('ApiConfig(')
+          ..write('userId: $userId, ')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('apiType: $apiType, ')
@@ -2139,6 +2390,7 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
 
   @override
   int get hashCode => Object.hash(
+      userId,
       id,
       name,
       apiType,
@@ -2161,6 +2413,7 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ApiConfig &&
+          other.userId == this.userId &&
           other.id == this.id &&
           other.name == this.name &&
           other.apiType == this.apiType &&
@@ -2182,26 +2435,28 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
 }
 
 class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
+  final Value<int?> userId;
   final Value<String> id;
   final Value<String> name;
   final Value<LlmType> apiType;
   final Value<String> model;
   final Value<String?> apiKey;
   final Value<String?> baseUrl;
-  final Value<bool> useCustomTemperature;
+  final Value<bool?> useCustomTemperature;
   final Value<double?> temperature;
-  final Value<bool> useCustomTopP;
+  final Value<bool?> useCustomTopP;
   final Value<double?> topP;
-  final Value<bool> useCustomTopK;
+  final Value<bool?> useCustomTopK;
   final Value<int?> topK;
   final Value<int?> maxOutputTokens;
   final Value<List<String>?> stopSequences;
   final Value<bool?> enableReasoningEffort;
   final Value<OpenAIReasoningEffort?> reasoningEffort;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
+  final Value<DateTime?> createdAt;
+  final Value<DateTime?> updatedAt;
   final Value<int> rowid;
   const ApiConfigsCompanion({
+    this.userId = const Value.absent(),
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.apiType = const Value.absent(),
@@ -2223,6 +2478,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.rowid = const Value.absent(),
   });
   ApiConfigsCompanion.insert({
+    this.userId = const Value.absent(),
     this.id = const Value.absent(),
     required String name,
     required LlmType apiType,
@@ -2246,6 +2502,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
         apiType = Value(apiType),
         model = Value(model);
   static Insertable<ApiConfig> custom({
+    Expression<int>? userId,
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? apiType,
@@ -2267,6 +2524,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (apiType != null) 'api_type': apiType,
@@ -2292,26 +2550,28 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   }
 
   ApiConfigsCompanion copyWith(
-      {Value<String>? id,
+      {Value<int?>? userId,
+      Value<String>? id,
       Value<String>? name,
       Value<LlmType>? apiType,
       Value<String>? model,
       Value<String?>? apiKey,
       Value<String?>? baseUrl,
-      Value<bool>? useCustomTemperature,
+      Value<bool?>? useCustomTemperature,
       Value<double?>? temperature,
-      Value<bool>? useCustomTopP,
+      Value<bool?>? useCustomTopP,
       Value<double?>? topP,
-      Value<bool>? useCustomTopK,
+      Value<bool?>? useCustomTopK,
       Value<int?>? topK,
       Value<int?>? maxOutputTokens,
       Value<List<String>?>? stopSequences,
       Value<bool?>? enableReasoningEffort,
       Value<OpenAIReasoningEffort?>? reasoningEffort,
-      Value<DateTime>? createdAt,
-      Value<DateTime>? updatedAt,
+      Value<DateTime?>? createdAt,
+      Value<DateTime?>? updatedAt,
       Value<int>? rowid}) {
     return ApiConfigsCompanion(
+      userId: userId ?? this.userId,
       id: id ?? this.id,
       name: name ?? this.name,
       apiType: apiType ?? this.apiType,
@@ -2338,6 +2598,9 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
     if (id.present) {
       map['id'] = Variable<String>(id.value);
     }
@@ -2381,7 +2644,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     }
     if (stopSequences.present) {
       map['stop_sequences'] = Variable<String>(
-          $ApiConfigsTable.$converterstopSequences.toSql(stopSequences.value));
+          $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences.value));
     }
     if (enableReasoningEffort.present) {
       map['enable_reasoning_effort'] =
@@ -2407,6 +2670,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   @override
   String toString() {
     return (StringBuffer('ApiConfigsCompanion(')
+          ..write('userId: $userId, ')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('apiType: $apiType, ')
@@ -2431,21 +2695,676 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   }
 }
 
+class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UsersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _usernameMeta =
+      const VerificationMeta('username');
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+      'username', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _passwordHashMeta =
+      const VerificationMeta('passwordHash');
+  @override
+  late final GeneratedColumn<String> passwordHash = GeneratedColumn<String>(
+      'password_hash', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  @override
+  late final GeneratedColumnWithTypeConverter<List<int>?, String> chatIds =
+      GeneratedColumn<String>('chat_ids', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<int>?>($UsersTable.$converterchatIdsn);
+  static const VerificationMeta _enableAutoTitleGenerationMeta =
+      const VerificationMeta('enableAutoTitleGeneration');
+  @override
+  late final GeneratedColumn<bool> enableAutoTitleGeneration =
+      GeneratedColumn<bool>('enable_auto_title_generation', aliasedName, true,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("enable_auto_title_generation" IN (0, 1))'));
+  static const VerificationMeta _titleGenerationPromptMeta =
+      const VerificationMeta('titleGenerationPrompt');
+  @override
+  late final GeneratedColumn<String> titleGenerationPrompt =
+      GeneratedColumn<String>('title_generation_prompt', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _titleGenerationApiConfigIdMeta =
+      const VerificationMeta('titleGenerationApiConfigId');
+  @override
+  late final GeneratedColumn<String> titleGenerationApiConfigId =
+      GeneratedColumn<String>(
+          'title_generation_api_config_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _enableResumeMeta =
+      const VerificationMeta('enableResume');
+  @override
+  late final GeneratedColumn<bool> enableResume = GeneratedColumn<bool>(
+      'enable_resume', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("enable_resume" IN (0, 1))'));
+  static const VerificationMeta _resumePromptMeta =
+      const VerificationMeta('resumePrompt');
+  @override
+  late final GeneratedColumn<String> resumePrompt = GeneratedColumn<String>(
+      'resume_prompt', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _resumeApiConfigIdMeta =
+      const VerificationMeta('resumeApiConfigId');
+  @override
+  late final GeneratedColumn<String> resumeApiConfigId =
+      GeneratedColumn<String>('resume_api_config_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>?, String>
+      geminiApiKeys = GeneratedColumn<String>(
+              'gemini_api_keys', aliasedName, true,
+              type: DriftSqlType.string, requiredDuringInsert: false)
+          .withConverter<List<String>?>($UsersTable.$convertergeminiApiKeysn);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        username,
+        passwordHash,
+        chatIds,
+        enableAutoTitleGeneration,
+        titleGenerationPrompt,
+        titleGenerationApiConfigId,
+        enableResume,
+        resumePrompt,
+        resumeApiConfigId,
+        geminiApiKeys
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'users';
+  @override
+  VerificationContext validateIntegrity(Insertable<DriftUser> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('username')) {
+      context.handle(_usernameMeta,
+          username.isAcceptableOrUnknown(data['username']!, _usernameMeta));
+    } else if (isInserting) {
+      context.missing(_usernameMeta);
+    }
+    if (data.containsKey('password_hash')) {
+      context.handle(
+          _passwordHashMeta,
+          passwordHash.isAcceptableOrUnknown(
+              data['password_hash']!, _passwordHashMeta));
+    } else if (isInserting) {
+      context.missing(_passwordHashMeta);
+    }
+    if (data.containsKey('enable_auto_title_generation')) {
+      context.handle(
+          _enableAutoTitleGenerationMeta,
+          enableAutoTitleGeneration.isAcceptableOrUnknown(
+              data['enable_auto_title_generation']!,
+              _enableAutoTitleGenerationMeta));
+    }
+    if (data.containsKey('title_generation_prompt')) {
+      context.handle(
+          _titleGenerationPromptMeta,
+          titleGenerationPrompt.isAcceptableOrUnknown(
+              data['title_generation_prompt']!, _titleGenerationPromptMeta));
+    }
+    if (data.containsKey('title_generation_api_config_id')) {
+      context.handle(
+          _titleGenerationApiConfigIdMeta,
+          titleGenerationApiConfigId.isAcceptableOrUnknown(
+              data['title_generation_api_config_id']!,
+              _titleGenerationApiConfigIdMeta));
+    }
+    if (data.containsKey('enable_resume')) {
+      context.handle(
+          _enableResumeMeta,
+          enableResume.isAcceptableOrUnknown(
+              data['enable_resume']!, _enableResumeMeta));
+    }
+    if (data.containsKey('resume_prompt')) {
+      context.handle(
+          _resumePromptMeta,
+          resumePrompt.isAcceptableOrUnknown(
+              data['resume_prompt']!, _resumePromptMeta));
+    }
+    if (data.containsKey('resume_api_config_id')) {
+      context.handle(
+          _resumeApiConfigIdMeta,
+          resumeApiConfigId.isAcceptableOrUnknown(
+              data['resume_api_config_id']!, _resumeApiConfigIdMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DriftUser map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DriftUser(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      username: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}username'])!,
+      passwordHash: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}password_hash'])!,
+      chatIds: $UsersTable.$converterchatIdsn.fromSql(attachedDatabase
+          .typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}chat_ids'])),
+      enableAutoTitleGeneration: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool,
+          data['${effectivePrefix}enable_auto_title_generation']),
+      titleGenerationPrompt: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}title_generation_prompt']),
+      titleGenerationApiConfigId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}title_generation_api_config_id']),
+      enableResume: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}enable_resume']),
+      resumePrompt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}resume_prompt']),
+      resumeApiConfigId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}resume_api_config_id']),
+      geminiApiKeys: $UsersTable.$convertergeminiApiKeysn.fromSql(
+          attachedDatabase.typeMapping.read(
+              DriftSqlType.string, data['${effectivePrefix}gemini_api_keys'])),
+    );
+  }
+
+  @override
+  $UsersTable createAlias(String alias) {
+    return $UsersTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<List<int>, String> $converterchatIds =
+      const IntListConverter();
+  static TypeConverter<List<int>?, String?> $converterchatIdsn =
+      NullAwareTypeConverter.wrap($converterchatIds);
+  static TypeConverter<List<String>, String> $convertergeminiApiKeys =
+      const StringListConverter();
+  static TypeConverter<List<String>?, String?> $convertergeminiApiKeysn =
+      NullAwareTypeConverter.wrap($convertergeminiApiKeys);
+}
+
+class DriftUser extends DataClass implements Insertable<DriftUser> {
+  /// 用户的唯一ID，自增主键。
+  final int id;
+
+  /// 用户名，必须是唯一的。
+  final String username;
+
+  /// 存储密码的哈希值。
+  final String passwordHash;
+
+  /// 存储用户拥有的聊天ID列表。
+  /// 使用自定义的 TypeConverter 将 List<int> 转换为 String 进行存储。
+  final List<int>? chatIds;
+
+  /// 是否启用自动生成聊天标题。
+  final bool? enableAutoTitleGeneration;
+
+  /// 自动生成标题时使用的提示词。
+  final String? titleGenerationPrompt;
+
+  /// 自动生成标题时使用的 API 配置 ID。
+  final String? titleGenerationApiConfigId;
+
+  /// 是否启用中断恢复功能。
+  final bool? enableResume;
+
+  /// 中断恢复时使用的提示词。
+  final String? resumePrompt;
+
+  /// 中断恢复时使用的 API 配置 ID。
+  final String? resumeApiConfigId;
+
+  /// Gemini API 密钥列表
+  final List<String>? geminiApiKeys;
+  const DriftUser(
+      {required this.id,
+      required this.username,
+      required this.passwordHash,
+      this.chatIds,
+      this.enableAutoTitleGeneration,
+      this.titleGenerationPrompt,
+      this.titleGenerationApiConfigId,
+      this.enableResume,
+      this.resumePrompt,
+      this.resumeApiConfigId,
+      this.geminiApiKeys});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['username'] = Variable<String>(username);
+    map['password_hash'] = Variable<String>(passwordHash);
+    if (!nullToAbsent || chatIds != null) {
+      map['chat_ids'] =
+          Variable<String>($UsersTable.$converterchatIdsn.toSql(chatIds));
+    }
+    if (!nullToAbsent || enableAutoTitleGeneration != null) {
+      map['enable_auto_title_generation'] =
+          Variable<bool>(enableAutoTitleGeneration);
+    }
+    if (!nullToAbsent || titleGenerationPrompt != null) {
+      map['title_generation_prompt'] = Variable<String>(titleGenerationPrompt);
+    }
+    if (!nullToAbsent || titleGenerationApiConfigId != null) {
+      map['title_generation_api_config_id'] =
+          Variable<String>(titleGenerationApiConfigId);
+    }
+    if (!nullToAbsent || enableResume != null) {
+      map['enable_resume'] = Variable<bool>(enableResume);
+    }
+    if (!nullToAbsent || resumePrompt != null) {
+      map['resume_prompt'] = Variable<String>(resumePrompt);
+    }
+    if (!nullToAbsent || resumeApiConfigId != null) {
+      map['resume_api_config_id'] = Variable<String>(resumeApiConfigId);
+    }
+    if (!nullToAbsent || geminiApiKeys != null) {
+      map['gemini_api_keys'] = Variable<String>(
+          $UsersTable.$convertergeminiApiKeysn.toSql(geminiApiKeys));
+    }
+    return map;
+  }
+
+  UsersCompanion toCompanion(bool nullToAbsent) {
+    return UsersCompanion(
+      id: Value(id),
+      username: Value(username),
+      passwordHash: Value(passwordHash),
+      chatIds: chatIds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chatIds),
+      enableAutoTitleGeneration:
+          enableAutoTitleGeneration == null && nullToAbsent
+              ? const Value.absent()
+              : Value(enableAutoTitleGeneration),
+      titleGenerationPrompt: titleGenerationPrompt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(titleGenerationPrompt),
+      titleGenerationApiConfigId:
+          titleGenerationApiConfigId == null && nullToAbsent
+              ? const Value.absent()
+              : Value(titleGenerationApiConfigId),
+      enableResume: enableResume == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enableResume),
+      resumePrompt: resumePrompt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resumePrompt),
+      resumeApiConfigId: resumeApiConfigId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resumeApiConfigId),
+      geminiApiKeys: geminiApiKeys == null && nullToAbsent
+          ? const Value.absent()
+          : Value(geminiApiKeys),
+    );
+  }
+
+  factory DriftUser.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DriftUser(
+      id: serializer.fromJson<int>(json['id']),
+      username: serializer.fromJson<String>(json['username']),
+      passwordHash: serializer.fromJson<String>(json['passwordHash']),
+      chatIds: serializer.fromJson<List<int>?>(json['chatIds']),
+      enableAutoTitleGeneration:
+          serializer.fromJson<bool?>(json['enableAutoTitleGeneration']),
+      titleGenerationPrompt:
+          serializer.fromJson<String?>(json['titleGenerationPrompt']),
+      titleGenerationApiConfigId:
+          serializer.fromJson<String?>(json['titleGenerationApiConfigId']),
+      enableResume: serializer.fromJson<bool?>(json['enableResume']),
+      resumePrompt: serializer.fromJson<String?>(json['resumePrompt']),
+      resumeApiConfigId:
+          serializer.fromJson<String?>(json['resumeApiConfigId']),
+      geminiApiKeys: serializer.fromJson<List<String>?>(json['geminiApiKeys']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'username': serializer.toJson<String>(username),
+      'passwordHash': serializer.toJson<String>(passwordHash),
+      'chatIds': serializer.toJson<List<int>?>(chatIds),
+      'enableAutoTitleGeneration':
+          serializer.toJson<bool?>(enableAutoTitleGeneration),
+      'titleGenerationPrompt':
+          serializer.toJson<String?>(titleGenerationPrompt),
+      'titleGenerationApiConfigId':
+          serializer.toJson<String?>(titleGenerationApiConfigId),
+      'enableResume': serializer.toJson<bool?>(enableResume),
+      'resumePrompt': serializer.toJson<String?>(resumePrompt),
+      'resumeApiConfigId': serializer.toJson<String?>(resumeApiConfigId),
+      'geminiApiKeys': serializer.toJson<List<String>?>(geminiApiKeys),
+    };
+  }
+
+  DriftUser copyWith(
+          {int? id,
+          String? username,
+          String? passwordHash,
+          Value<List<int>?> chatIds = const Value.absent(),
+          Value<bool?> enableAutoTitleGeneration = const Value.absent(),
+          Value<String?> titleGenerationPrompt = const Value.absent(),
+          Value<String?> titleGenerationApiConfigId = const Value.absent(),
+          Value<bool?> enableResume = const Value.absent(),
+          Value<String?> resumePrompt = const Value.absent(),
+          Value<String?> resumeApiConfigId = const Value.absent(),
+          Value<List<String>?> geminiApiKeys = const Value.absent()}) =>
+      DriftUser(
+        id: id ?? this.id,
+        username: username ?? this.username,
+        passwordHash: passwordHash ?? this.passwordHash,
+        chatIds: chatIds.present ? chatIds.value : this.chatIds,
+        enableAutoTitleGeneration: enableAutoTitleGeneration.present
+            ? enableAutoTitleGeneration.value
+            : this.enableAutoTitleGeneration,
+        titleGenerationPrompt: titleGenerationPrompt.present
+            ? titleGenerationPrompt.value
+            : this.titleGenerationPrompt,
+        titleGenerationApiConfigId: titleGenerationApiConfigId.present
+            ? titleGenerationApiConfigId.value
+            : this.titleGenerationApiConfigId,
+        enableResume:
+            enableResume.present ? enableResume.value : this.enableResume,
+        resumePrompt:
+            resumePrompt.present ? resumePrompt.value : this.resumePrompt,
+        resumeApiConfigId: resumeApiConfigId.present
+            ? resumeApiConfigId.value
+            : this.resumeApiConfigId,
+        geminiApiKeys:
+            geminiApiKeys.present ? geminiApiKeys.value : this.geminiApiKeys,
+      );
+  DriftUser copyWithCompanion(UsersCompanion data) {
+    return DriftUser(
+      id: data.id.present ? data.id.value : this.id,
+      username: data.username.present ? data.username.value : this.username,
+      passwordHash: data.passwordHash.present
+          ? data.passwordHash.value
+          : this.passwordHash,
+      chatIds: data.chatIds.present ? data.chatIds.value : this.chatIds,
+      enableAutoTitleGeneration: data.enableAutoTitleGeneration.present
+          ? data.enableAutoTitleGeneration.value
+          : this.enableAutoTitleGeneration,
+      titleGenerationPrompt: data.titleGenerationPrompt.present
+          ? data.titleGenerationPrompt.value
+          : this.titleGenerationPrompt,
+      titleGenerationApiConfigId: data.titleGenerationApiConfigId.present
+          ? data.titleGenerationApiConfigId.value
+          : this.titleGenerationApiConfigId,
+      enableResume: data.enableResume.present
+          ? data.enableResume.value
+          : this.enableResume,
+      resumePrompt: data.resumePrompt.present
+          ? data.resumePrompt.value
+          : this.resumePrompt,
+      resumeApiConfigId: data.resumeApiConfigId.present
+          ? data.resumeApiConfigId.value
+          : this.resumeApiConfigId,
+      geminiApiKeys: data.geminiApiKeys.present
+          ? data.geminiApiKeys.value
+          : this.geminiApiKeys,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DriftUser(')
+          ..write('id: $id, ')
+          ..write('username: $username, ')
+          ..write('passwordHash: $passwordHash, ')
+          ..write('chatIds: $chatIds, ')
+          ..write('enableAutoTitleGeneration: $enableAutoTitleGeneration, ')
+          ..write('titleGenerationPrompt: $titleGenerationPrompt, ')
+          ..write('titleGenerationApiConfigId: $titleGenerationApiConfigId, ')
+          ..write('enableResume: $enableResume, ')
+          ..write('resumePrompt: $resumePrompt, ')
+          ..write('resumeApiConfigId: $resumeApiConfigId, ')
+          ..write('geminiApiKeys: $geminiApiKeys')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      username,
+      passwordHash,
+      chatIds,
+      enableAutoTitleGeneration,
+      titleGenerationPrompt,
+      titleGenerationApiConfigId,
+      enableResume,
+      resumePrompt,
+      resumeApiConfigId,
+      geminiApiKeys);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DriftUser &&
+          other.id == this.id &&
+          other.username == this.username &&
+          other.passwordHash == this.passwordHash &&
+          other.chatIds == this.chatIds &&
+          other.enableAutoTitleGeneration == this.enableAutoTitleGeneration &&
+          other.titleGenerationPrompt == this.titleGenerationPrompt &&
+          other.titleGenerationApiConfigId == this.titleGenerationApiConfigId &&
+          other.enableResume == this.enableResume &&
+          other.resumePrompt == this.resumePrompt &&
+          other.resumeApiConfigId == this.resumeApiConfigId &&
+          other.geminiApiKeys == this.geminiApiKeys);
+}
+
+class UsersCompanion extends UpdateCompanion<DriftUser> {
+  final Value<int> id;
+  final Value<String> username;
+  final Value<String> passwordHash;
+  final Value<List<int>?> chatIds;
+  final Value<bool?> enableAutoTitleGeneration;
+  final Value<String?> titleGenerationPrompt;
+  final Value<String?> titleGenerationApiConfigId;
+  final Value<bool?> enableResume;
+  final Value<String?> resumePrompt;
+  final Value<String?> resumeApiConfigId;
+  final Value<List<String>?> geminiApiKeys;
+  const UsersCompanion({
+    this.id = const Value.absent(),
+    this.username = const Value.absent(),
+    this.passwordHash = const Value.absent(),
+    this.chatIds = const Value.absent(),
+    this.enableAutoTitleGeneration = const Value.absent(),
+    this.titleGenerationPrompt = const Value.absent(),
+    this.titleGenerationApiConfigId = const Value.absent(),
+    this.enableResume = const Value.absent(),
+    this.resumePrompt = const Value.absent(),
+    this.resumeApiConfigId = const Value.absent(),
+    this.geminiApiKeys = const Value.absent(),
+  });
+  UsersCompanion.insert({
+    this.id = const Value.absent(),
+    required String username,
+    required String passwordHash,
+    this.chatIds = const Value.absent(),
+    this.enableAutoTitleGeneration = const Value.absent(),
+    this.titleGenerationPrompt = const Value.absent(),
+    this.titleGenerationApiConfigId = const Value.absent(),
+    this.enableResume = const Value.absent(),
+    this.resumePrompt = const Value.absent(),
+    this.resumeApiConfigId = const Value.absent(),
+    this.geminiApiKeys = const Value.absent(),
+  })  : username = Value(username),
+        passwordHash = Value(passwordHash);
+  static Insertable<DriftUser> custom({
+    Expression<int>? id,
+    Expression<String>? username,
+    Expression<String>? passwordHash,
+    Expression<String>? chatIds,
+    Expression<bool>? enableAutoTitleGeneration,
+    Expression<String>? titleGenerationPrompt,
+    Expression<String>? titleGenerationApiConfigId,
+    Expression<bool>? enableResume,
+    Expression<String>? resumePrompt,
+    Expression<String>? resumeApiConfigId,
+    Expression<String>? geminiApiKeys,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (username != null) 'username': username,
+      if (passwordHash != null) 'password_hash': passwordHash,
+      if (chatIds != null) 'chat_ids': chatIds,
+      if (enableAutoTitleGeneration != null)
+        'enable_auto_title_generation': enableAutoTitleGeneration,
+      if (titleGenerationPrompt != null)
+        'title_generation_prompt': titleGenerationPrompt,
+      if (titleGenerationApiConfigId != null)
+        'title_generation_api_config_id': titleGenerationApiConfigId,
+      if (enableResume != null) 'enable_resume': enableResume,
+      if (resumePrompt != null) 'resume_prompt': resumePrompt,
+      if (resumeApiConfigId != null) 'resume_api_config_id': resumeApiConfigId,
+      if (geminiApiKeys != null) 'gemini_api_keys': geminiApiKeys,
+    });
+  }
+
+  UsersCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? username,
+      Value<String>? passwordHash,
+      Value<List<int>?>? chatIds,
+      Value<bool?>? enableAutoTitleGeneration,
+      Value<String?>? titleGenerationPrompt,
+      Value<String?>? titleGenerationApiConfigId,
+      Value<bool?>? enableResume,
+      Value<String?>? resumePrompt,
+      Value<String?>? resumeApiConfigId,
+      Value<List<String>?>? geminiApiKeys}) {
+    return UsersCompanion(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      passwordHash: passwordHash ?? this.passwordHash,
+      chatIds: chatIds ?? this.chatIds,
+      enableAutoTitleGeneration:
+          enableAutoTitleGeneration ?? this.enableAutoTitleGeneration,
+      titleGenerationPrompt:
+          titleGenerationPrompt ?? this.titleGenerationPrompt,
+      titleGenerationApiConfigId:
+          titleGenerationApiConfigId ?? this.titleGenerationApiConfigId,
+      enableResume: enableResume ?? this.enableResume,
+      resumePrompt: resumePrompt ?? this.resumePrompt,
+      resumeApiConfigId: resumeApiConfigId ?? this.resumeApiConfigId,
+      geminiApiKeys: geminiApiKeys ?? this.geminiApiKeys,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
+    }
+    if (passwordHash.present) {
+      map['password_hash'] = Variable<String>(passwordHash.value);
+    }
+    if (chatIds.present) {
+      map['chat_ids'] =
+          Variable<String>($UsersTable.$converterchatIdsn.toSql(chatIds.value));
+    }
+    if (enableAutoTitleGeneration.present) {
+      map['enable_auto_title_generation'] =
+          Variable<bool>(enableAutoTitleGeneration.value);
+    }
+    if (titleGenerationPrompt.present) {
+      map['title_generation_prompt'] =
+          Variable<String>(titleGenerationPrompt.value);
+    }
+    if (titleGenerationApiConfigId.present) {
+      map['title_generation_api_config_id'] =
+          Variable<String>(titleGenerationApiConfigId.value);
+    }
+    if (enableResume.present) {
+      map['enable_resume'] = Variable<bool>(enableResume.value);
+    }
+    if (resumePrompt.present) {
+      map['resume_prompt'] = Variable<String>(resumePrompt.value);
+    }
+    if (resumeApiConfigId.present) {
+      map['resume_api_config_id'] = Variable<String>(resumeApiConfigId.value);
+    }
+    if (geminiApiKeys.present) {
+      map['gemini_api_keys'] = Variable<String>(
+          $UsersTable.$convertergeminiApiKeysn.toSql(geminiApiKeys.value));
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UsersCompanion(')
+          ..write('id: $id, ')
+          ..write('username: $username, ')
+          ..write('passwordHash: $passwordHash, ')
+          ..write('chatIds: $chatIds, ')
+          ..write('enableAutoTitleGeneration: $enableAutoTitleGeneration, ')
+          ..write('titleGenerationPrompt: $titleGenerationPrompt, ')
+          ..write('titleGenerationApiConfigId: $titleGenerationApiConfigId, ')
+          ..write('enableResume: $enableResume, ')
+          ..write('resumePrompt: $resumePrompt, ')
+          ..write('resumeApiConfigId: $resumeApiConfigId, ')
+          ..write('geminiApiKeys: $geminiApiKeys')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ChatsTable chats = $ChatsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $ApiConfigsTable apiConfigs = $ApiConfigsTable(this);
+  late final $UsersTable users = $UsersTable(this);
   late final ChatDao chatDao = ChatDao(this as AppDatabase);
   late final MessageDao messageDao = MessageDao(this as AppDatabase);
   late final ApiConfigDao apiConfigDao = ApiConfigDao(this as AppDatabase);
+  late final UserDao userDao = UserDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [chats, messages, apiConfigs];
+      [chats, messages, apiConfigs, users];
 }
 
 typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
@@ -2457,7 +3376,7 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<String?> coverImageBase64,
   Value<String?> backgroundImagePath,
   Value<int?> orderIndex,
-  Value<bool> isFolder,
+  Value<bool?> isFolder,
   Value<int?> parentFolderId,
   required DriftContextConfig contextConfig,
   required List<DriftXmlRule> xmlRules,
@@ -2472,6 +3391,10 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<String?> secondaryXmlPrompt,
   Value<String?> secondaryXmlApiConfigId,
   Value<String?> continuePrompt,
+  Value<bool?> enableHelpMeReply,
+  Value<String?> helpMeReplyPrompt,
+  Value<String?> helpMeReplyApiConfigId,
+  Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode,
 });
 typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<int> id,
@@ -2482,7 +3405,7 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<String?> coverImageBase64,
   Value<String?> backgroundImagePath,
   Value<int?> orderIndex,
-  Value<bool> isFolder,
+  Value<bool?> isFolder,
   Value<int?> parentFolderId,
   Value<DriftContextConfig> contextConfig,
   Value<List<DriftXmlRule>> xmlRules,
@@ -2497,6 +3420,10 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<String?> secondaryXmlPrompt,
   Value<String?> secondaryXmlApiConfigId,
   Value<String?> continuePrompt,
+  Value<bool?> enableHelpMeReply,
+  Value<String?> helpMeReplyPrompt,
+  Value<String?> helpMeReplyApiConfigId,
+  Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode,
 });
 
 final class $$ChatsTableReferences
@@ -2615,6 +3542,24 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
       column: $table.continuePrompt,
       builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<bool> get enableHelpMeReply => $composableBuilder(
+      column: $table.enableHelpMeReply,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get helpMeReplyPrompt => $composableBuilder(
+      column: $table.helpMeReplyPrompt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get helpMeReplyApiConfigId => $composableBuilder(
+      column: $table.helpMeReplyApiConfigId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<HelpMeReplyTriggerMode?,
+          HelpMeReplyTriggerMode, String>
+      get helpMeReplyTriggerMode => $composableBuilder(
+          column: $table.helpMeReplyTriggerMode,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
   Expression<bool> messagesRefs(
       Expression<bool> Function($$MessagesTableFilterComposer f) f) {
     final $$MessagesTableFilterComposer composer = $composerBuilder(
@@ -2728,6 +3673,22 @@ class $$ChatsTableOrderingComposer
   ColumnOrderings<String> get continuePrompt => $composableBuilder(
       column: $table.continuePrompt,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get enableHelpMeReply => $composableBuilder(
+      column: $table.enableHelpMeReply,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get helpMeReplyPrompt => $composableBuilder(
+      column: $table.helpMeReplyPrompt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get helpMeReplyApiConfigId => $composableBuilder(
+      column: $table.helpMeReplyApiConfigId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get helpMeReplyTriggerMode => $composableBuilder(
+      column: $table.helpMeReplyTriggerMode,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$ChatsTableAnnotationComposer
@@ -2810,6 +3771,19 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumn<String> get continuePrompt => $composableBuilder(
       column: $table.continuePrompt, builder: (column) => column);
 
+  GeneratedColumn<bool> get enableHelpMeReply => $composableBuilder(
+      column: $table.enableHelpMeReply, builder: (column) => column);
+
+  GeneratedColumn<String> get helpMeReplyPrompt => $composableBuilder(
+      column: $table.helpMeReplyPrompt, builder: (column) => column);
+
+  GeneratedColumn<String> get helpMeReplyApiConfigId => $composableBuilder(
+      column: $table.helpMeReplyApiConfigId, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<HelpMeReplyTriggerMode?, String>
+      get helpMeReplyTriggerMode => $composableBuilder(
+          column: $table.helpMeReplyTriggerMode, builder: (column) => column);
+
   Expression<T> messagesRefs<T extends Object>(
       Expression<T> Function($$MessagesTableAnnotationComposer a) f) {
     final $$MessagesTableAnnotationComposer composer = $composerBuilder(
@@ -2863,7 +3837,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<String?> coverImageBase64 = const Value.absent(),
             Value<String?> backgroundImagePath = const Value.absent(),
             Value<int?> orderIndex = const Value.absent(),
-            Value<bool> isFolder = const Value.absent(),
+            Value<bool?> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
             Value<DriftContextConfig> contextConfig = const Value.absent(),
             Value<List<DriftXmlRule>> xmlRules = const Value.absent(),
@@ -2879,6 +3853,11 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<String?> secondaryXmlPrompt = const Value.absent(),
             Value<String?> secondaryXmlApiConfigId = const Value.absent(),
             Value<String?> continuePrompt = const Value.absent(),
+            Value<bool?> enableHelpMeReply = const Value.absent(),
+            Value<String?> helpMeReplyPrompt = const Value.absent(),
+            Value<String?> helpMeReplyApiConfigId = const Value.absent(),
+            Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode =
+                const Value.absent(),
           }) =>
               ChatsCompanion(
             id: id,
@@ -2904,6 +3883,10 @@ class $$ChatsTableTableManager extends RootTableManager<
             secondaryXmlPrompt: secondaryXmlPrompt,
             secondaryXmlApiConfigId: secondaryXmlApiConfigId,
             continuePrompt: continuePrompt,
+            enableHelpMeReply: enableHelpMeReply,
+            helpMeReplyPrompt: helpMeReplyPrompt,
+            helpMeReplyApiConfigId: helpMeReplyApiConfigId,
+            helpMeReplyTriggerMode: helpMeReplyTriggerMode,
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
@@ -2914,7 +3897,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<String?> coverImageBase64 = const Value.absent(),
             Value<String?> backgroundImagePath = const Value.absent(),
             Value<int?> orderIndex = const Value.absent(),
-            Value<bool> isFolder = const Value.absent(),
+            Value<bool?> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
             required DriftContextConfig contextConfig,
             required List<DriftXmlRule> xmlRules,
@@ -2930,6 +3913,11 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<String?> secondaryXmlPrompt = const Value.absent(),
             Value<String?> secondaryXmlApiConfigId = const Value.absent(),
             Value<String?> continuePrompt = const Value.absent(),
+            Value<bool?> enableHelpMeReply = const Value.absent(),
+            Value<String?> helpMeReplyPrompt = const Value.absent(),
+            Value<String?> helpMeReplyApiConfigId = const Value.absent(),
+            Value<HelpMeReplyTriggerMode?> helpMeReplyTriggerMode =
+                const Value.absent(),
           }) =>
               ChatsCompanion.insert(
             id: id,
@@ -2955,6 +3943,10 @@ class $$ChatsTableTableManager extends RootTableManager<
             secondaryXmlPrompt: secondaryXmlPrompt,
             secondaryXmlApiConfigId: secondaryXmlApiConfigId,
             continuePrompt: continuePrompt,
+            enableHelpMeReply: enableHelpMeReply,
+            helpMeReplyPrompt: helpMeReplyPrompt,
+            helpMeReplyApiConfigId: helpMeReplyApiConfigId,
+            helpMeReplyTriggerMode: helpMeReplyTriggerMode,
           ),
           withReferenceMapper: (p0) => p0
               .map((e) =>
@@ -3298,45 +4290,47 @@ typedef $$MessagesTableProcessedTableManager = ProcessedTableManager<
     MessageData,
     PrefetchHooks Function({bool chatId})>;
 typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
+  Value<int?> userId,
   Value<String> id,
   required String name,
   required LlmType apiType,
   required String model,
   Value<String?> apiKey,
   Value<String?> baseUrl,
-  Value<bool> useCustomTemperature,
+  Value<bool?> useCustomTemperature,
   Value<double?> temperature,
-  Value<bool> useCustomTopP,
+  Value<bool?> useCustomTopP,
   Value<double?> topP,
-  Value<bool> useCustomTopK,
+  Value<bool?> useCustomTopK,
   Value<int?> topK,
   Value<int?> maxOutputTokens,
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
+  Value<DateTime?> createdAt,
+  Value<DateTime?> updatedAt,
   Value<int> rowid,
 });
 typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
+  Value<int?> userId,
   Value<String> id,
   Value<String> name,
   Value<LlmType> apiType,
   Value<String> model,
   Value<String?> apiKey,
   Value<String?> baseUrl,
-  Value<bool> useCustomTemperature,
+  Value<bool?> useCustomTemperature,
   Value<double?> temperature,
-  Value<bool> useCustomTopP,
+  Value<bool?> useCustomTopP,
   Value<double?> topP,
-  Value<bool> useCustomTopK,
+  Value<bool?> useCustomTopK,
   Value<int?> topK,
   Value<int?> maxOutputTokens,
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
-  Value<DateTime> createdAt,
-  Value<DateTime> updatedAt,
+  Value<DateTime?> createdAt,
+  Value<DateTime?> updatedAt,
   Value<int> rowid,
 });
 
@@ -3349,6 +4343,9 @@ class $$ApiConfigsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
 
@@ -3423,6 +4420,9 @@ class $$ApiConfigsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<int> get userId => $composableBuilder(
+      column: $table.userId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
 
@@ -3494,6 +4494,9 @@ class $$ApiConfigsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<int> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
@@ -3574,28 +4577,30 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
           createComputedFieldComposer: () =>
               $$ApiConfigsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
+            Value<int?> userId = const Value.absent(),
             Value<String> id = const Value.absent(),
             Value<String> name = const Value.absent(),
             Value<LlmType> apiType = const Value.absent(),
             Value<String> model = const Value.absent(),
             Value<String?> apiKey = const Value.absent(),
             Value<String?> baseUrl = const Value.absent(),
-            Value<bool> useCustomTemperature = const Value.absent(),
+            Value<bool?> useCustomTemperature = const Value.absent(),
             Value<double?> temperature = const Value.absent(),
-            Value<bool> useCustomTopP = const Value.absent(),
+            Value<bool?> useCustomTopP = const Value.absent(),
             Value<double?> topP = const Value.absent(),
-            Value<bool> useCustomTopK = const Value.absent(),
+            Value<bool?> useCustomTopK = const Value.absent(),
             Value<int?> topK = const Value.absent(),
             Value<int?> maxOutputTokens = const Value.absent(),
             Value<List<String>?> stopSequences = const Value.absent(),
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> createdAt = const Value.absent(),
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ApiConfigsCompanion(
+            userId: userId,
             id: id,
             name: name,
             apiType: apiType,
@@ -3617,28 +4622,30 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           createCompanionCallback: ({
+            Value<int?> userId = const Value.absent(),
             Value<String> id = const Value.absent(),
             required String name,
             required LlmType apiType,
             required String model,
             Value<String?> apiKey = const Value.absent(),
             Value<String?> baseUrl = const Value.absent(),
-            Value<bool> useCustomTemperature = const Value.absent(),
+            Value<bool?> useCustomTemperature = const Value.absent(),
             Value<double?> temperature = const Value.absent(),
-            Value<bool> useCustomTopP = const Value.absent(),
+            Value<bool?> useCustomTopP = const Value.absent(),
             Value<double?> topP = const Value.absent(),
-            Value<bool> useCustomTopK = const Value.absent(),
+            Value<bool?> useCustomTopK = const Value.absent(),
             Value<int?> topK = const Value.absent(),
             Value<int?> maxOutputTokens = const Value.absent(),
             Value<List<String>?> stopSequences = const Value.absent(),
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
-            Value<DateTime> createdAt = const Value.absent(),
-            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> createdAt = const Value.absent(),
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ApiConfigsCompanion.insert(
+            userId: userId,
             id: id,
             name: name,
             apiType: apiType,
@@ -3678,6 +4685,271 @@ typedef $$ApiConfigsTableProcessedTableManager = ProcessedTableManager<
     (ApiConfig, BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig>),
     ApiConfig,
     PrefetchHooks Function()>;
+typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
+  Value<int> id,
+  required String username,
+  required String passwordHash,
+  Value<List<int>?> chatIds,
+  Value<bool?> enableAutoTitleGeneration,
+  Value<String?> titleGenerationPrompt,
+  Value<String?> titleGenerationApiConfigId,
+  Value<bool?> enableResume,
+  Value<String?> resumePrompt,
+  Value<String?> resumeApiConfigId,
+  Value<List<String>?> geminiApiKeys,
+});
+typedef $$UsersTableUpdateCompanionBuilder = UsersCompanion Function({
+  Value<int> id,
+  Value<String> username,
+  Value<String> passwordHash,
+  Value<List<int>?> chatIds,
+  Value<bool?> enableAutoTitleGeneration,
+  Value<String?> titleGenerationPrompt,
+  Value<String?> titleGenerationApiConfigId,
+  Value<bool?> enableResume,
+  Value<String?> resumePrompt,
+  Value<String?> resumeApiConfigId,
+  Value<List<String>?> geminiApiKeys,
+});
+
+class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get username => $composableBuilder(
+      column: $table.username, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get passwordHash => $composableBuilder(
+      column: $table.passwordHash, builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<List<int>?, List<int>, String> get chatIds =>
+      $composableBuilder(
+          column: $table.chatIds,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+
+  ColumnFilters<bool> get enableAutoTitleGeneration => $composableBuilder(
+      column: $table.enableAutoTitleGeneration,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get titleGenerationPrompt => $composableBuilder(
+      column: $table.titleGenerationPrompt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get titleGenerationApiConfigId => $composableBuilder(
+      column: $table.titleGenerationApiConfigId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get enableResume => $composableBuilder(
+      column: $table.enableResume, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get resumePrompt => $composableBuilder(
+      column: $table.resumePrompt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get resumeApiConfigId => $composableBuilder(
+      column: $table.resumeApiConfigId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
+      get geminiApiKeys => $composableBuilder(
+          column: $table.geminiApiKeys,
+          builder: (column) => ColumnWithTypeConverterFilters(column));
+}
+
+class $$UsersTableOrderingComposer
+    extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get username => $composableBuilder(
+      column: $table.username, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get passwordHash => $composableBuilder(
+      column: $table.passwordHash,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get chatIds => $composableBuilder(
+      column: $table.chatIds, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get enableAutoTitleGeneration => $composableBuilder(
+      column: $table.enableAutoTitleGeneration,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get titleGenerationPrompt => $composableBuilder(
+      column: $table.titleGenerationPrompt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get titleGenerationApiConfigId => $composableBuilder(
+      column: $table.titleGenerationApiConfigId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get enableResume => $composableBuilder(
+      column: $table.enableResume,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get resumePrompt => $composableBuilder(
+      column: $table.resumePrompt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get resumeApiConfigId => $composableBuilder(
+      column: $table.resumeApiConfigId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get geminiApiKeys => $composableBuilder(
+      column: $table.geminiApiKeys,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$UsersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UsersTable> {
+  $$UsersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get passwordHash => $composableBuilder(
+      column: $table.passwordHash, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<List<int>?, String> get chatIds =>
+      $composableBuilder(column: $table.chatIds, builder: (column) => column);
+
+  GeneratedColumn<bool> get enableAutoTitleGeneration => $composableBuilder(
+      column: $table.enableAutoTitleGeneration, builder: (column) => column);
+
+  GeneratedColumn<String> get titleGenerationPrompt => $composableBuilder(
+      column: $table.titleGenerationPrompt, builder: (column) => column);
+
+  GeneratedColumn<String> get titleGenerationApiConfigId => $composableBuilder(
+      column: $table.titleGenerationApiConfigId, builder: (column) => column);
+
+  GeneratedColumn<bool> get enableResume => $composableBuilder(
+      column: $table.enableResume, builder: (column) => column);
+
+  GeneratedColumn<String> get resumePrompt => $composableBuilder(
+      column: $table.resumePrompt, builder: (column) => column);
+
+  GeneratedColumn<String> get resumeApiConfigId => $composableBuilder(
+      column: $table.resumeApiConfigId, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<List<String>?, String> get geminiApiKeys =>
+      $composableBuilder(
+          column: $table.geminiApiKeys, builder: (column) => column);
+}
+
+class $$UsersTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $UsersTable,
+    DriftUser,
+    $$UsersTableFilterComposer,
+    $$UsersTableOrderingComposer,
+    $$UsersTableAnnotationComposer,
+    $$UsersTableCreateCompanionBuilder,
+    $$UsersTableUpdateCompanionBuilder,
+    (DriftUser, BaseReferences<_$AppDatabase, $UsersTable, DriftUser>),
+    DriftUser,
+    PrefetchHooks Function()> {
+  $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UsersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UsersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UsersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> username = const Value.absent(),
+            Value<String> passwordHash = const Value.absent(),
+            Value<List<int>?> chatIds = const Value.absent(),
+            Value<bool?> enableAutoTitleGeneration = const Value.absent(),
+            Value<String?> titleGenerationPrompt = const Value.absent(),
+            Value<String?> titleGenerationApiConfigId = const Value.absent(),
+            Value<bool?> enableResume = const Value.absent(),
+            Value<String?> resumePrompt = const Value.absent(),
+            Value<String?> resumeApiConfigId = const Value.absent(),
+            Value<List<String>?> geminiApiKeys = const Value.absent(),
+          }) =>
+              UsersCompanion(
+            id: id,
+            username: username,
+            passwordHash: passwordHash,
+            chatIds: chatIds,
+            enableAutoTitleGeneration: enableAutoTitleGeneration,
+            titleGenerationPrompt: titleGenerationPrompt,
+            titleGenerationApiConfigId: titleGenerationApiConfigId,
+            enableResume: enableResume,
+            resumePrompt: resumePrompt,
+            resumeApiConfigId: resumeApiConfigId,
+            geminiApiKeys: geminiApiKeys,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String username,
+            required String passwordHash,
+            Value<List<int>?> chatIds = const Value.absent(),
+            Value<bool?> enableAutoTitleGeneration = const Value.absent(),
+            Value<String?> titleGenerationPrompt = const Value.absent(),
+            Value<String?> titleGenerationApiConfigId = const Value.absent(),
+            Value<bool?> enableResume = const Value.absent(),
+            Value<String?> resumePrompt = const Value.absent(),
+            Value<String?> resumeApiConfigId = const Value.absent(),
+            Value<List<String>?> geminiApiKeys = const Value.absent(),
+          }) =>
+              UsersCompanion.insert(
+            id: id,
+            username: username,
+            passwordHash: passwordHash,
+            chatIds: chatIds,
+            enableAutoTitleGeneration: enableAutoTitleGeneration,
+            titleGenerationPrompt: titleGenerationPrompt,
+            titleGenerationApiConfigId: titleGenerationApiConfigId,
+            enableResume: enableResume,
+            resumePrompt: resumePrompt,
+            resumeApiConfigId: resumeApiConfigId,
+            geminiApiKeys: geminiApiKeys,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$UsersTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $UsersTable,
+    DriftUser,
+    $$UsersTableFilterComposer,
+    $$UsersTableOrderingComposer,
+    $$UsersTableAnnotationComposer,
+    $$UsersTableCreateCompanionBuilder,
+    $$UsersTableUpdateCompanionBuilder,
+    (DriftUser, BaseReferences<_$AppDatabase, $UsersTable, DriftUser>),
+    DriftUser,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3688,4 +4960,6 @@ class $AppDatabaseManager {
       $$MessagesTableTableManager(_db, _db.messages);
   $$ApiConfigsTableTableManager get apiConfigs =>
       $$ApiConfigsTableTableManager(_db, _db.apiConfigs);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db, _db.users);
 }

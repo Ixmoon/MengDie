@@ -28,7 +28,7 @@ import 'xml_processor.dart';
 import '../llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
-import '../../data/repositories/chat_repository.dart';
+import '../../ui/providers/repository_providers.dart';
 import '../../ui/providers/chat_state_providers.dart'; // Import for ChatStateNotifier
 class ApiRequestContext {
   final List<LlmContent> contextParts;

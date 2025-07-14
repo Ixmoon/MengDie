@@ -17,17 +17,17 @@ class ApiConfigMapper {
       model: data.model,
       apiKey: data.apiKey,
       baseUrl: data.baseUrl,
-      useCustomTemperature: data.useCustomTemperature,
+      useCustomTemperature: data.useCustomTemperature ?? false,
       temperature: data.temperature,
-      useCustomTopP: data.useCustomTopP,
+      useCustomTopP: data.useCustomTopP ?? false,
       topP: data.topP,
-      useCustomTopK: data.useCustomTopK,
+      useCustomTopK: data.useCustomTopK ?? false,
       topK: data.topK,
       maxOutputTokens: data.maxOutputTokens,
-      stopSequences: data.stopSequences,
-      createdAt: data.createdAt,
-      updatedAt: data.updatedAt,
-      enableReasoningEffort: data.enableReasoningEffort,
+      stopSequences: data.stopSequences ?? [],
+      createdAt: data.createdAt ?? DateTime.now(),
+      updatedAt: data.updatedAt ?? DateTime.now(),
+      enableReasoningEffort: data.enableReasoningEffort ?? false,
       reasoningEffort: data.reasoningEffort,
     );
   }
@@ -52,7 +52,7 @@ class ApiConfigMapper {
       stopSequences: Value(config.stopSequences),
       createdAt: Value(config.createdAt),
       updatedAt: Value(config.updatedAt),
-      enableReasoningEffort: Value(config.enableReasoningEffort ?? false),
+      enableReasoningEffort: Value(config.enableReasoningEffort),
       reasoningEffort: Value(config.reasoningEffort),
     );
   }

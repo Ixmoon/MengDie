@@ -13,7 +13,14 @@ export '../database/common_enums.dart'
 		XmlAction,
 		LocalHarmCategory,
 		LocalHarmBlockThreshold,
-		ContextManagementMode;
+		ContextManagementMode,
+		HelpMeReplyTriggerMode;
+
+// --- “帮我回复”触发模式 ---
+enum HelpMeReplyTriggerMode {
+		manual, // 手动触发
+		auto,   // 自动触发
+}
 
 // --- 主题设置枚举 (UI specific, not in Drift common_enums) ---
 enum ThemeModeSetting {

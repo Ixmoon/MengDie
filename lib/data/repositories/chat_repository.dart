@@ -1,34 +1,43 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
+import 'package:stream_transform/stream_transform.dart';
 import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat.dart';
 import '../models/export_import_dtos.dart';
+import '../mappers/user_mapper.dart';
 import '../../ui/providers/core_providers.dart';
+import '../../ui/providers/repository_providers.dart';
 import '../database/app_database.dart';
 import '../database/common_enums.dart';
 import '../database/daos/api_config_dao.dart';
 import '../database/daos/chat_dao.dart';
+import '../database/daos/user_dao.dart';
 import '../mappers/chat_mapper.dart';
+import '../../ui/providers/auth_providers.dart';
 
 // 本文件包含用于管理 Chat 数据集合的仓库类和提供者。
 
-// --- Chat Repository Provider ---
-final chatRepositoryProvider = Provider<ChatRepository>((ref) {
-  final appDb = ref.watch(appDatabaseProvider);
-  // Now depends on both chatDao and apiConfigDao
-  return ChatRepository(appDb, appDb.chatDao, appDb.apiConfigDao);
-});
-
 // --- Chat Repository Implementation ---
 class ChatRepository {
+  final Ref _ref;
   final AppDatabase _db;
   final ChatDao _chatDao;
   final ApiConfigDao _apiConfigDao;
+  final UserDao _userDao;
 
-  ChatRepository(this._db, this._chatDao, this._apiConfigDao);
+  ChatRepository(this._ref, this._db, this._chatDao, this._apiConfigDao, this._userDao);
 
+  /// 检查当前用户登录状态，如果已登录，则将新创建的项目ID与其关联。
+  Future<void> _bindItemToCurrentUser(int itemId) async {
+    final authState = _ref.read(authProvider);
+    if (authState.currentUser != null) {
+      // 使用 read 方法获取最新的 UserRepository 实例
+      await _ref.read(userRepositoryProvider).addChatIdToUser(authState.currentUser!.id, itemId);
+    }
+  }
+  
   // --- 数据库操作 ---
   Future<List<Chat>> getAllChats() async {
     debugPrint("ChatRepository: 获取所有聊天 (Drift)...");
@@ -45,9 +54,12 @@ class ChatRepository {
 
     LlmType? apiType;
     if (chat.apiConfigId != null) {
-      final apiConfigData = await _apiConfigDao.getApiConfigById(chat.apiConfigId!);
-      if (apiConfigData != null) {
-        apiType = apiConfigData.apiType;
+      final userId = _ref.read(authProvider).currentUser?.id;
+      if (userId != null) {
+        final apiConfigData = await _apiConfigDao.getApiConfigById(chat.apiConfigId!, userId);
+        if (apiConfigData != null) {
+          apiType = apiConfigData.apiType;
+        }
       }
     }
     // Lmmediate Fix: Ensure apiType is not null to prevent crashes on older schemas.
@@ -55,7 +67,12 @@ class ChatRepository {
     apiType ??= LlmType.gemini;
 
     final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0, apiType: apiType);
-    return await _chatDao.saveChat(companion, forceRemoteWrite: forceRemoteWrite);
+    final newId = await _chatDao.saveChat(companion, forceRemoteWrite: forceRemoteWrite);
+    // 如果是新增操作 (id=0)，则自动绑定到当前用户
+    if (chat.id == 0) {
+      await _bindItemToCurrentUser(newId);
+    }
+    return newId;
   }
 
   /// 新增一个文件夹，可以是普通文件夹或模板文件夹
@@ -73,6 +90,7 @@ class ChatRepository {
       parentFolderId: parentFolderId,
       createdAt: timestamp,
       updatedAt: timestamp,
+      orderIndex: null, // 确保新文件夹置顶
     );
     // 调用 saveChat 来实际保存
     return await saveChat(newFolder);
@@ -134,10 +152,50 @@ class ChatRepository {
         .map((data) => data != null ? ChatMapper.fromData(data) : null);
   }
 
+  Stream<List<Chat>> watchChatsForUser(int userId, int? parentFolderId) {
+    // 彻底重构：严格遵循分层设计原则
+    // 1. 监听原始 DriftUser? 数据流
+    return _userDao.watchUser(userId)
+        // 2. **立即**将数据库实体映射为领域模型。这是关键。
+        //    在数据流的早期进行转换，确保下游逻辑处理的是干净、可靠的对象。
+        .map((driftUser) => driftUser != null ? UserMapper.fromDrift(driftUser) : null)
+        // 3. 使用 switchMap 将 User? 数据流转换为聊天列表数据流
+        .switchMap((user) {
+      // 如果用户不存在，返回空列表流
+      if (user == null) {
+        return Stream.value([]);
+      }
+
+      // 4. 根据用户类型（游客或普通用户）构建查询
+      //    由于我们现在处理的是领域模型 User，可以确信 user.chatIds 永远不为 null。
+      if (user.id == 0) {
+        // 对于游客，查询逻辑保持不变，但不再需要空值检查。
+        return Stream.fromFuture(_chatDao.getAllOwnedChatIds()).switchMap((ownedChatIds) {
+          return _chatDao.watchOrphanChats(
+            guestChatIds: user.chatIds, // 直接使用，无需 `?? []`
+            ownedChatIds: ownedChatIds,
+            parentFolderId: parentFolderId,
+          );
+        }).map((list) => list.map(ChatMapper.fromData).toList());
+      } else {
+        // 对于普通用户，如果聊天列表为空，直接返回空流。
+        if (user.chatIds.isEmpty) {
+          return Stream.value([]);
+        }
+        // 否则，监听属于该用户的聊天。
+        return _chatDao
+            .watchChatsForUser(user.chatIds, parentFolderId)
+            .map((list) => list.map(ChatMapper.fromData).toList());
+      }
+    });
+  }
+
   // --- 导入聊天 ---
   Future<int> importChat(ChatExportDto chatDto, {int? parentFolderId}) async {
     debugPrint("ChatRepository: 开始导入聊天: ${chatDto.title ?? '无标题'} 到文件夹 ID: $parentFolderId (Drift)...");
-    return await _chatDao.importChatFromDto(chatDto, _db, parentFolderId: parentFolderId);
+    final newChatId = await _chatDao.importChatFromDto(chatDto, _db, parentFolderId: parentFolderId);
+    await _bindItemToCurrentUser(newChatId);
+    return newChatId;
   }
 
   Future<int> forkChat(int originalChatId, int fromMessageId) async {
@@ -158,11 +216,13 @@ class ChatRepository {
         orderIndex: const Value(null), // 分叉的聊天应使用默认排序
     );
     // 调用通用的 DAO 方法，并传入消息ID以上限
-    return await _chatDao.forkOrCloneChat(
+    final newChatId = await _chatDao.forkOrCloneChat(
       forkedChatCompanion,
       originalChatId,
       upToMessageId: fromMessageId,
     );
+    await _bindItemToCurrentUser(newChatId);
+    return newChatId;
     
   }
 
@@ -175,7 +235,7 @@ class ChatRepository {
     }
 
     final now = DateTime.now();
-    
+
     // 使用 copyWith 创建一个新实例，并重置关键字段
     final newChat = templateChat.copyWith({
       'id': 0, // 关键：重置ID以创建新记录
@@ -183,10 +243,10 @@ class ChatRepository {
       'createdAt': now, // 关键：设置为当前时间
       'updatedAt': now, // 关键：设置为当前时间
       'parentFolderId': parentFolderId, // 关键：设置新的父文件夹ID
-      'orderIndex': null, // 总是放在列表顶部
+      'orderIndex': null, // 确保新聊天置顶
     });
 
-    // 保存这个新创建的聊天，它将没有任何消息
+    // saveChat 将自动处理用户绑定
     return await saveChat(newChat);
   }
 
@@ -213,7 +273,7 @@ class ChatRepository {
       'createdAt': timestamp,
       'updatedAt': timestamp,
       'parentFolderId': null, // 总是克隆到根目录
-      'orderIndex': null, // 总是放在列表顶部
+      'orderIndex': null, // 确保克隆体置顶
       'contextSummary': null, // 清空上下文摘要
     });
     

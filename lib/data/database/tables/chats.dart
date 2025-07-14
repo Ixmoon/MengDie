@@ -14,7 +14,7 @@ class Chats extends Table {
   TextColumn get backgroundImagePath => text().nullable()();
 
   IntColumn get orderIndex => integer().nullable()();
-  BoolColumn get isFolder => boolean().withDefault(const Constant(false))();
+  BoolColumn get isFolder => boolean().nullable()();
   IntColumn get parentFolderId => integer().nullable()();
 
   // For embedded objects, we'll store them as JSON strings initially
@@ -40,6 +40,12 @@ class Chats extends Table {
   TextColumn get secondaryXmlPrompt => text().nullable()();
   TextColumn get secondaryXmlApiConfigId => text().nullable()();
   TextColumn get continuePrompt => text().nullable()(); // 新增：续写提示词
+
+  // --- "Help Me Reply" Feature ---
+  BoolColumn get enableHelpMeReply => boolean().nullable()();
+  TextColumn get helpMeReplyPrompt => text().nullable()();
+  TextColumn get helpMeReplyApiConfigId => text().nullable()();
+  TextColumn get helpMeReplyTriggerMode => text().map(const HelpMeReplyTriggerModeConverter()).nullable()();
   // --- End ---
 
   // autoIncrement() on id column automatically makes it the primary key.

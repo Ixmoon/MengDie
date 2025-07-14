@@ -294,6 +294,61 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     return (select(chats)..where((t) => t.id.equals(chatId))).watchSingleOrNull();
   }
 
+  /// 监听特定用户的聊天列表。
+  Stream<List<ChatData>> watchChatsForUser(List<int> chatIds, int? parentFolderId) {
+    final query = select(chats)
+      ..where((t) => t.id.isIn(chatIds) & (parentFolderId == null ? t.parentFolderId.isNull() : t.parentFolderId.equals(parentFolderId)))
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.first),
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)
+      ]);
+    return query.watch();
+  }
+
+  /// 监听游客和孤儿聊天。
+  Stream<List<ChatData>> watchOrphanChats({
+    required List<int> guestChatIds,
+    required List<int> ownedChatIds,
+    int? parentFolderId,
+  }) {
+    final query = select(chats)
+      ..where((t) {
+        // 条件：
+        // 1. 聊天ID不在任何已注册用户的列表中 (孤儿聊天)
+        //    或者
+        // 2. 聊天ID在游客自己的列表中
+        final isOrphan = t.id.isNotIn(ownedChatIds);
+        final isGuestsOwn = t.id.isIn(guestChatIds);
+        // 文件夹过滤条件
+        final folderCondition = parentFolderId == null
+            ? t.parentFolderId.isNull()
+            : t.parentFolderId.equals(parentFolderId);
+
+        return (isOrphan | isGuestsOwn) & folderCondition;
+      })
+      ..orderBy([
+        (t) => OrderingTerm(expression: t.orderIndex, mode: OrderingMode.asc, nulls: NullsOrder.first),
+        (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)
+      ]);
+    return query.watch();
+  }
+
+  /// 获取所有**非游客**用户的聊天ID列表。
+  /// 这是为了识别哪些聊天是“孤儿”聊天（不属于任何注册用户）。
+  Future<List<int>> getAllOwnedChatIds() async {
+    // 通过添加 where 条件排除了 id 为 0 的游客用户
+    final allUsers = await (db.userDao.db.select(db.userDao.db.users)..where((u) => u.id.isNotValue(0))).get();
+    final allOwnedIds = <int>{};
+    for (final user in allUsers) {
+      // Safely add chat IDs, ensuring the list is not null.
+      final chatIds = user.chatIds;
+      if (chatIds != null) {
+        allOwnedIds.addAll(chatIds);
+      }
+    }
+    return allOwnedIds.toList();
+  }
+
   Future<List<ChatData>> getChatsInFolder(int? parentFolderId) {
     final query = select(chats)
       ..where((t) => parentFolderId == null ? t.parentFolderId.isNull() : t.parentFolderId.equals(parentFolderId))
@@ -338,7 +393,7 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       updatedAt: chatDto.updatedAt ?? now,
       apiConfigId: Value(chatDto.apiConfigId),
       parentFolderId: Value(parentFolderId),
-      orderIndex: const Value(0),
+      orderIndex: Value(chatDto.orderIndex),
       coverImageBase64: Value(chatDto.coverImageBase64),
       backgroundImagePath: const Value(null),
       // new fields
