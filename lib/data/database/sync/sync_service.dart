@@ -184,46 +184,57 @@ class SyncService {
       }
 
       // Batch insert/update using UNNEST for superior performance.
-      // Using a transaction for a single, complex operation is best practice.
       // Manual transaction control
       await remoteConnection.execute('BEGIN');
       try {
-        // We must iterate and execute for each user, as batch operations with
-        // ON CONFLICT are complex to construct safely with the postgres package.
-        for (final user in localUsers) {
-          await remoteConnection.execute(
-            Sql.named('''
-              INSERT INTO users (id, username, password_hash, chat_ids, enable_auto_title_generation, title_generation_prompt, title_generation_api_config_id, enable_resume, resume_prompt, resume_api_config_id, gemini_api_keys)
-              VALUES (@id, @username, @password_hash, @chat_ids, @enable_auto_title_generation, @title_generation_prompt, @title_generation_api_config_id, @enable_resume, @resume_prompt, @resume_api_config_id, @gemini_api_keys)
-              ON CONFLICT (id) DO UPDATE SET
-                username = EXCLUDED.username,
-                password_hash = EXCLUDED.password_hash,
-                chat_ids = EXCLUDED.chat_ids,
-                enable_auto_title_generation = EXCLUDED.enable_auto_title_generation,
-                title_generation_prompt = EXCLUDED.title_generation_prompt,
-                title_generation_api_config_id = EXCLUDED.title_generation_api_config_id,
-                enable_resume = EXCLUDED.enable_resume,
-                resume_prompt = EXCLUDED.resume_prompt,
-                resume_api_config_id = EXCLUDED.resume_api_config_id,
-                gemini_api_keys = EXCLUDED.gemini_api_keys;
-            '''),
-            parameters: {
-              'id': user.id,
-              'username': user.username,
-              'password_hash': user.passwordHash,
-              'chat_ids': const IntListConverter().toSql(user.chatIds ?? []),
-              'enable_auto_title_generation': user.enableAutoTitleGeneration,
-              'title_generation_prompt': user.titleGenerationPrompt,
-              'title_generation_api_config_id': user.titleGenerationApiConfigId,
-              'enable_resume': user.enableResume,
-              'resume_prompt': user.resumePrompt,
-              'resume_api_config_id': user.resumeApiConfigId,
-              'gemini_api_keys': const StringListConverter().toSql(user.geminiApiKeys ?? []),
-            },
-          );
-        }
+        await remoteConnection.execute(
+          Sql.named('''
+            INSERT INTO users (
+              id, username, password_hash, chat_ids, enable_auto_title_generation,
+              title_generation_prompt, title_generation_api_config_id, enable_resume,
+              resume_prompt, resume_api_config_id, gemini_api_keys
+            )
+            SELECT
+              u.id, u.username, u.password_hash, u.chat_ids, u.enable_auto_title_generation,
+              u.title_generation_prompt, u.title_generation_api_config_id, u.enable_resume,
+              u.resume_prompt, u.resume_api_config_id, u.gemini_api_keys
+            FROM UNNEST(
+              @ids, @usernames, @password_hashes, @chat_ids_list, @enable_auto_title_generations,
+              @title_generation_prompts, @title_generation_api_config_ids, @enable_resumes,
+              @resume_prompts, @resume_api_config_ids, @gemini_api_keys_list
+            ) AS u(
+              id, username, password_hash, chat_ids, enable_auto_title_generation,
+              title_generation_prompt, title_generation_api_config_id, enable_resume,
+              resume_prompt, resume_api_config_id, gemini_api_keys
+            )
+            ON CONFLICT (id) DO UPDATE SET
+              username = EXCLUDED.username,
+              password_hash = EXCLUDED.password_hash,
+              chat_ids = EXCLUDED.chat_ids,
+              enable_auto_title_generation = EXCLUDED.enable_auto_title_generation,
+              title_generation_prompt = EXCLUDED.title_generation_prompt,
+              title_generation_api_config_id = EXCLUDED.title_generation_api_config_id,
+              enable_resume = EXCLUDED.enable_resume,
+              resume_prompt = EXCLUDED.resume_prompt,
+              resume_api_config_id = EXCLUDED.resume_api_config_id,
+              gemini_api_keys = EXCLUDED.gemini_api_keys;
+          '''),
+          parameters: {
+            'ids': localUsers.map((u) => u.id).toList(),
+            'usernames': localUsers.map((u) => u.username).toList(),
+            'password_hashes': localUsers.map((u) => u.passwordHash).toList(),
+            'chat_ids_list': localUsers.map((u) => const IntListConverter().toSql(u.chatIds ?? [])).toList(),
+            'enable_auto_title_generations': localUsers.map((u) => u.enableAutoTitleGeneration).toList(),
+            'title_generation_prompts': localUsers.map((u) => u.titleGenerationPrompt).toList(),
+            'title_generation_api_config_ids': localUsers.map((u) => u.titleGenerationApiConfigId).toList(),
+            'enable_resumes': localUsers.map((u) => u.enableResume).toList(),
+            'resume_prompts': localUsers.map((u) => u.resumePrompt).toList(),
+            'resume_api_config_ids': localUsers.map((u) => u.resumeApiConfigId).toList(),
+            'gemini_api_keys_list': localUsers.map((u) => const StringListConverter().toSql(u.geminiApiKeys ?? [])).toList(),
+          },
+        );
         await remoteConnection.execute('COMMIT');
-      } catch(e) {
+      } catch (e) {
         await remoteConnection.execute('ROLLBACK');
         rethrow;
       }
@@ -304,44 +315,71 @@ class SyncService {
       final userId = SettingsService.instance.currentUserId;
       debugPrint('Syncing data for userId: $userId');
 
-      // --- Step 1 & 2: Fetch Metadata and Compute Actions ---
-      // API Configs
-      final localApiConfigMetas = await (_db.selectOnly(_db.apiConfigs)..addColumns([_db.apiConfigs.id, _db.apiConfigs.createdAt, _db.apiConfigs.updatedAt]))
-        .get().then((rows) {
-        debugPrint('Found ${rows.length} local api_config metas.');
-        return rows.map((row) => _SyncMeta(id: row.read(_db.apiConfigs.id)!, createdAt: row.read(_db.apiConfigs.createdAt)!, updatedAt: row.read(_db.apiConfigs.updatedAt)!)).toList();
-      });
-      final remoteApiConfigMetas = await remoteConnection.execute('SELECT id, created_at, updated_at FROM api_configs')
-        .then((rows) => rows.map((row) => _SyncMeta(id: row[0] as String, createdAt: row[1] as DateTime, updatedAt: row[2] as DateTime)).toList());
-      final apiConfigActions = _computeSyncActions(localMetas: localApiConfigMetas, remoteMetas: remoteApiConfigMetas);
+      // --- Step 1: Fetch Metadata in Parallel ---
+      final metaResults = await Future.wait([
+        // 0: localApiConfigMetas
+        (_db.selectOnly(_db.apiConfigs)..addColumns([_db.apiConfigs.id, _db.apiConfigs.createdAt, _db.apiConfigs.updatedAt]))
+            .get().then((rows) {
+          debugPrint('Found ${rows.length} local api_config metas.');
+          return rows.map((row) => _SyncMeta(id: row.read(_db.apiConfigs.id)!, createdAt: row.read(_db.apiConfigs.createdAt)!, updatedAt: row.read(_db.apiConfigs.updatedAt)!)).toList();
+        }),
+        // 1: remoteApiConfigMetas
+        remoteConnection.execute('SELECT id, created_at, updated_at FROM api_configs')
+            .then((rows) => rows.map((row) => _SyncMeta(id: row[0] as String, createdAt: row[1] as DateTime, updatedAt: row[2] as DateTime)).toList()),
+        // 2: localChatMetas
+        (_db.selectOnly(_db.chats)..addColumns([_db.chats.id, _db.chats.createdAt, _db.chats.updatedAt]))
+            .get().then((rows) {
+          debugPrint('Found ${rows.length} local chat metas.');
+          return rows.map((row) => _SyncMeta(id: row.read(_db.chats.id)!, createdAt: row.read(_db.chats.createdAt)!, updatedAt: row.read(_db.chats.updatedAt)!)).toList();
+        }),
+        // 3: remoteChatMetas
+        remoteConnection.execute('SELECT id, created_at, updated_at FROM chats')
+            .then((rows) => rows.map((row) => _SyncMeta(id: row[0] as int, createdAt: row[1] as DateTime, updatedAt: row[2] as DateTime)).toList()),
+      ]);
 
-      // Chats
-      final localChatMetas = await (_db.selectOnly(_db.chats)..addColumns([_db.chats.id, _db.chats.createdAt, _db.chats.updatedAt]))
-        .get().then((rows) {
-        debugPrint('Found ${rows.length} local chat metas.');
-        return rows.map((row) => _SyncMeta(id: row.read(_db.chats.id)!, createdAt: row.read(_db.chats.createdAt)!, updatedAt: row.read(_db.chats.updatedAt)!)).toList();
-      });
-      final remoteChatMetas = await remoteConnection.execute('SELECT id, created_at, updated_at FROM chats')
-        .then((rows) => rows.map((row) => _SyncMeta(id: row[0] as int, createdAt: row[1] as DateTime, updatedAt: row[2] as DateTime)).toList());
+      final localApiConfigMetas = metaResults[0] as List<_SyncMeta>;
+      final remoteApiConfigMetas = metaResults[1] as List<_SyncMeta>;
+      final localChatMetas = metaResults[2] as List<_SyncMeta>;
+      final remoteChatMetas = metaResults[3] as List<_SyncMeta>;
+
+      // --- Step 2: Compute Actions ---
+      final apiConfigActions = _computeSyncActions(localMetas: localApiConfigMetas, remoteMetas: remoteApiConfigMetas);
       final chatActions = _computeSyncActions(localMetas: localChatMetas, remoteMetas: remoteChatMetas);
       debugPrint('API Config Actions: ${apiConfigActions.toCreateRemotely.length} to create, ${apiConfigActions.toPush.length} to push.');
       debugPrint('Chat Actions: ${chatActions.toCreateRemotely.length} to create, ${chatActions.toPush.length} to push.');
 
-      // --- Step 3: Fetch Full Data for Actions ---
-      // Combine items to be pushed (updated) and created remotely.
+      // --- Step 3: Fetch Full Data for Actions in Parallel ---
       final apiConfigIdsToPush = {...apiConfigActions.toPush, ...apiConfigActions.toCreateRemotely}.toList();
       final chatIdsToPush = {...chatActions.toPush, ...chatActions.toCreateRemotely}.toList();
-
-      final apiConfigsToPush = apiConfigIdsToPush.isNotEmpty ? await (_db.select(_db.apiConfigs)..where((t) => t.id.isIn(apiConfigIdsToPush.cast<String>()))).get() : <ApiConfig>[];
-      final chatsToPush = chatIdsToPush.isNotEmpty ? await (_db.select(_db.chats)..where((t) => t.id.isIn(chatIdsToPush.cast<int>()))).get() : <ChatData>[];
-      debugPrint('Will push ${apiConfigsToPush.length} api_configs and ${chatsToPush.length} chats.');
-      
-      // Combine items to be pulled (updated) and created locally.
       final apiConfigIdsToPull = {...apiConfigActions.toPull, ...apiConfigActions.toCreateLocally}.toList();
       final chatIdsToPull = {...chatActions.toPull, ...chatActions.toCreateLocally}.toList();
 
-      final apiConfigsToPull = apiConfigIdsToPull.isNotEmpty ? await remoteConnection.execute(Sql.named('SELECT * FROM api_configs WHERE id = ANY(@ids)'), parameters: {'ids': apiConfigIdsToPull}).then((rows) => rows.map((r) => ApiConfig.fromJson(r.toColumnMap())).toList()) : <ApiConfig>[];
-      final chatsToPull = chatIdsToPull.isNotEmpty ? await remoteConnection.execute(Sql.named('SELECT * FROM chats WHERE id = ANY(@ids)'), parameters: {'ids': chatIdsToPull}).then((rows) => rows.map((r) => ChatData.fromJson(r.toColumnMap())).toList()) : <ChatData>[];
+      final dataResults = await Future.wait([
+        // 0: apiConfigsToPush
+        apiConfigIdsToPush.isNotEmpty
+            ? (_db.select(_db.apiConfigs)..where((t) => t.id.isIn(apiConfigIdsToPush.cast<String>()))).get()
+            : Future.value(<ApiConfig>[]),
+        // 1: chatsToPush
+        chatIdsToPush.isNotEmpty
+            ? (_db.select(_db.chats)..where((t) => t.id.isIn(chatIdsToPush.cast<int>()))).get()
+            : Future.value(<ChatData>[]),
+        // 2: apiConfigsToPull
+        apiConfigIdsToPull.isNotEmpty
+            ? remoteConnection.execute(Sql.named('SELECT * FROM api_configs WHERE id = ANY(@ids)'), parameters: {'ids': apiConfigIdsToPull})
+                .then((rows) => rows.map((r) => ApiConfig.fromJson(r.toColumnMap())).toList())
+            : Future.value(<ApiConfig>[]),
+        // 3: chatsToPull
+        chatIdsToPull.isNotEmpty
+            ? remoteConnection.execute(Sql.named('SELECT * FROM chats WHERE id = ANY(@ids)'), parameters: {'ids': chatIdsToPull})
+                .then((rows) => rows.map((r) => ChatData.fromJson(r.toColumnMap())).toList())
+            : Future.value(<ChatData>[]),
+      ]);
+
+      final apiConfigsToPush = dataResults[0] as List<ApiConfig>;
+      final chatsToPush = dataResults[1] as List<ChatData>;
+      final apiConfigsToPull = dataResults[2] as List<ApiConfig>;
+      final chatsToPull = dataResults[3] as List<ChatData>;
+      debugPrint('Will push ${apiConfigsToPush.length} api_configs and ${chatsToPush.length} chats.');
       
       // Fetch messages for chats that need to be pulled, before entering local transaction.
       final Map<int, List<MessageData>> messagesToPullByChat = {};
@@ -358,118 +396,181 @@ class SyncService {
       // Manual transaction for remote push
       await remoteConnection.execute('BEGIN');
       try {
-        // Push API Configs one-by-one for robustness
+        // Batch push API Configs
         if (apiConfigsToPush.isNotEmpty) {
-          debugPrint('Executing push for ${apiConfigsToPush.length} api_configs...');
-          for (final config in apiConfigsToPush) {
-            await remoteConnection.execute(
-              Sql.named('''
-                INSERT INTO api_configs (id, user_id, name, api_type, model, api_key, base_url, use_custom_temperature, temperature, use_custom_top_p, top_p, use_custom_top_k, top_k, max_output_tokens, stop_sequences, enable_reasoning_effort, reasoning_effort, created_at, updated_at)
-                VALUES (@id, @user_id, @name, @api_type, @model, @api_key, @base_url, @use_custom_temperature, @temperature, @use_custom_top_p, @top_p, @use_custom_top_k, @top_k, @max_output_tokens, @stop_sequences, @enable_reasoning_effort, @reasoning_effort, @created_at, @updated_at)
-                ON CONFLICT (id) DO UPDATE SET
-                  user_id = EXCLUDED.user_id, name = EXCLUDED.name, api_type = EXCLUDED.api_type, model = EXCLUDED.model, api_key = EXCLUDED.api_key, base_url = EXCLUDED.base_url,
-                  use_custom_temperature = EXCLUDED.use_custom_temperature, temperature = EXCLUDED.temperature, use_custom_top_p = EXCLUDED.use_custom_top_p, top_p = EXCLUDED.top_p,
-                  use_custom_top_k = EXCLUDED.use_custom_top_k, top_k = EXCLUDED.top_k, max_output_tokens = EXCLUDED.max_output_tokens, stop_sequences = EXCLUDED.stop_sequences,
-                  enable_reasoning_effort = EXCLUDED.enable_reasoning_effort, reasoning_effort = EXCLUDED.reasoning_effort, updated_at = EXCLUDED.updated_at;
-              '''),
-              parameters: {
-                'id': config.id,
-                'user_id': userId,
-                'name': config.name,
-                'api_type': config.apiType.name,
-                'model': config.model,
-                'api_key': config.apiKey,
-                'base_url': config.baseUrl,
-                'use_custom_temperature': config.useCustomTemperature,
-                'temperature': config.temperature,
-                'use_custom_top_p': config.useCustomTopP,
-                'top_p': config.topP,
-                'use_custom_top_k': config.useCustomTopK,
-                'top_k': config.topK,
-                'max_output_tokens': config.maxOutputTokens,
-                'stop_sequences': const StringListConverter().toSql(config.stopSequences ?? []),
-                'enable_reasoning_effort': config.enableReasoningEffort,
-                'reasoning_effort': config.reasoningEffort?.name,
-                'created_at': config.createdAt,
-                'updated_at': config.updatedAt,
-              }
-            );
-          }
+          debugPrint('Executing batch push for ${apiConfigsToPush.length} api_configs...');
+          await remoteConnection.execute(
+            Sql.named('''
+              INSERT INTO api_configs (
+                id, user_id, name, api_type, model, api_key, base_url,
+                use_custom_temperature, temperature, use_custom_top_p, top_p,
+                use_custom_top_k, top_k, max_output_tokens, stop_sequences,
+                enable_reasoning_effort, reasoning_effort, created_at, updated_at
+              )
+              SELECT
+                c.id, @user_id, c.name, c.api_type, c.model, c.api_key, c.base_url,
+                c.use_custom_temperature, c.temperature, c.use_custom_top_p, c.top_p,
+                c.use_custom_top_k, c.top_k, c.max_output_tokens, c.stop_sequences,
+                c.enable_reasoning_effort, c.reasoning_effort, c.created_at, c.updated_at
+              FROM UNNEST(
+                @ids, @names, @api_types, @models, @api_keys, @base_urls,
+                @use_custom_temperatures, @temperatures, @use_custom_top_ps, @top_ps,
+                @use_custom_top_ks, @top_ks, @max_output_tokens_list, @stop_sequences_list,
+                @enable_reasoning_efforts, @reasoning_efforts, @created_ats, @updated_ats
+              ) AS c(
+                id, name, api_type, model, api_key, base_url,
+                use_custom_temperature, temperature, use_custom_top_p, top_p,
+                use_custom_top_k, top_k, max_output_tokens, stop_sequences,
+                enable_reasoning_effort, reasoning_effort, created_at, updated_at
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                user_id = EXCLUDED.user_id, name = EXCLUDED.name, api_type = EXCLUDED.api_type,
+                model = EXCLUDED.model, api_key = EXCLUDED.api_key, base_url = EXCLUDED.base_url,
+                use_custom_temperature = EXCLUDED.use_custom_temperature, temperature = EXCLUDED.temperature,
+                use_custom_top_p = EXCLUDED.use_custom_top_p, top_p = EXCLUDED.top_p,
+                use_custom_top_k = EXCLUDED.use_custom_top_k, top_k = EXCLUDED.top_k,
+                max_output_tokens = EXCLUDED.max_output_tokens, stop_sequences = EXCLUDED.stop_sequences,
+                enable_reasoning_effort = EXCLUDED.enable_reasoning_effort,
+                reasoning_effort = EXCLUDED.reasoning_effort, updated_at = EXCLUDED.updated_at;
+            '''),
+            parameters: {
+              'user_id': userId,
+              'ids': apiConfigsToPush.map((c) => c.id).toList(),
+              'names': apiConfigsToPush.map((c) => c.name).toList(),
+              'api_types': apiConfigsToPush.map((c) => c.apiType.name).toList(),
+              'models': apiConfigsToPush.map((c) => c.model).toList(),
+              'api_keys': apiConfigsToPush.map((c) => c.apiKey).toList(),
+              'base_urls': apiConfigsToPush.map((c) => c.baseUrl).toList(),
+              'use_custom_temperatures': apiConfigsToPush.map((c) => c.useCustomTemperature).toList(),
+              'temperatures': apiConfigsToPush.map((c) => c.temperature).toList(),
+              'use_custom_top_ps': apiConfigsToPush.map((c) => c.useCustomTopP).toList(),
+              'top_ps': apiConfigsToPush.map((c) => c.topP).toList(),
+              'use_custom_top_ks': apiConfigsToPush.map((c) => c.useCustomTopK).toList(),
+              'top_ks': apiConfigsToPush.map((c) => c.topK).toList(),
+              'max_output_tokens_list': apiConfigsToPush.map((c) => c.maxOutputTokens).toList(),
+              'stop_sequences_list': apiConfigsToPush.map((c) => const StringListConverter().toSql(c.stopSequences ?? [])).toList(),
+              'enable_reasoning_efforts': apiConfigsToPush.map((c) => c.enableReasoningEffort).toList(),
+              'reasoning_efforts': apiConfigsToPush.map((c) => c.reasoningEffort?.name).toList(),
+              'created_ats': apiConfigsToPush.map((c) => c.createdAt).toList(),
+              'updated_ats': apiConfigsToPush.map((c) => c.updatedAt).toList(),
+            }
+          );
         }
 
-        // Push Chats and their Messages (ATOMIC) one-by-one
+        // Batch push Chats and their Messages (ATOMIC)
         if (chatsToPush.isNotEmpty) {
-          debugPrint('Executing push for ${chatsToPush.length} chats...');
-          for (final chat in chatsToPush) {
-            // Insert/Update the chat itself
+          debugPrint('Executing batch push for ${chatsToPush.length} chats...');
+          
+          // Batch insert/update chats
+          await remoteConnection.execute(
+            Sql.named('''
+              INSERT INTO chats (
+                id, title, system_prompt, created_at, updated_at, cover_image_base64,
+                background_image_path, order_index, is_folder, parent_folder_id,
+                context_config, xml_rules, api_config_id,
+                enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id,
+                enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
+                continue_prompt, enable_help_me_reply, help_me_reply_prompt,
+                help_me_reply_api_config_id, help_me_reply_trigger_mode
+              )
+              SELECT
+                c.id, c.title, c.system_prompt, c.created_at, c.updated_at, c.cover_image_base64,
+                c.background_image_path, c.order_index, c.is_folder, c.parent_folder_id,
+                c.context_config, c.xml_rules, c.api_config_id,
+                c.enable_preprocessing, c.preprocessing_prompt, c.context_summary, c.preprocessing_api_config_id,
+                c.enable_secondary_xml, c.secondary_xml_prompt, c.secondary_xml_api_config_id,
+                c.continue_prompt, c.enable_help_me_reply, c.help_me_reply_prompt,
+                c.help_me_reply_api_config_id, c.help_me_reply_trigger_mode
+              FROM UNNEST(
+                @ids, @titles, @system_prompts, @created_ats, @updated_ats, @cover_image_base64s,
+                @background_image_paths, @order_indexes, @is_folders, @parent_folder_ids,
+                @context_configs, @xml_rules_list, @api_config_ids,
+                @enable_preprocessings, @preprocessing_prompts, @context_summaries, @preprocessing_api_config_ids,
+                @enable_secondary_xmls, @secondary_xml_prompts, @secondary_xml_api_config_ids,
+                @continue_prompts, @enable_help_me_replies, @help_me_reply_prompts,
+                @help_me_reply_api_config_ids, @help_me_reply_trigger_modes
+              ) AS c(
+                id, title, system_prompt, created_at, updated_at, cover_image_base64,
+                background_image_path, order_index, is_folder, parent_folder_id,
+                context_config, xml_rules, api_config_id,
+                enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id,
+                enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
+                continue_prompt, enable_help_me_reply, help_me_reply_prompt,
+                help_me_reply_api_config_id, help_me_reply_trigger_mode
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title, system_prompt = EXCLUDED.system_prompt, updated_at = EXCLUDED.updated_at,
+                cover_image_base64 = EXCLUDED.cover_image_base64, background_image_path = EXCLUDED.background_image_path,
+                order_index = EXCLUDED.order_index, is_folder = EXCLUDED.is_folder, parent_folder_id = EXCLUDED.parent_folder_id,
+                context_config = EXCLUDED.context_config, xml_rules = EXCLUDED.xml_rules,
+                api_config_id = EXCLUDED.api_config_id,
+                enable_preprocessing = EXCLUDED.enable_preprocessing, preprocessing_prompt = EXCLUDED.preprocessing_prompt,
+                context_summary = EXCLUDED.context_summary, preprocessing_api_config_id = EXCLUDED.preprocessing_api_config_id,
+                enable_secondary_xml = EXCLUDED.enable_secondary_xml, secondary_xml_prompt = EXCLUDED.secondary_xml_prompt,
+                secondary_xml_api_config_id = EXCLUDED.secondary_xml_api_config_id,
+                continue_prompt = EXCLUDED.continue_prompt, enable_help_me_reply = EXCLUDED.enable_help_me_reply,
+                help_me_reply_prompt = EXCLUDED.help_me_reply_prompt, help_me_reply_api_config_id = EXCLUDED.help_me_reply_api_config_id,
+                help_me_reply_trigger_mode = EXCLUDED.help_me_reply_trigger_mode;
+            '''),
+            parameters: {
+              'ids': chatsToPush.map((c) => c.id).toList(),
+              'titles': chatsToPush.map((c) => c.title).toList(),
+              'system_prompts': chatsToPush.map((c) => c.systemPrompt).toList(),
+              'created_ats': chatsToPush.map((c) => c.createdAt).toList(),
+              'updated_ats': chatsToPush.map((c) => c.updatedAt).toList(),
+              'cover_image_base64s': chatsToPush.map((c) => c.coverImageBase64).toList(),
+              'background_image_paths': chatsToPush.map((c) => c.backgroundImagePath).toList(),
+              'order_indexes': chatsToPush.map((c) => c.orderIndex).toList(),
+              'is_folders': chatsToPush.map((c) => c.isFolder).toList(),
+              'parent_folder_ids': chatsToPush.map((c) => c.parentFolderId).toList(),
+              'context_configs': chatsToPush.map((c) => const ContextConfigConverter().toSql(c.contextConfig)).toList(),
+              'xml_rules_list': chatsToPush.map((c) => const XmlRuleListConverter().toSql(c.xmlRules)).toList(),
+              'api_config_ids': chatsToPush.map((c) => c.apiConfigId).toList(),
+              'enable_preprocessings': chatsToPush.map((c) => c.enablePreprocessing).toList(),
+              'preprocessing_prompts': chatsToPush.map((c) => c.preprocessingPrompt).toList(),
+              'context_summaries': chatsToPush.map((c) => c.contextSummary).toList(),
+              'preprocessing_api_config_ids': chatsToPush.map((c) => c.preprocessingApiConfigId).toList(),
+              'enable_secondary_xmls': chatsToPush.map((c) => c.enableSecondaryXml).toList(),
+              'secondary_xml_prompts': chatsToPush.map((c) => c.secondaryXmlPrompt).toList(),
+              'secondary_xml_api_config_ids': chatsToPush.map((c) => c.secondaryXmlApiConfigId).toList(),
+              'continue_prompts': chatsToPush.map((c) => c.continuePrompt).toList(),
+              'enable_help_me_replies': chatsToPush.map((c) => c.enableHelpMeReply).toList(),
+              'help_me_reply_prompts': chatsToPush.map((c) => c.helpMeReplyPrompt).toList(),
+              'help_me_reply_api_config_ids': chatsToPush.map((c) => c.helpMeReplyApiConfigId).toList(),
+              'help_me_reply_trigger_modes': chatsToPush.map((c) => c.helpMeReplyTriggerMode?.name).toList(),
+            }
+          );
+
+          // Now, handle all messages for all pushed chats in a batch
+          final allChatIds = chatsToPush.map((c) => c.id).toList();
+          final allMessagesToPush = await (_db.select(_db.messages)..where((t) => t.chatId.isIn(allChatIds))).get();
+          
+          // First, delete all existing messages for these chats to ensure consistency
+          await remoteConnection.execute(Sql.named('DELETE FROM messages WHERE chat_id = ANY(@ids)'), parameters: {'ids': allChatIds});
+          
+          if (allMessagesToPush.isNotEmpty) {
+            // Then, batch insert all new messages
             await remoteConnection.execute(
               Sql.named('''
-                INSERT INTO chats (id, title, system_prompt, created_at, updated_at, cover_image_base64, background_image_path, order_index, is_folder, parent_folder_id, context_config, xml_rules, api_config_id, api_type, generation_config, enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id, enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id, continue_prompt, enable_help_me_reply, help_me_reply_prompt, help_me_reply_api_config_id, help_me_reply_trigger_mode)
-                VALUES (@id, @title, @system_prompt, @created_at, @updated_at, @cover_image_base64, @background_image_path, @order_index, @is_folder, @parent_folder_id, @context_config, @xml_rules, @api_config_id, @api_type, @generation_config, @enable_preprocessing, @preprocessing_prompt, @context_summary, @preprocessing_api_config_id, @enable_secondary_xml, @secondary_xml_prompt, @secondary_xml_api_config_id, @continue_prompt, @enable_help_me_reply, @help_me_reply_prompt, @help_me_reply_api_config_id, @help_me_reply_trigger_mode)
-                ON CONFLICT (id) DO UPDATE SET
-                  title = EXCLUDED.title, system_prompt = EXCLUDED.system_prompt, updated_at = EXCLUDED.updated_at, cover_image_base64 = EXCLUDED.cover_image_base64, background_image_path = EXCLUDED.background_image_path,
-                  order_index = EXCLUDED.order_index, is_folder = EXCLUDED.is_folder, parent_folder_id = EXCLUDED.parent_folder_id, context_config = EXCLUDED.context_config, xml_rules = EXCLUDED.xml_rules,
-                  api_config_id = EXCLUDED.api_config_id, api_type = EXCLUDED.api_type, generation_config = EXCLUDED.generation_config, enable_preprocessing = EXCLUDED.enable_preprocessing,
-                  preprocessing_prompt = EXCLUDED.preprocessing_prompt, context_summary = EXCLUDED.context_summary, preprocessing_api_config_id = EXCLUDED.preprocessing_api_config_id,
-                  enable_secondary_xml = EXCLUDED.enable_secondary_xml, secondary_xml_prompt = EXCLUDED.secondary_xml_prompt, secondary_xml_api_config_id = EXCLUDED.secondary_xml_api_config_id,
-                  continue_prompt = EXCLUDED.continue_prompt, enable_help_me_reply = EXCLUDED.enable_help_me_reply, help_me_reply_prompt = EXCLUDED.help_me_reply_prompt,
-                  help_me_reply_api_config_id = EXCLUDED.help_me_reply_api_config_id, help_me_reply_trigger_mode = EXCLUDED.help_me_reply_trigger_mode;
+                INSERT INTO messages (id, chat_id, role, raw_text, "timestamp", original_xml_content, secondary_xml_content)
+                SELECT
+                  m.id, m.chat_id, m.role, m.raw_text, m.timestamp, m.original_xml_content, m.secondary_xml_content
+                FROM UNNEST(
+                  @ids, @chat_ids, @roles, @raw_texts, @timestamps, @original_xml_contents, @secondary_xml_contents
+                ) AS m(
+                  id, chat_id, role, raw_text, "timestamp", original_xml_content, secondary_xml_content
+                )
               '''),
               parameters: {
-                'id': chat.id,
-                'title': chat.title,
-                'system_prompt': chat.systemPrompt,
-                'created_at': chat.createdAt,
-                'updated_at': chat.updatedAt,
-                'cover_image_base64': chat.coverImageBase64,
-                'background_image_path': chat.backgroundImagePath,
-                'order_index': chat.orderIndex,
-                'is_folder': chat.isFolder,
-                'parent_folder_id': chat.parentFolderId,
-                'context_config': const ContextConfigConverter().toSql(chat.contextConfig),
-                'xml_rules': const XmlRuleListConverter().toSql(chat.xmlRules),
-                'api_config_id': chat.apiConfigId,
-                'enable_preprocessing': chat.enablePreprocessing,
-                'preprocessing_prompt': chat.preprocessingPrompt,
-                'context_summary': chat.contextSummary,
-                'preprocessing_api_config_id': chat.preprocessingApiConfigId,
-                'enable_secondary_xml': chat.enableSecondaryXml,
-                'secondary_xml_prompt': chat.secondaryXmlPrompt,
-                'secondary_xml_api_config_id': chat.secondaryXmlApiConfigId,
-                'continue_prompt': chat.continuePrompt,
-                'enable_help_me_reply': chat.enableHelpMeReply,
-                'help_me_reply_prompt': chat.helpMeReplyPrompt,
-                'help_me_reply_api_config_id': chat.helpMeReplyApiConfigId,
-                'help_me_reply_trigger_mode': chat.helpMeReplyTriggerMode?.name,
+                'ids': allMessagesToPush.map((m) => m.id).toList(),
+                'chat_ids': allMessagesToPush.map((m) => m.chatId).toList(),
+                'roles': allMessagesToPush.map((m) => m.role.name).toList(),
+                'raw_texts': allMessagesToPush.map((m) => m.rawText).toList(),
+                'timestamps': allMessagesToPush.map((m) => m.timestamp).toList(),
+                'original_xml_contents': allMessagesToPush.map((m) => m.originalXmlContent).toList(),
+                'secondary_xml_contents': allMessagesToPush.map((m) => m.secondaryXmlContent).toList(),
               }
             );
-
-            // Now, handle messages for this specific chat
-            final messagesToPush = await (_db.select(_db.messages)..where((t) => t.chatId.equals(chat.id))).get();
-            
-            // First, delete existing messages for this chat to ensure consistency
-            await remoteConnection.execute(Sql.named('DELETE FROM messages WHERE chat_id = @id'), parameters: {'id': chat.id});
-            
-            if (messagesToPush.isNotEmpty) {
-              // Insert messages one-by-one for this chat
-              for (final message in messagesToPush) {
-                await remoteConnection.execute(
-                  Sql.named('''
-                    INSERT INTO messages (id, chat_id, role, raw_text, "timestamp", original_xml_content, secondary_xml_content)
-                    VALUES (@id, @chat_id, @role, @raw_text, @timestamp, @original_xml_content, @secondary_xml_content)
-                  '''),
-                  parameters: {
-                    'id': message.id,
-                    'chat_id': message.chatId,
-                    'role': message.role.name,
-                    'raw_text': message.partsJson,
-                    'timestamp': message.timestamp,
-                    'original_xml_content': message.originalXmlContent,
-                    'secondary_xml_content': message.secondaryXmlContent,
-                  }
-                );
-              }
-            }
           }
         }
         await remoteConnection.execute('COMMIT');

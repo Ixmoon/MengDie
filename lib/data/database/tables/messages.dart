@@ -10,7 +10,7 @@ class Messages extends Table {
   // Foreign key to the Chats table
   IntColumn get chatId => integer().references(Chats, #id)(); 
   
-  TextColumn get partsJson => text().named('raw_text')(); // Store parts as JSON, keep DB column name for migration
+  TextColumn get rawText => text().named('raw_text')(); // Mapped from DTO, stores parts as JSON
   TextColumn get role => text().map(const MessageRoleConverter())();
   DateTimeColumn get timestamp => dateTime()();
 
