@@ -52,21 +52,7 @@ class ChatRepository {
 
   Future<int> saveChat(Chat chat) async {
 
-    LlmType? apiType;
-    if (chat.apiConfigId != null) {
-      final userId = _ref.read(authProvider).currentUser?.id;
-      if (userId != null) {
-        final apiConfigData = await _apiConfigDao.getApiConfigById(chat.apiConfigId!, userId);
-        if (apiConfigData != null) {
-          apiType = apiConfigData.apiType;
-        }
-      }
-    }
-    // Lmmediate Fix: Ensure apiType is not null to prevent crashes on older schemas.
-    // Default to a safe value if no config is found.
-    apiType ??= LlmType.gemini;
-
-    final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0, apiType: apiType);
+    final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0);
     final newId = await _chatDao.saveChat(companion);
     // 如果是新增操作 (id=0)，则自动绑定到当前用户
     if (chat.id == 0) {
@@ -280,23 +266,4 @@ class ChatRepository {
     return await saveChat(newChat);
   }
 
-  // --- Migration Helpers ---
-  Future<List<Map<String, dynamic>>> getRawChatsForMigration() async {
-    // This is a raw query to fetch data from columns that may no longer exist in the schema
-    // This is an advanced Drift feature and should be used with caution.
-    final result = await _db.customSelect('SELECT id, title, generation_config, api_type FROM chats').get();
-    return result.map((row) {
-      final data = row.data;
-      // The generation_config is a JSON string, so we need to decode it.
-      if (data['generation_config'] is String) {
-        data['generation_config'] = json.decode(data['generation_config']);
-      }
-      return data;
-    }).toList();
-  }
-
-  Future<void> updateApiConfigId(int chatId, String apiConfigId) async {
-    await (_db.update(_db.chats)..where((t) => t.id.equals(chatId)))
-        .write(ChatsCompanion(apiConfigId: Value(apiConfigId)));
-  }
 }

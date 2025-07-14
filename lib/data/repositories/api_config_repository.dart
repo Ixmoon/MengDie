@@ -37,15 +37,4 @@ class ApiConfigRepository {
   Future<void> clearAllConfigs(int userId) =>
       _dao.clearAllApiConfigs(userId);
 
-  // Data migration logic can be added here.
-  // This method would be called once upon app initialization.
-  Future<void> migrateOldConfigs() async {
-    // This is a placeholder for the complex migration logic.
-    // It would involve:
-    // 1. Reading from the (now-hidden) old `GeminiApiKeys` and `OpenAIConfigs` tables.
-    // 2. Creating new `ApiConfig` entries for each old config.
-    // 3. Updating all chats to point to the new `apiConfigId`.
-    // 4. After successful migration, the old tables can be dropped in a future schema version.
-    _log.info("Placeholder for data migration logic.");
-  }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/models/api_config.dart'; // Use the new domain model
@@ -52,10 +51,6 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
   final UserRepository _userRepository;
   final Ref _ref;
 
-  static const _geminiKeysPrefKey = 'gemini_api_keys'; // For migration
-  static const _geminiKeysMigratedPrefKey = 'gemini_keys_migrated_to_db';
-  static const _migrationV11PrefKey = 'migrated_chat_configs_to_v11';
-  
   int? get _userId => _ref.read(authProvider).currentUser?.id;
 
   ApiKeyNotifier(this._apiConfigRepository, this._chatRepository, this._userRepository, this._ref) : super(const ApiKeyState());
@@ -68,7 +63,6 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       }
     }, fireImmediately: true);
     
-    await _migrateOldChatDataIfNeeded();
   }
 
   Future<void> saveConfig({
@@ -192,82 +186,9 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
     return key;
   }
 
-  // --- Data Migration ---
   Future<void> _loadAllUserData() async {
     await _loadConfigs();
     await _loadGeminiKeys();
-    await _migrateGeminiKeysFromPrefs(); // Run migration after user is loaded
-  }
-
-  Future<void> _migrateGeminiKeysFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_geminiKeysMigratedPrefKey) ?? false) {
-      return;
-    }
-
-    final currentUser = _ref.read(authProvider).currentUser;
-    if (currentUser == null || currentUser.isGuestMode) {
-      return;
-    }
-
-    List<String> oldKeys = [];
-    final dynamic storedKeys = prefs.get(_geminiKeysPrefKey);
-    if (storedKeys is List) {
-      oldKeys = storedKeys.map((e) => e.toString()).toList();
-    } else if (storedKeys is String && storedKeys.isNotEmpty) {
-      oldKeys = [storedKeys];
-    }
-
-    if (oldKeys.isNotEmpty) {
-      final newKeys = {...currentUser.geminiApiKeys, ...oldKeys}.toList();
-      await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
-      await prefs.remove(_geminiKeysPrefKey); // Clean up old key
-    }
-    
-    await prefs.setBool(_geminiKeysMigratedPrefKey, true);
-  }
-
-  Future<void> _migrateOldChatDataIfNeeded() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_migrationV11PrefKey) ?? false) {
-      return;
-    }
-
-    try {
-      final oldChats = await _chatRepository.getRawChatsForMigration();
-      for (final oldChat in oldChats) {
-        final oldGenConfig = oldChat['generation_config'];
-        final oldApiTypeStr = oldChat['api_type'] as String?;
-        
-        if (oldGenConfig != null) {
-          final newConfigId = const Uuid().v4();
-          final newConfigName = "Migrated - ${oldChat['title'] ?? oldChat['id']}";
-          
-          await saveConfig(
-            id: newConfigId,
-            name: newConfigName,
-            apiType: oldApiTypeStr == 'openai' ? LlmType.openai : LlmType.gemini,
-            model: oldGenConfig['modelName'] ?? 'gemini-1.5-pro-latest',
-            useCustomTemperature: oldGenConfig['useCustomTemperature'] ?? false,
-            temperature: oldGenConfig['temperature'],
-            useCustomTopP: oldGenConfig['useCustomTopP'] ?? false,
-            topP: oldGenConfig['topP'],
-            useCustomTopK: oldGenConfig['useCustomTopK'] ?? false,
-            topK: oldGenConfig['topK'],
-            maxOutputTokens: oldGenConfig['maxOutputTokens'],
-            stopSequences: (oldGenConfig['stopSequences'] as List<dynamic>?)?.cast<String>(),
-            // No reasoning effort settings to migrate from old data
-          );
-          
-          await _chatRepository.updateApiConfigId(oldChat['id'] as int, newConfigId);
-        }
-      }
-      
-      await prefs.setBool(_migrationV11PrefKey, true);
-    } catch (e) {
-      // Errors in one-time migrations should not crash the app.
-      // They can be logged to a more persistent store if needed.
-    }
   }
 }
 
