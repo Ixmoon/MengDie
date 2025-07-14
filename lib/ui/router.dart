@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
 import '../data/models/enums.dart'; // 导入枚举
-import 'providers/auth_providers.dart';
 // 导入需要导航到的屏幕
 import 'screens/main_screen.dart';
 import 'screens/startup_screen.dart';

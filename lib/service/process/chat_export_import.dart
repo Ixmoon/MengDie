@@ -14,7 +14,6 @@ import 'package:exif/exif.dart'; // 读写 EXIF
 import '../../data/models/export_import_dtos.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
-import '../../ui/providers/auth_providers.dart';
 import '../../ui/providers/repository_providers.dart';
 
 // --- Service Provider ---
