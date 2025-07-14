@@ -76,7 +76,7 @@ class ChatMapper {
     );
   }
 
-  static drift.ChatsCompanion toCompanion(domain.Chat chat, {bool forInsert = false, drift.LlmType? apiType}) {
+  static drift.ChatsCompanion toCompanion(domain.Chat chat, {bool forInsert = false}) {
     return drift.ChatsCompanion(
       id: forInsert ? const Value.absent() : Value(chat.id),
       title: Value(chat.title),
@@ -91,10 +91,6 @@ class ChatMapper {
       apiConfigId: Value(chat.apiConfigId),
       contextConfig: Value(ContextConfigMapper.toDrift(chat.contextConfig)),
       xmlRules: Value(chat.xmlRules.map(XmlRuleMapper.toDrift).toList()),
-      // The legacy `generation_config` field is kept for migration but no longer
-      // used. It's set to null as it's a nullable column now.
-      generationConfig: const Value(null),
-      apiType: Value(apiType), // Use the provided apiType
       enablePreprocessing: Value(chat.enablePreprocessing),
       preprocessingPrompt: Value(chat.preprocessingPrompt),
       contextSummary: Value(chat.contextSummary),
