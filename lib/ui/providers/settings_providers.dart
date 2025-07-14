@@ -16,6 +16,55 @@ import 'repository_providers.dart';
 //    对于游客模式，它会提供一套临时的默认设置。
 
 
+// --- 同步设置 (设备级) ---
+
+const String _syncEnabledKey = 'sync_enabled';
+const String _syncConnectionStringKey = 'sync_connection_string';
+
+/// 同步设置的状态模型
+class SyncSettings {
+  final bool isEnabled;
+  final String connectionString;
+
+  SyncSettings({this.isEnabled = false, this.connectionString = ''});
+
+  SyncSettings copyWith({
+    bool? isEnabled,
+    String? connectionString,
+  }) {
+    return SyncSettings(
+      isEnabled: isEnabled ?? this.isEnabled,
+      connectionString: connectionString ?? this.connectionString,
+    );
+  }
+}
+
+/// 管理和持久化同步设置的 Notifier
+class SyncSettingsNotifier extends StateNotifier<SyncSettings> {
+  late final SharedPreferences? _prefs;
+
+  SyncSettingsNotifier() : super(SyncSettings());
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    final isEnabled = _prefs?.getBool(_syncEnabledKey) ?? false;
+    final connectionString = _prefs?.getString(_syncConnectionStringKey) ?? '';
+    state = SyncSettings(isEnabled: isEnabled, connectionString: connectionString);
+  }
+
+  Future<void> updateSettings(SyncSettings newSettings) async {
+    state = newSettings;
+    await _prefs?.setBool(_syncEnabledKey, newSettings.isEnabled);
+    await _prefs?.setString(_syncConnectionStringKey, newSettings.connectionString);
+  }
+}
+
+/// 提供 SyncSettingsNotifier 实例的全局 Provider
+final syncSettingsProvider = StateNotifierProvider<SyncSettingsNotifier, SyncSettings>((ref) {
+  return SyncSettingsNotifier();
+});
+
+
 // --- 主题设置 (设备级) ---
 
 const String _themeModeKey = 'app_theme_mode'; // SharedPreferences Key
@@ -62,9 +111,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
 
 /// 提供 ThemeModeNotifier 实例的全局 Provider。
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
-  final notifier = ThemeModeNotifier();
-  notifier.init();
-  return notifier;
+  return ThemeModeNotifier();
 });
 
 

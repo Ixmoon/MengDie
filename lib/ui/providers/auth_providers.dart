@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/database/settings_service.dart';
 import '../../data/models/user.dart';
 import 'repository_providers.dart';
 
@@ -40,6 +41,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await _ref.read(userRepositoryProvider).getUserById(lastUserId);
       if (user != null) {
         state = AuthState(currentUser: user, isGuestMode: user.id == 0);
+        SettingsService.instance.currentUserId = user.id;
       }
     }
     // 如果没有保存的用户ID，或者找不到用户，状态将保持 initial，
@@ -56,6 +58,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (user != null) {
       state = AuthState(currentUser: user, isGuestMode: false);
       await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(user.id);
+      SettingsService.instance.currentUserId = user.id;
     } else {
       throw Exception('Invalid username or password');
     }
@@ -71,6 +74,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     await _ref.read(userRepositoryProvider).clearLastLoggedInUserId();
     state = AuthState.initial();
+    SettingsService.instance.currentUserId = 0;
     // 登出后，我们希望用户停留在登录页，而不是自动进入游客模式。
     // 因此，这里不需要调用 switchToGuestMode()。
   }
@@ -103,6 +107,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final newUser = await _ref.read(userRepositoryProvider).createUser(username, password);
     state = AuthState(currentUser: newUser, isGuestMode: false);
     await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(newUser.id);
+    SettingsService.instance.currentUserId = newUser.id;
   }
 
   /// 进入游客模式
@@ -115,6 +120,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final guestUser = await _ref.read(userRepositoryProvider).getOrCreateGuestUser();
     state = AuthState(currentUser: guestUser, isGuestMode: true);
     await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(guestUser.id);
+    SettingsService.instance.currentUserId = guestUser.id;
   }
 
   /// 从数据库刷新当前用户的状态
@@ -126,6 +132,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final updatedUser = await _ref.read(userRepositoryProvider).getUserById(state.currentUser!.id);
       if (updatedUser != null) {
         state = AuthState(currentUser: updatedUser, isGuestMode: updatedUser.id == 0);
+        SettingsService.instance.currentUserId = updatedUser.id;
       }
     }
   }

@@ -45,12 +45,12 @@ class ChatRepository {
     return chatDataList.map(ChatMapper.fromData).toList();
   }
 
-  Future<Chat?> getChat(int chatId, {bool forceRemoteRead = false}) async {
-    final chatData = await _chatDao.getChat(chatId, forceRemoteRead: forceRemoteRead);
+  Future<Chat?> getChat(int chatId) async {
+    final chatData = await _chatDao.getChat(chatId);
     return chatData != null ? ChatMapper.fromData(chatData) : null;
   }
 
-  Future<int> saveChat(Chat chat, {bool forceRemoteWrite = false}) async {
+  Future<int> saveChat(Chat chat) async {
 
     LlmType? apiType;
     if (chat.apiConfigId != null) {
@@ -67,7 +67,7 @@ class ChatRepository {
     apiType ??= LlmType.gemini;
 
     final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0, apiType: apiType);
-    final newId = await _chatDao.saveChat(companion, forceRemoteWrite: forceRemoteWrite);
+    final newId = await _chatDao.saveChat(companion);
     // 如果是新增操作 (id=0)，则自动绑定到当前用户
     if (chat.id == 0) {
       await _bindItemToCurrentUser(newId);
@@ -96,15 +96,15 @@ class ChatRepository {
     return await saveChat(newFolder);
   }
   
-  Future<bool> deleteChat(int chatId, {bool forceRemoteWrite = false}) async {
+  Future<bool> deleteChat(int chatId) async {
     debugPrint("ChatRepository: 删除聊天 ID: $chatId 及其消息 (Drift)...");
-    return await _chatDao.deleteChatAndMessages(chatId, forceRemoteWrite: forceRemoteWrite);
+    return await _chatDao.deleteChatAndMessages(chatId);
   }
 
-  Future<int> deleteChats(List<int> chatIds, {bool forceRemoteWrite = false}) async {
+  Future<int> deleteChats(List<int> chatIds) async {
     if (chatIds.isEmpty) return 0;
     debugPrint("ChatRepository: 批量删除聊天 IDs: $chatIds 及其消息 (Drift)...");
-    return await _chatDao.deleteMultipleChatsAndMessages(chatIds, forceRemoteWrite: forceRemoteWrite);
+    return await _chatDao.deleteMultipleChatsAndMessages(chatIds);
   }
 
   // 新增：非响应式地获取文件夹内容
@@ -114,11 +114,11 @@ class ChatRepository {
     return chatDataList.map(ChatMapper.fromData).toList();
   }
 
-  Future<void> updateChatOrder(List<Chat> chatsToUpdate, {bool forceRemoteWrite = false}) async {
+  Future<void> updateChatOrder(List<Chat> chatsToUpdate) async {
     if (chatsToUpdate.isEmpty) return;
     debugPrint("ChatRepository: 批量更新 ${chatsToUpdate.length} 个聊天的 orderIndex (Drift)...");
     final companions = chatsToUpdate.map((c) => ChatMapper.toCompanion(c)).toList();
-    await _chatDao.updateChatOrder(companions, forceRemoteWrite: forceRemoteWrite);
+    await _chatDao.updateChatOrder(companions);
     debugPrint("ChatRepository: 批量更新 orderIndex 完成 (Drift)。");
   }
 
@@ -129,11 +129,10 @@ class ChatRepository {
   Future<void> moveChatsToNewParent({
     required List<int> chatIds,
     required int? newParentFolderId,
-    bool forceRemoteWrite = false,
   }) async {
     if (chatIds.isEmpty) return;
     debugPrint("ChatRepository: 批量移动聊天 $chatIds 到文件夹 $newParentFolderId...");
-    await _chatDao.moveChatsToNewParent(chatIds, newParentFolderId, forceRemoteWrite: forceRemoteWrite);
+    await _chatDao.moveChatsToNewParent(chatIds, newParentFolderId);
     debugPrint("ChatRepository: 批量移动完成。");
   }
 

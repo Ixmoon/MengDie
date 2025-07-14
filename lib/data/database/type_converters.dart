@@ -158,3 +158,30 @@ class HelpMeReplyTriggerModeConverter extends TypeConverter<HelpMeReplyTriggerMo
     return value?.name;
   }
 }
+
+/// Type converter for List<int> to be stored as a JSON string.
+class IntListConverter extends TypeConverter<List<int>, String> {
+  const IntListConverter();
+
+  @override
+  List<int> fromSql(String fromDb) {
+    if (fromDb.isEmpty) return [];
+    try {
+      final List<dynamic> jsonData = json.decode(fromDb) as List<dynamic>;
+      return jsonData.map((item) => item as int).toList();
+    } catch (e) {
+      // Fallback for non-JSON format like '[1,2,3]'
+      if (fromDb.startsWith('[') && fromDb.endsWith(']')) {
+        final content = fromDb.substring(1, fromDb.length - 1);
+        if (content.isEmpty) return [];
+        return content.split(',').map((s) => int.parse(s.trim())).toList();
+      }
+      return []; // Return empty list if format is unrecognizable
+    }
+  }
+
+  @override
+  String toSql(List<int> value) {
+    return json.encode(value);
+  }
+}

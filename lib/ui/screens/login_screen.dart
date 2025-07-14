@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_providers.dart';
+import '../../data/database/sync/sync_service.dart';
 
 /// 登录屏幕
 ///
@@ -34,6 +35,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               _usernameController.text,
               _passwordController.text,
             );
+       // 登录成功后，在后台触发自动同步和用户设置拉取
+       // We don't await these futures to avoid blocking the UI.
+       SyncService.instance.syncWithRemote();
+       SyncService.instance.forcePullUsers();
+
        if (mounted) context.go('/list');
       } catch (e) {
         if (mounted) {
@@ -57,6 +63,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               _usernameController.text,
               _passwordController.text,
             );
+       // 注册成功后，同样触发后台同步
+       SyncService.instance.syncWithRemote();
+       SyncService.instance.forcePullUsers();
+       
        if (mounted) context.go('/list');
       } catch (e) {
         if (mounted) {

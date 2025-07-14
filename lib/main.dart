@@ -16,7 +16,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'ui/theme.dart'; // 导入主题配置
 import 'ui/router.dart'; // 导入路由配置
 import 'ui/providers/auth_providers.dart';
-import 'ui/providers/settings_providers.dart'; // 导入主题设置 Provider
+import 'ui/providers/settings_providers.dart';
+import 'data/database/app_database.dart';
+import 'data/database/sync/sync_service.dart';
+import 'data/database/connections/remote.dart';
+import 'ui/providers/core_providers.dart';
 
 // --- 应用主函数 ---
 // 将 main 函数修改为 async 以便在启动前执行异步操作
@@ -30,6 +34,18 @@ void main() async {
 	// 在应用启动时尝试自动登录。
 	// 这是实现登录持久化的关键步骤。
 	await container.read(authProvider.notifier).tryAutoLogin();
+
+	// 初始化需要持久化存储的 Provider
+	await container.read(themeModeProvider.notifier).init();
+	await container.read(syncSettingsProvider.notifier).init();
+
+	// 初始化 SyncService
+	final db = container.read(appDatabaseProvider);
+	SyncService.initialize(
+		db,
+		() => connectRemote(container.read(syncSettingsProvider).connectionString),
+		container,
+	);
 
 	// 运行 Flutter 应用。
 	// 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，

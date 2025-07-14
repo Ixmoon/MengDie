@@ -9,7 +9,6 @@ class Chats extends Table {
   TextColumn get systemPrompt => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
-  // TextColumn get coverImagePath => text().nullable()(); // 移除或注释掉旧的 coverImagePath
   TextColumn get coverImageBase64 => text().nullable()(); // 新增：用于存储封面图片的 Base64 字符串
   TextColumn get backgroundImagePath => text().nullable()();
 
