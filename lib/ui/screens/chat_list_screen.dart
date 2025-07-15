@@ -768,12 +768,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                 title: const Text('新建空白模板'),
                 onTap: () async {
                   Navigator.pop(ctx);
+                  final now = DateTime.now();
                   final newChat = Chat(
-                    title: '新模板 ${DateFormat.Hm().format(DateTime.now())}',
+                    title: '新模板 ${DateFormat.Hm().format(now)}',
                     parentFolderId: currentFolderId,
-                    createdAt: kTemplateTimestamp, // 使用常量
-                    updatedAt: kTemplateTimestamp, // 使用常量
+                    createdAt: now,
+                    updatedAt: now,
                     orderIndex: null, // 确保新模板置顶
+                    backgroundImagePath: '/template/chat', // 新的模板逻辑
                   );
                   try {
                     final repo = ref.read(chatRepositoryProvider);

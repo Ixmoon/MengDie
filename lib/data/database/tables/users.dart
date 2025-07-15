@@ -1,4 +1,6 @@
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
+import 'package:uuid/uuid.dart';
 
 import '../type_converters.dart';
 
@@ -9,6 +11,15 @@ import '../type_converters.dart';
 class Users extends Table {
   /// 用户的唯一ID，自增主键。
   IntColumn get id => integer().autoIncrement()();
+
+  /// 用于数据同步的全局唯一标识符。
+  TextColumn get uuid => text().clientDefault(() => const Uuid().v4())();
+
+  /// 记录创建时间的时间戳。
+  DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
+
+  /// 记录最后更新时间的时间戳。
+  DateTimeColumn get updatedAt => dateTime()();
 
   /// 用户名，必须是唯一的。
   TextColumn get username => text().unique()();

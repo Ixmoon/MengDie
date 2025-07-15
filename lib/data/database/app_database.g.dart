@@ -33,7 +33,9 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
@@ -227,8 +229,6 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
-    } else if (isInserting) {
-      context.missing(_createdAtMeta);
     }
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
@@ -998,7 +998,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.systemPrompt = const Value.absent(),
-    required DateTime createdAt,
+    this.createdAt = const Value.absent(),
     required DateTime updatedAt,
     this.coverImageBase64 = const Value.absent(),
     this.backgroundImagePath = const Value.absent(),
@@ -1020,8 +1020,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.helpMeReplyPrompt = const Value.absent(),
     this.helpMeReplyApiConfigId = const Value.absent(),
     this.helpMeReplyTriggerMode = const Value.absent(),
-  })  : createdAt = Value(createdAt),
-        updatedAt = Value(updatedAt),
+  })  : updatedAt = Value(updatedAt),
         contextConfig = Value(contextConfig),
         xmlRules = Value(xmlRules);
   static Insertable<ChatData> custom({
@@ -1791,14 +1790,16 @@ class $ApiConfigsTable extends ApiConfigs
       const VerificationMeta('createdAt');
   @override
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-      'created_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
   @override
   List<GeneratedColumn> get $columns => [
         userId,
@@ -1909,6 +1910,8 @@ class $ApiConfigsTable extends ApiConfigs
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
     }
     return context;
   }
@@ -1957,9 +1960,9 @@ class $ApiConfigsTable extends ApiConfigs
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}reasoning_effort'])),
       createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at']),
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
   }
 
@@ -1996,8 +1999,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   final List<String>? stopSequences;
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
   const ApiConfig(
       {this.userId,
       required this.id,
@@ -2016,8 +2019,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       this.stopSequences,
       this.enableReasoningEffort,
       this.reasoningEffort,
-      this.createdAt,
-      this.updatedAt});
+      required this.createdAt,
+      required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2069,12 +2072,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       map['reasoning_effort'] = Variable<String>(
           $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort));
     }
-    if (!nullToAbsent || createdAt != null) {
-      map['created_at'] = Variable<DateTime>(createdAt);
-    }
-    if (!nullToAbsent || updatedAt != null) {
-      map['updated_at'] = Variable<DateTime>(updatedAt);
-    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
 
@@ -2117,12 +2116,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       reasoningEffort: reasoningEffort == null && nullToAbsent
           ? const Value.absent()
           : Value(reasoningEffort),
-      createdAt: createdAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(createdAt),
-      updatedAt: updatedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(updatedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
     );
   }
 
@@ -2150,8 +2145,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           serializer.fromJson<bool?>(json['enableReasoningEffort']),
       reasoningEffort:
           serializer.fromJson<OpenAIReasoningEffort?>(json['reasoningEffort']),
-      createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
   @override
@@ -2176,8 +2171,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
       'reasoningEffort':
           serializer.toJson<OpenAIReasoningEffort?>(reasoningEffort),
-      'createdAt': serializer.toJson<DateTime?>(createdAt),
-      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
@@ -2199,8 +2194,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           Value<List<String>?> stopSequences = const Value.absent(),
           Value<bool?> enableReasoningEffort = const Value.absent(),
           Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
-          Value<DateTime?> createdAt = const Value.absent(),
-          Value<DateTime?> updatedAt = const Value.absent()}) =>
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
       ApiConfig(
         userId: userId.present ? userId.value : this.userId,
         id: id ?? this.id,
@@ -2230,8 +2225,8 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
         reasoningEffort: reasoningEffort.present
             ? reasoningEffort.value
             : this.reasoningEffort,
-        createdAt: createdAt.present ? createdAt.value : this.createdAt,
-        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
       );
   ApiConfig copyWithCompanion(ApiConfigsCompanion data) {
     return ApiConfig(
@@ -2362,8 +2357,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   final Value<List<String>?> stopSequences;
   final Value<bool?> enableReasoningEffort;
   final Value<OpenAIReasoningEffort?> reasoningEffort;
-  final Value<DateTime?> createdAt;
-  final Value<DateTime?> updatedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ApiConfigsCompanion({
     this.userId = const Value.absent(),
@@ -2406,11 +2401,12 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.enableReasoningEffort = const Value.absent(),
     this.reasoningEffort = const Value.absent(),
     this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
+    required DateTime updatedAt,
     this.rowid = const Value.absent(),
   })  : name = Value(name),
         apiType = Value(apiType),
-        model = Value(model);
+        model = Value(model),
+        updatedAt = Value(updatedAt);
   static Insertable<ApiConfig> custom({
     Expression<int>? userId,
     Expression<String>? id,
@@ -2477,8 +2473,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       Value<List<String>?>? stopSequences,
       Value<bool?>? enableReasoningEffort,
       Value<OpenAIReasoningEffort?>? reasoningEffort,
-      Value<DateTime?>? createdAt,
-      Value<DateTime?>? updatedAt,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
     return ApiConfigsCompanion(
       userId: userId ?? this.userId,
@@ -2619,6 +2615,27 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
       requiredDuringInsert: false,
       defaultConstraints:
           GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _uuidMeta = const VerificationMeta('uuid');
+  @override
+  late final GeneratedColumn<String> uuid = GeneratedColumn<String>(
+      'uuid', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      clientDefault: () => const Uuid().v4());
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
   static const VerificationMeta _usernameMeta =
       const VerificationMeta('username');
   @override
@@ -2690,6 +2707,9 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
   @override
   List<GeneratedColumn> get $columns => [
         id,
+        uuid,
+        createdAt,
+        updatedAt,
         username,
         passwordHash,
         chatIds,
@@ -2713,6 +2733,20 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('uuid')) {
+      context.handle(
+          _uuidMeta, uuid.isAcceptableOrUnknown(data['uuid']!, _uuidMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
     }
     if (data.containsKey('username')) {
       context.handle(_usernameMeta,
@@ -2777,6 +2811,12 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
     return DriftUser(
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      uuid: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}uuid'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
       username: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}username'])!,
       passwordHash: attachedDatabase.typeMapping
@@ -2824,6 +2864,15 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   /// 用户的唯一ID，自增主键。
   final int id;
 
+  /// 用于数据同步的全局唯一标识符。
+  final String uuid;
+
+  /// 记录创建时间的时间戳。
+  final DateTime createdAt;
+
+  /// 记录最后更新时间的时间戳。
+  final DateTime updatedAt;
+
   /// 用户名，必须是唯一的。
   final String username;
 
@@ -2856,6 +2905,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   final List<String>? geminiApiKeys;
   const DriftUser(
       {required this.id,
+      required this.uuid,
+      required this.createdAt,
+      required this.updatedAt,
       required this.username,
       required this.passwordHash,
       this.chatIds,
@@ -2870,6 +2922,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    map['uuid'] = Variable<String>(uuid);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     map['username'] = Variable<String>(username);
     map['password_hash'] = Variable<String>(passwordHash);
     if (!nullToAbsent || chatIds != null) {
@@ -2906,6 +2961,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   UsersCompanion toCompanion(bool nullToAbsent) {
     return UsersCompanion(
       id: Value(id),
+      uuid: Value(uuid),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
       username: Value(username),
       passwordHash: Value(passwordHash),
       chatIds: chatIds == null && nullToAbsent
@@ -2942,6 +3000,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DriftUser(
       id: serializer.fromJson<int>(json['id']),
+      uuid: serializer.fromJson<String>(json['uuid']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       username: serializer.fromJson<String>(json['username']),
       passwordHash: serializer.fromJson<String>(json['passwordHash']),
       chatIds: serializer.fromJson<List<int>?>(json['chatIds']),
@@ -2963,6 +3024,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'uuid': serializer.toJson<String>(uuid),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'username': serializer.toJson<String>(username),
       'passwordHash': serializer.toJson<String>(passwordHash),
       'chatIds': serializer.toJson<List<int>?>(chatIds),
@@ -2981,6 +3045,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
 
   DriftUser copyWith(
           {int? id,
+          String? uuid,
+          DateTime? createdAt,
+          DateTime? updatedAt,
           String? username,
           String? passwordHash,
           Value<List<int>?> chatIds = const Value.absent(),
@@ -2993,6 +3060,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
           Value<List<String>?> geminiApiKeys = const Value.absent()}) =>
       DriftUser(
         id: id ?? this.id,
+        uuid: uuid ?? this.uuid,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
         username: username ?? this.username,
         passwordHash: passwordHash ?? this.passwordHash,
         chatIds: chatIds.present ? chatIds.value : this.chatIds,
@@ -3018,6 +3088,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   DriftUser copyWithCompanion(UsersCompanion data) {
     return DriftUser(
       id: data.id.present ? data.id.value : this.id,
+      uuid: data.uuid.present ? data.uuid.value : this.uuid,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       username: data.username.present ? data.username.value : this.username,
       passwordHash: data.passwordHash.present
           ? data.passwordHash.value
@@ -3051,6 +3124,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   String toString() {
     return (StringBuffer('DriftUser(')
           ..write('id: $id, ')
+          ..write('uuid: $uuid, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('username: $username, ')
           ..write('passwordHash: $passwordHash, ')
           ..write('chatIds: $chatIds, ')
@@ -3068,6 +3144,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   @override
   int get hashCode => Object.hash(
       id,
+      uuid,
+      createdAt,
+      updatedAt,
       username,
       passwordHash,
       chatIds,
@@ -3083,6 +3162,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
       identical(this, other) ||
       (other is DriftUser &&
           other.id == this.id &&
+          other.uuid == this.uuid &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
           other.username == this.username &&
           other.passwordHash == this.passwordHash &&
           other.chatIds == this.chatIds &&
@@ -3097,6 +3179,9 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
 
 class UsersCompanion extends UpdateCompanion<DriftUser> {
   final Value<int> id;
+  final Value<String> uuid;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
   final Value<String> username;
   final Value<String> passwordHash;
   final Value<List<int>?> chatIds;
@@ -3109,6 +3194,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   final Value<List<String>?> geminiApiKeys;
   const UsersCompanion({
     this.id = const Value.absent(),
+    this.uuid = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.username = const Value.absent(),
     this.passwordHash = const Value.absent(),
     this.chatIds = const Value.absent(),
@@ -3122,6 +3210,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   });
   UsersCompanion.insert({
     this.id = const Value.absent(),
+    this.uuid = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    required DateTime updatedAt,
     required String username,
     required String passwordHash,
     this.chatIds = const Value.absent(),
@@ -3132,10 +3223,14 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
     this.resumePrompt = const Value.absent(),
     this.resumeApiConfigId = const Value.absent(),
     this.geminiApiKeys = const Value.absent(),
-  })  : username = Value(username),
+  })  : updatedAt = Value(updatedAt),
+        username = Value(username),
         passwordHash = Value(passwordHash);
   static Insertable<DriftUser> custom({
     Expression<int>? id,
+    Expression<String>? uuid,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
     Expression<String>? username,
     Expression<String>? passwordHash,
     Expression<String>? chatIds,
@@ -3149,6 +3244,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (uuid != null) 'uuid': uuid,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (username != null) 'username': username,
       if (passwordHash != null) 'password_hash': passwordHash,
       if (chatIds != null) 'chat_ids': chatIds,
@@ -3167,6 +3265,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
 
   UsersCompanion copyWith(
       {Value<int>? id,
+      Value<String>? uuid,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
       Value<String>? username,
       Value<String>? passwordHash,
       Value<List<int>?>? chatIds,
@@ -3179,6 +3280,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
       Value<List<String>?>? geminiApiKeys}) {
     return UsersCompanion(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       username: username ?? this.username,
       passwordHash: passwordHash ?? this.passwordHash,
       chatIds: chatIds ?? this.chatIds,
@@ -3200,6 +3304,15 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (uuid.present) {
+      map['uuid'] = Variable<String>(uuid.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
     if (username.present) {
       map['username'] = Variable<String>(username.value);
@@ -3243,6 +3356,9 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   String toString() {
     return (StringBuffer('UsersCompanion(')
           ..write('id: $id, ')
+          ..write('uuid: $uuid, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('username: $username, ')
           ..write('passwordHash: $passwordHash, ')
           ..write('chatIds: $chatIds, ')
@@ -3281,7 +3397,7 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<int> id,
   Value<String?> title,
   Value<String?> systemPrompt,
-  required DateTime createdAt,
+  Value<DateTime> createdAt,
   required DateTime updatedAt,
   Value<String?> coverImageBase64,
   Value<String?> backgroundImagePath,
@@ -3768,7 +3884,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String?> title = const Value.absent(),
             Value<String?> systemPrompt = const Value.absent(),
-            required DateTime createdAt,
+            Value<DateTime> createdAt = const Value.absent(),
             required DateTime updatedAt,
             Value<String?> coverImageBase64 = const Value.absent(),
             Value<String?> backgroundImagePath = const Value.absent(),
@@ -4178,8 +4294,8 @@ typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
-  Value<DateTime?> createdAt,
-  Value<DateTime?> updatedAt,
+  Value<DateTime> createdAt,
+  required DateTime updatedAt,
   Value<int> rowid,
 });
 typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
@@ -4200,8 +4316,8 @@ typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
-  Value<DateTime?> createdAt,
-  Value<DateTime?> updatedAt,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
   Value<int> rowid,
 });
 
@@ -4466,8 +4582,8 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
-            Value<DateTime?> createdAt = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ApiConfigsCompanion(
@@ -4511,8 +4627,8 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
-            Value<DateTime?> createdAt = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            required DateTime updatedAt,
             Value<int> rowid = const Value.absent(),
           }) =>
               ApiConfigsCompanion.insert(
@@ -4558,6 +4674,9 @@ typedef $$ApiConfigsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function()>;
 typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
   Value<int> id,
+  Value<String> uuid,
+  Value<DateTime> createdAt,
+  required DateTime updatedAt,
   required String username,
   required String passwordHash,
   Value<List<int>?> chatIds,
@@ -4571,6 +4690,9 @@ typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
 });
 typedef $$UsersTableUpdateCompanionBuilder = UsersCompanion Function({
   Value<int> id,
+  Value<String> uuid,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
   Value<String> username,
   Value<String> passwordHash,
   Value<List<int>?> chatIds,
@@ -4593,6 +4715,15 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
   });
   ColumnFilters<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get uuid => $composableBuilder(
+      column: $table.uuid, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get username => $composableBuilder(
       column: $table.username, builder: (column) => ColumnFilters(column));
@@ -4645,6 +4776,15 @@ class $$UsersTableOrderingComposer
   ColumnOrderings<int> get id => $composableBuilder(
       column: $table.id, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get uuid => $composableBuilder(
+      column: $table.uuid, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get username => $composableBuilder(
       column: $table.username, builder: (column) => ColumnOrderings(column));
 
@@ -4695,6 +4835,15 @@ class $$UsersTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get uuid =>
+      $composableBuilder(column: $table.uuid, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<String> get username =>
       $composableBuilder(column: $table.username, builder: (column) => column);
@@ -4752,6 +4901,9 @@ class $$UsersTableTableManager extends RootTableManager<
               $$UsersTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> uuid = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<String> username = const Value.absent(),
             Value<String> passwordHash = const Value.absent(),
             Value<List<int>?> chatIds = const Value.absent(),
@@ -4765,6 +4917,9 @@ class $$UsersTableTableManager extends RootTableManager<
           }) =>
               UsersCompanion(
             id: id,
+            uuid: uuid,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             username: username,
             passwordHash: passwordHash,
             chatIds: chatIds,
@@ -4778,6 +4933,9 @@ class $$UsersTableTableManager extends RootTableManager<
           ),
           createCompanionCallback: ({
             Value<int> id = const Value.absent(),
+            Value<String> uuid = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            required DateTime updatedAt,
             required String username,
             required String passwordHash,
             Value<List<int>?> chatIds = const Value.absent(),
@@ -4791,6 +4949,9 @@ class $$UsersTableTableManager extends RootTableManager<
           }) =>
               UsersCompanion.insert(
             id: id,
+            uuid: uuid,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
             username: username,
             passwordHash: passwordHash,
             chatIds: chatIds,

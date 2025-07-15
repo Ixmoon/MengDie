@@ -9,6 +9,7 @@ import '../database/daos/user_dao.dart';
 import '../mappers/user_mapper.dart';
 import '../models/user.dart';
 import '../../ui/providers/auth_providers.dart';
+import '../database/sync/sync_service.dart';
 
 /// 用户仓库
 ///
@@ -77,6 +78,7 @@ class UserRepository {
       id: id != null ? Value(id) : const Value.absent(),
       username: Value(username),
       passwordHash: Value(hashedPassword),
+      updatedAt: Value(DateTime.now()), // Set initial timestamp
       // 新用户从一个空的聊天列表开始
       chatIds: const Value([]),
       // 使用默认设置
@@ -146,8 +148,9 @@ class UserRepository {
   ///
   /// [user] 包含最新设置的 User 对象。
   Future<void> updateUserSettings(User user) async {
-    final driftUser = UserMapper.toDrift(user);
-    await _userDao.saveUser(driftUser);
+    // Convert to companion to allow DAO to handle the `updatedAt` timestamp.
+    final companion = UserMapper.toDrift(user).toCompanion(false);
+    await _userDao.saveUser(companion);
     // 更新数据库后，刷新 AuthProvider 中的状态，以确保UI反映最新设置
     await _ref.read(authProvider.notifier).refreshCurrentUserState();
   }

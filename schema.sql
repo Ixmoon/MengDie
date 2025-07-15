@@ -4,7 +4,10 @@
 -- Users Table
 -- Stores user information, credentials, and their associated chat IDs.
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
+    uuid TEXT PRIMARY KEY,
+    id SERIAL UNIQUE NOT NULL, -- Keep for potential legacy relations, but not as PK
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     chat_ids TEXT,
@@ -20,7 +23,8 @@ CREATE TABLE IF NOT EXISTS users (
 -- API Configs Table
 -- Unified table for API configurations (e.g., Gemini, OpenAI).
 CREATE TABLE IF NOT EXISTS api_configs (
-    id TEXT NOT NULL,
+    uuid TEXT PRIMARY KEY,
+    id TEXT NOT NULL, -- Keep for legacy mapping, ensure it's populated with UUID
     user_id INTEGER,
     name TEXT NOT NULL,
     api_type TEXT NOT NULL,
@@ -38,19 +42,19 @@ CREATE TABLE IF NOT EXISTS api_configs (
     enable_reasoning_effort BOOLEAN,
     reasoning_effort TEXT,
     created_at TIMESTAMP,
-    updated_at TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE (id, created_at) -- Composite key for synchronization
+    updated_at TIMESTAMP
 );
 
 -- Chats Table
 -- Stores chat sessions, which can be conversations or folders.
 CREATE TABLE IF NOT EXISTS chats (
-    id SERIAL NOT NULL,
+    uuid TEXT PRIMARY KEY,
+    id INTEGER NOT NULL,
     title TEXT,
     system_prompt TEXT,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
+    is_template BOOLEAN NOT NULL DEFAULT FALSE,
     cover_image_base64 TEXT,
     background_image_path TEXT,
     order_index INTEGER,
@@ -70,9 +74,7 @@ CREATE TABLE IF NOT EXISTS chats (
     enable_help_me_reply BOOLEAN,
     help_me_reply_prompt TEXT,
     help_me_reply_api_config_id TEXT,
-    help_me_reply_trigger_mode TEXT,
-    PRIMARY KEY (id),
-    UNIQUE (id, created_at) -- Composite key for synchronization
+    help_me_reply_trigger_mode TEXT
 );
 
 -- Messages Table

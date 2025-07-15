@@ -89,22 +89,18 @@ final chatListProvider =
 
     final sourceStream = repo.watchChatsForUser(authState.currentUser!.id, params.parentFolderId);
 
-    // 根据模式和时间戳过滤数据流
-    return sourceStream.map((chats) {
-      switch (params.mode) {
-        case ChatListMode.normal:
-          // 普通模式：只显示 updatedAt 不是模板时间戳的聊天
-          return chats
-              .where((chat) => chat.updatedAt.millisecondsSinceEpoch >= 1000)
-              .toList();
-        case ChatListMode.templateSelection:
-        case ChatListMode.templateManagement:
-          // 模板模式：只显示 updatedAt 是模板时间戳的聊天 (允许1秒误差)
-          return chats
-              .where((chat) => chat.updatedAt.millisecondsSinceEpoch < 1000)
-              .toList();
-      }
-    });
+    // 根据模式和新的 isTemplate 逻辑过滤数据流
+  return sourceStream.map((chats) {
+    switch (params.mode) {
+      case ChatListMode.normal:
+        // 普通模式：只显示非模板项目
+        return chats.where((chat) => !chat.isTemplate).toList();
+      case ChatListMode.templateSelection:
+      case ChatListMode.templateManagement:
+        // 模板模式：只显示模板项目
+        return chats.where((chat) => chat.isTemplate).toList();
+    }
+  });
   } catch (e) {
     debugPrint(
         "chatListProvider(folderId: ${params.parentFolderId}, mode: ${params.mode}) 错误: $e");
@@ -433,6 +429,16 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
   // --- Token Counting ---
   Future<void> calculateAndStoreTokenCount() async {
     if (!mounted) return;
+
+    // 关键修复：在尝试计算Token之前，首先检查是否存在任何API配置。
+    // 这是为了防止在没有配置API的情况下，UI不断触发Token计算，从而导致无限循环的异常。
+    final apiConfigs = _ref.read(apiKeyNotifierProvider).apiConfigs;
+    if (apiConfigs.isEmpty) {
+      if (mounted && state.totalTokens != null) {
+        state = state.copyWith(clearTotalTokens: true);
+      }
+      return; // 如果没有配置，则直接停止，不进行任何计算。
+    }
 
     final chat = _ref.read(currentChatProvider(_chatId)).value;
     final messages = _ref.read(chatMessagesProvider(_chatId)).value;

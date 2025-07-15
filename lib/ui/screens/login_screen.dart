@@ -38,7 +38,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
        // 登录成功后，在后台触发自动同步和用户设置拉取
        // We don't await these futures to avoid blocking the UI.
        SyncService.instance.syncWithRemote();
-       SyncService.instance.forcePullUsers();
 
        if (mounted) context.go('/list');
       } catch (e) {
@@ -65,7 +64,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             );
        // 注册成功后，同样触发后台同步
        SyncService.instance.syncWithRemote();
-       SyncService.instance.forcePullUsers();
        
        if (mounted) context.go('/list');
       } catch (e) {

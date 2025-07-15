@@ -30,8 +30,9 @@ class UserDao extends DatabaseAccessor<AppDatabase> with _$UserDaoMixin {
   /// 保存一个新用户或更新一个现有用户。
   ///
   /// [user] 要保存或更新的用户对象。
-  Future<void> saveUser(DriftUser user) {
-    return into(users).insertOnConflictUpdate(user);
+  Future<void> saveUser(UsersCompanion user) {
+    final companionWithTime = user.copyWith(updatedAt: Value(DateTime.now()));
+    return into(users).insertOnConflictUpdate(companionWithTime);
   }
   /// 监听单个用户的变化。
   ///

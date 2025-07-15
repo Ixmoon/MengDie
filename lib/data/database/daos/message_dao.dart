@@ -59,9 +59,8 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
     });
   }
 
-  Future<bool> deleteMessage(int messageId) async {
-    final count = await (delete(messages)..where((t) => t.id.equals(messageId))).go();
-    return count > 0;
+  Future<int> deleteMessage(int messageId) async {
+    return await (delete(messages)..where((t) => t.id.equals(messageId))).go();
   }
   
   Stream<List<MessageData>> watchMessagesForChat(int chatId) {
