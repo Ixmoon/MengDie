@@ -68,15 +68,15 @@ class ChatRepository {
     int? parentFolderId,
   }) async {
     debugPrint("ChatRepository: 新增文件夹: $title, 是否为模板: $isTemplate");
-    // 模板文件夹使用特殊的时间戳，普通文件夹使用当前时间
-    final timestamp = isTemplate ? kTemplateTimestamp : DateTime.now();
+    final now = DateTime.now();
     final newFolder = Chat(
       title: title,
       isFolder: true,
       parentFolderId: parentFolderId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
+      createdAt: now,
+      updatedAt: now,
       orderIndex: null, // 确保新文件夹置顶
+      backgroundImagePath: isTemplate ? '/template/folder' : null, // 新的模板逻辑
     );
     // 调用 saveChat 来实际保存
     return await saveChat(newFolder);
@@ -249,17 +249,18 @@ class ChatRepository {
 
     // 准备新聊天的标题和时间戳
     final newTitle = originalChat.title ?? "无标题"; // 直接使用原始标题
-    final timestamp = asTemplate ? kTemplateTimestamp : DateTime.now();
+    final now = DateTime.now();
 
     // 使用 copyWith 创建一个新实例，并重置关键字段
     final newChat = originalChat.copyWith({
       'id': 0, // 关键：重置ID以创建新记录
       'title': newTitle,
-      'createdAt': timestamp,
-      'updatedAt': timestamp,
+      'createdAt': now,
+      'updatedAt': now,
       'parentFolderId': null, // 总是克隆到根目录
       'orderIndex': null, // 确保克隆体置顶
       'contextSummary': null, // 清空上下文摘要
+      'backgroundImagePath': asTemplate ? '/template/chat' : null, // 新的模板逻辑
     });
     
     // 直接保存这个新的Chat对象，它将不包含任何消息

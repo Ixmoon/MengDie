@@ -30,11 +30,19 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
   }
 
   Future<int> saveChat(ChatsCompanion chat) {
-    return into(chats).insert(chat, mode: InsertMode.insertOrReplace);
+    final companionWithTime = chat.copyWith(updatedAt: Value(DateTime.now()));
+    return into(chats).insert(companionWithTime, mode: InsertMode.insertOrReplace);
   }
 
   Future<void> updateChat(ChatsCompanion chat) {
-    return (update(chats)..where((t) => t.id.equals(chat.id.value))).write(chat);
+    final companionWithTime = chat.copyWith(updatedAt: Value(DateTime.now()));
+    return (update(chats)..where((t) => t.id.equals(chat.id.value))).write(companionWithTime);
+  }
+
+  /// Efficiently updates the `updatedAt` timestamp for a given chat.
+  Future<void> touchChat(int chatId) {
+    return (update(chats)..where((t) => t.id.equals(chatId)))
+        .write(ChatsCompanion(updatedAt: Value(DateTime.now())));
   }
 
   Future<bool> deleteChatAndMessages(int chatId) async {
@@ -58,7 +66,8 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     
     await db.transaction(() async {
       for (final chatCompanion in chatsToUpdate) {
-        await (update(chats)..where((t) => t.id.equals(chatCompanion.id.value))).write(chatCompanion);
+        final companionWithTime = chatCompanion.copyWith(updatedAt: Value(DateTime.now()));
+        await (update(chats)..where((t) => t.id.equals(chatCompanion.id.value))).write(companionWithTime);
       }
     });
   }
@@ -70,6 +79,7 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       ChatsCompanion(
         parentFolderId: Value(newParentFolderId),
         orderIndex: const Value(null),
+        updatedAt: Value(DateTime.now()),
       ),
     );
   }
@@ -187,7 +197,7 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       contextConfig: contextConfigDrift,
       xmlRules: xmlRulesDrift,
       // 优先使用 DTO 中的时间戳，否则使用当前时间作为备用
-      createdAt: chatDto.createdAt ?? now,
+      createdAt: Value(chatDto.createdAt ?? now),
       updatedAt: chatDto.updatedAt ?? now,
       apiConfigId: Value(chatDto.apiConfigId),
       parentFolderId: Value(parentFolderId),

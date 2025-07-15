@@ -76,12 +76,13 @@ class ChatMapper {
   }
 
   static drift.ChatsCompanion toCompanion(domain.Chat chat, {bool forInsert = false}) {
+    // The `updatedAt` field is now managed by the DAO layer.
     return drift.ChatsCompanion(
       id: forInsert ? const Value.absent() : Value(chat.id),
       title: Value(chat.title),
       systemPrompt: Value(chat.systemPrompt),
       createdAt: Value(chat.createdAt),
-      updatedAt: Value(chat.updatedAt),
+      // Do not set `updatedAt` here. The DAO will handle it.
       coverImageBase64: Value(chat.coverImageBase64),
       backgroundImagePath: Value(chat.backgroundImagePath),
       orderIndex: Value(chat.orderIndex),

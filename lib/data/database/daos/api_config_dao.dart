@@ -31,9 +31,12 @@ class ApiConfigDao extends DatabaseAccessor<AppDatabase> with _$ApiConfigDaoMixi
 
   // Insert or update a config for a specific user
   Future<void> upsertApiConfig(ApiConfigsCompanion companion, int userId) async {
-    // Ensure the companion has the correct userId before upserting
-    final companionWithUser = companion.copyWith(userId: Value(userId));
-    await into(apiConfigs).insertOnConflictUpdate(companionWithUser);
+    // Ensure the companion has the correct userId and an updated timestamp before upserting
+    final companionWithMeta = companion.copyWith(
+      userId: Value(userId),
+      updatedAt: Value(DateTime.now()),
+    );
+    await into(apiConfigs).insertOnConflictUpdate(companionWithMeta);
   }
 
   // Delete a config by ID for a specific user

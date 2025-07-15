@@ -3,10 +3,6 @@ import 'context_config.dart';
 import 'xml_rule.dart';
 import 'enums.dart';
 
-/// 用于标识聊天模板的特殊时间戳。
-/// 使用一个极早的时间来避免与真实的用户数据冲突。
-final kTemplateTimestamp = DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true);
-
 @immutable
 class Chat {
   final int id;
@@ -34,6 +30,9 @@ class Chat {
   final String? helpMeReplyPrompt;
   final String? helpMeReplyApiConfigId;
   final HelpMeReplyTriggerMode helpMeReplyTriggerMode;
+
+  /// 如果背景图片路径包含 '/template'，则该聊天被视为模板。
+  bool get isTemplate => backgroundImagePath?.contains('/template') ?? false;
 
   const Chat({
     this.id = 0,

@@ -9,6 +9,9 @@ class UserMapper {
   static User fromDrift(DriftUser driftUser) {
     return User(
       id: driftUser.id,
+      uuid: driftUser.uuid,
+      createdAt: driftUser.createdAt,
+      updatedAt: driftUser.updatedAt,
       username: driftUser.username,
       passwordHash: driftUser.passwordHash,
       chatIds: driftUser.chatIds ?? [],
@@ -30,6 +33,9 @@ class UserMapper {
   static DriftUser toDrift(User user) {
     return DriftUser(
       id: user.id,
+      uuid: user.uuid,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
       username: user.username,
       passwordHash: user.passwordHash,
       chatIds: user.chatIds,

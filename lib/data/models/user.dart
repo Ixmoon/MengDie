@@ -10,6 +10,15 @@ class User {
   /// 用户的唯一ID。
   final int id;
 
+  /// 用于数据同步的全局唯一标识符。
+  final String uuid;
+
+  /// 记录创建时间的时间戳。
+  final DateTime createdAt;
+
+  /// 记录最后更新时间的时间戳。
+  final DateTime updatedAt;
+
   /// 用户名。
   final String username;
 
@@ -44,6 +53,9 @@ class User {
 
   const User({
     required this.id,
+    required this.uuid,
+    required this.createdAt,
+    required this.updatedAt,
     required this.username,
     required this.passwordHash,
     required this.chatIds,
@@ -62,8 +74,11 @@ class User {
   /// 它使用一个特殊的ID（通常为0）来标识游客，并且不包含敏感信息（如密码哈希）。
   /// 所有设置都采用应用程序定义的默认值。
   factory User.guest() {
-    return const User(
+    return User(
       id: 0, // 使用 0 作为游客的特殊ID
+      uuid: '00000000-0000-0000-0000-000000000000', // 游客使用固定的UUID
+      createdAt: DateTime(2000), // 使用一个固定的旧时间
+      updatedAt: DateTime(2000),
       username: 'Guest',
       passwordHash: '', // 游客没有密码
       chatIds: [], // 游客没有持久化的聊天记录
@@ -83,6 +98,9 @@ class User {
 
   User copyWith({
     int? id,
+    String? uuid,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     String? username,
     String? passwordHash,
     List<int>? chatIds,
@@ -98,6 +116,9 @@ class User {
   }) {
     return User(
       id: id ?? this.id,
+      uuid: uuid ?? this.uuid,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       username: username ?? this.username,
       passwordHash: passwordHash ?? this.passwordHash,
       chatIds: chatIds ?? this.chatIds,
@@ -117,6 +138,9 @@ class User {
       other is User &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          uuid == other.uuid &&
+          createdAt == other.createdAt &&
+          updatedAt == other.updatedAt &&
           username == other.username &&
           passwordHash == other.passwordHash &&
           listEquals(chatIds, other.chatIds) &&
@@ -131,6 +155,9 @@ class User {
   @override
   int get hashCode =>
       id.hashCode ^
+      uuid.hashCode ^
+      createdAt.hashCode ^
+      updatedAt.hashCode ^
       username.hashCode ^
       passwordHash.hashCode ^
       chatIds.hashCode ^

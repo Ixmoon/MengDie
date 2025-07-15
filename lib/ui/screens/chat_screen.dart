@@ -23,8 +23,9 @@ import '../widgets/top_message_banner.dart'; // 导入顶部消息横幅 Widget
 import '../widgets/cached_image.dart'; // 导入缓存图片组件
 import '../providers/settings_providers.dart'; // 导入全局设置
 import '../providers/api_key_provider.dart';
-  
-  // 本文件包含了应用的核心聊天界面。
+import '../../data/database/sync/sync_service.dart'; // 导入同步服务
+
+// 本文件包含了应用的核心聊天界面。
 //
 // 主要功能和组件包括：
 // 1. **ChatScreen**: 使用 PageView 实现的可左右滑动的聊天容器，用于在同一文件夹内的聊天之间切换。
@@ -172,6 +173,7 @@ class ChatPageContent extends ConsumerStatefulWidget {
 class _ChatPageContentState extends ConsumerState<ChatPageContent> {
   final ScrollController _scrollController = ScrollController();
   late final TextEditingController _messageController;
+  bool _isPushing = false;
 
   @override
   void initState() {
@@ -211,6 +213,10 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
 
   @override
   void dispose() {
+    // 退出时，在后台静默触发一次快速上传，无需等待或处理结果。
+    // 这是一个“即发即忘”的操作，确保在离开页面时能保存最新的更改。
+    SyncService.instance.forcePushChanges();
+
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _messageController.dispose();
@@ -623,6 +629,33 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     await ref.read(chatStateNotifierProvider(widget.chatId).notifier).deleteMessage(messageToDelete.id);
   }
 
+  // --- 业务逻辑：手动触发差异化推送 ---
+  Future<void> _handleForcePush() async {
+    if (_isPushing) return;
+
+    setState(() => _isPushing = true);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Text('正在上传本地变更...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    final success = await SyncService.instance.forcePushChanges();
+    
+    if (mounted) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text(success ? '上传成功' : '上传失败或无需上传'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+      setState(() => _isPushing = false);
+    }
+  }
+
   // --- 业务逻辑：选择并设置封面图片 (Base64) ---
   Future<void> _pickAndSetCoverImageBase64(ImageSource source) async {
     final ImagePicker picker = ImagePicker();
@@ -774,6 +807,8 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                     }
                   }
                 },
+                onForcePush: _handleForcePush,
+                isPushing: _isPushing,
               ),
               body: SafeArea(
                 child: Column(
@@ -858,6 +893,8 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final VoidCallback onSetCoverImage;
   final VoidCallback onExportCoverImage;
   final VoidCallback onRemoveCoverImage;
+  final VoidCallback onForcePush;
+  final bool isPushing;
 
   const _ChatAppBar({
     required this.chat,
@@ -865,6 +902,8 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
     required this.onSetCoverImage,
     required this.onExportCoverImage,
     required this.onRemoveCoverImage,
+    required this.onForcePush,
+    required this.isPushing,
   });
 
   @override
@@ -899,6 +938,20 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        isPushing
+            ? const Padding(
+                padding: EdgeInsets.all(12.0),
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.0),
+                ),
+              )
+            : IconButton(
+                icon: const Icon(Icons.upload_outlined),
+                tooltip: '上传本地变更',
+                onPressed: onForcePush,
+              ),
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert),
           tooltip: '更多选项',
@@ -959,23 +1012,23 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                     }
                   }
                   break;
-                case 'cloneAsTemplate':
+                case 'exportAsTemplate':
                   try {
                     final repo = ref.read(chatRepositoryProvider);
                     // cloneChat 现在会自动处理用户绑定
                     await repo.cloneChat(chat.id, asTemplate: true);
                     if (!context.mounted) return;
-                    notifier.showTopMessage('已成功克隆为模板', backgroundColor: Colors.green);
+                    notifier.showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
                     // 刷新模板列表
                     ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
                     context.push('/list?mode=manage');
                   } catch (e) {
                     if (context.mounted) {
-                      notifier.showTopMessage('克隆为模板失败: $e', backgroundColor: Colors.red);
+                      notifier.showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
                     }
                   }
                   break;
-                case 'cloneAsChat':
+                case 'exportAsChat':
                   try {
                     final repo = ref.read(chatRepositoryProvider);
                     // cloneChat 现在会自动处理用户绑定
@@ -1015,9 +1068,9 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
             buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
             buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
             const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'exportChat', icon: Icons.upload_file_outlined, label: '导出聊天到文件'),
-            buildPopupMenuItem(value: 'cloneAsTemplate', icon: Icons.flip_to_front_outlined, label: '导出聊天到模板'),
-            buildPopupMenuItem(value: 'cloneAsChat', icon: Icons.control_point_duplicate_outlined, label: '导出为新聊天'),
+            buildPopupMenuItem(value: 'exportChat', icon: Icons.file_download_outlined, label: '导出到文件'),
+            buildPopupMenuItem(value: 'exportAsTemplate', icon: Icons.flip_to_front_outlined, label: '另存为模板'),
+            buildPopupMenuItem(value: 'exportAsChat', icon: Icons.control_point_duplicate_outlined, label: '克隆为新聊天'),
             const PopupMenuDivider(),
             buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
           ],
@@ -1078,11 +1131,15 @@ class _MessageListState extends ConsumerState<_MessageList> {
       data: (dbMessages) {
         // 当UI构建时，如果发现没有 token 数据，则主动触发一次计算。
         if ((chatState.totalTokens ?? 0) == 0 && !chatState.isLoading && dbMessages.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
-            }
-          });
+          // 关键修复：在触发计算之前，同样检查API配置是否存在，以避免不必要的重复调用。
+          final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+          if (apiConfigs.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
+              }
+            });
+          }
         }
         
         final streamingMessage = chatState.streamingMessage;

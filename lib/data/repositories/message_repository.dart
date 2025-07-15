@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/message.dart';
 import '../../ui/providers/core_providers.dart';
+import '../database/daos/chat_dao.dart';
 import '../database/daos/message_dao.dart';
 import '../mappers/message_mapper.dart';
 
@@ -11,14 +12,16 @@ import '../mappers/message_mapper.dart';
 // --- Message Repository Provider ---
 final messageRepositoryProvider = Provider<MessageRepository>((ref) {
   final appDb = ref.watch(appDatabaseProvider);
-  return MessageRepository(appDb.messageDao);
+  // Now depends on both messageDao and chatDao
+  return MessageRepository(appDb.messageDao, appDb.chatDao);
 });
 
 // --- Message Repository Implementation ---
 class MessageRepository {
   final MessageDao _messageDao;
+  final ChatDao _chatDao;
 
-  MessageRepository(this._messageDao);
+  MessageRepository(this._messageDao, this._chatDao);
 
   // --- 数据库操作 ---
   Future<List<Message>> getMessagesForChat(int chatId) async {
@@ -50,18 +53,40 @@ class MessageRepository {
   Future<int> saveMessage(Message message) async {
     debugPrint("MessageRepository: 保存消息 ID: ${message.id} (Chat ID: ${message.chatId}) (Drift)...");
     final companion = MessageMapper.toCompanion(message);
-    return await _messageDao.saveMessage(companion);
+    final newId = await _messageDao.saveMessage(companion);
+    // After saving a message, "touch" the parent chat to update its timestamp.
+    await _chatDao.touchChat(message.chatId);
+    return newId;
   }
 
   Future<void> saveMessages(List<Message> messages) async {
+    if (messages.isEmpty) return;
     debugPrint("MessageRepository: 批量保存 ${messages.length} 条消息 (Chat ID: ${messages.firstOrNull?.chatId}) (Drift)...");
     final companions = messages.map(MessageMapper.toCompanion).toList();
     await _messageDao.saveMessages(companions);
+
+    // After saving, find the unique chat IDs and "touch" them all.
+    final chatIds = messages.map((m) => m.chatId).toSet();
+    for (final chatId in chatIds) {
+      await _chatDao.touchChat(chatId);
+    }
   }
 
   Future<bool> deleteMessage(int messageId) async {
     debugPrint("MessageRepository: 删除消息 ID: $messageId (Drift)...");
-    return await _messageDao.deleteMessage(messageId);
+    // First, get the message to find its chat ID.
+    final message = await getMessageById(messageId);
+    if (message == null) {
+      return false; // Message didn't exist.
+    }
+
+    final deletedRows = await _messageDao.deleteMessage(messageId);
+    if (deletedRows > 0) {
+      // If deletion was successful, "touch" the parent chat.
+      await _chatDao.touchChat(message.chatId);
+      return true;
+    }
+    return false;
   }
 
   // --- 数据库监听流 ---

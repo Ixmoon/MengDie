@@ -175,6 +175,7 @@ class ChatExportDto {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final int? orderIndex; // 新增：用于保存排序信息
+  final String? backgroundImagePath; // 新增：用于区分模板
 
   const ChatExportDto({
     this.title,
@@ -197,6 +198,7 @@ class ChatExportDto {
     this.createdAt, // 在构造函数中添加
     this.updatedAt, // 在构造函数中添加
     this.orderIndex, // 在构造函数中添加
+    this.backgroundImagePath, // 在构造函数中添加
   });
 
   factory ChatExportDto.fromJson(Map<String, dynamic> json) {
@@ -226,6 +228,7 @@ class ChatExportDto {
       createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt'] as String) : null,
       orderIndex: json['orderIndex'] as int?, // 从 JSON 解析排序信息
+      backgroundImagePath: json['backgroundImagePath'] as String?, // 从 JSON 解析
     );
   }
 
@@ -258,6 +261,7 @@ class ChatExportDto {
     String? contextSummary,
     String? continuePrompt,
     int? orderIndex,
+    String? backgroundImagePath,
   }) {
     return ChatExportDto(
       title: title ?? this.title,
@@ -278,6 +282,7 @@ class ChatExportDto {
       contextSummary: contextSummary ?? this.contextSummary,
       continuePrompt: continuePrompt ?? this.continuePrompt,
       orderIndex: orderIndex ?? this.orderIndex,
+      backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
     );
   }
 
@@ -304,6 +309,7 @@ class ChatExportDto {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'orderIndex': orderIndex, // 序列化排序信息
+      'backgroundImagePath': backgroundImagePath, // 序列化
     };
   }
 

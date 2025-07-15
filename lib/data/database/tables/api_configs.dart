@@ -33,8 +33,8 @@ class ApiConfigs extends Table {
   TextColumn get reasoningEffort => text().map(const OpenAIReasoningEffortConverter()).nullable()();
 
   // --- 时间戳 ---
-  DateTimeColumn get createdAt => dateTime().nullable()();
-  DateTimeColumn get updatedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
+  DateTimeColumn get updatedAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};

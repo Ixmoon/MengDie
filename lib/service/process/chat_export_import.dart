@@ -260,6 +260,7 @@ class ChatExportImportService {
       xmlRules: chat.xmlRules.map((r) => XmlRuleDto(tagName: r.tagName, action: r.action)).toList(),
       messages: messageDtos,
       hasRealCoverImage: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+      backgroundImagePath: chat.backgroundImagePath, // 导出模板路径
       // 填充时间戳
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,

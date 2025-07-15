@@ -46,6 +46,14 @@ void main() async {
 		container,
 	);
 
+	// 在应用启动时，异步执行一次全面的数据同步。
+	// 这是一个“即发即忘”的操作，不会阻塞应用的启动流程。
+	SyncService.instance.syncWithRemote().catchError((e, s) {
+	   // 在生产环境中，你可能希望将此错误记录到监控服务
+	   debugPrint('Initial sync failed: $e');
+	 });
+
+
 	// 运行 Flutter 应用。
 	// 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，
 	// 确保 Provider 的状态在整个应用生命周期内保持一致。
