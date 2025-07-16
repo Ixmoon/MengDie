@@ -229,6 +229,7 @@ class ChatRepository {
       'updatedAt': now, // 关键：设置为当前时间
       'parentFolderId': parentFolderId, // 关键：设置新的父文件夹ID
       'orderIndex': null, // 确保新聊天置顶
+      'backgroundImagePath': null, // 关键：从模板创建的聊天不是模板
     });
 
     // saveChat 将自动处理用户绑定

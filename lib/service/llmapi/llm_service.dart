@@ -51,12 +51,17 @@ class LlmService {
       if (apiConfig.useCustomTopK && apiConfig.topK != null) 'topK': apiConfig.topK,
       if (apiConfig.maxOutputTokens != null) 'maxOutputTokens': apiConfig.maxOutputTokens,
       if (apiConfig.stopSequences != null && apiConfig.stopSequences!.isNotEmpty) 'stopSequences': apiConfig.stopSequences,
-      // OpenAI specific settings
-      if (apiConfig.apiType == LlmType.openai &&
-          (apiConfig.enableReasoningEffort ?? false) &&
-          apiConfig.reasoningEffort != null) ...{
+      
+      // --- Provider-specific settings ---
+      // These are passed through and handled by the individual services.
+
+      // OpenAI-specific
+      if (apiConfig.enableReasoningEffort == true && apiConfig.reasoningEffort != null)
         'reasoning_effort': apiConfig.reasoningEffort!.toApiValue,
-      },
+
+      // Gemini-specific
+      if (apiConfig.thinkingBudget != null)
+        'thinkingBudget': apiConfig.thinkingBudget,
     };
   }
 
@@ -124,13 +129,44 @@ class LlmService {
   Future<int> countTokens({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig, // 直接接收配置对象
+    bool useRemoteCounter = false,
   }) async {
 
     final service = _services[apiConfig.apiType];
     if (service == null) {
       throw Exception("LlmService.countTokens Error: Unsupported API type: ${apiConfig.apiType}");
     }
-    return await service.countTokens(llmContext: llmContext, apiConfig: apiConfig);
+    return await service.countTokens(
+      llmContext: llmContext,
+      apiConfig: apiConfig,
+      useRemoteCounter: useRemoteCounter,
+    );
+  }
+
+  /// 根据文本提示生成图片。
+  Future<LlmImageResponse> generateImage({
+    required String prompt,
+    required ApiConfig apiConfig,
+    int n = 1,
+  }) async {
+    final service = _services[apiConfig.apiType];
+    if (service == null) {
+      return LlmImageResponse.error("Unsupported API type: ${apiConfig.apiType}");
+    }
+    if (apiConfig.apiType != LlmType.openai && apiConfig.apiType != LlmType.gemini) {
+        return LlmImageResponse.error("Image generation is only supported for OpenAI and Gemini compatible APIs.");
+    }
+
+    try {
+      return await service.generateImage(
+        prompt: prompt,
+        apiConfig: apiConfig,
+        n: n,
+      );
+    } catch (e) {
+      debugPrint("Error during ${apiConfig.apiType} generateImage: $e");
+      return LlmImageResponse.error("${apiConfig.apiType} API Error: $e");
+    }
   }
 
   // --- Placeholder for future methods ---

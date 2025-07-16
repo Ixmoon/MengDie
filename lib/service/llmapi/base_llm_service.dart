@@ -49,10 +49,24 @@ abstract class BaseLlmService {
   Future<int> countTokens({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
+    bool useRemoteCounter = false,
   });
 
   /// 取消当前正在进行的 API 请求。
   ///
   /// 这个方法应该能够中断正在进行的流式或一次性请求。
   Future<void> cancelRequest();
+
+  /// 根据文本提示生成图片。
+  ///
+  /// [prompt]: 用于生成图片的文本描述。
+  /// [apiConfig]: 包含模型名称、API密钥等信息的配置。
+  /// [n]: 要生成的图片数量。
+  ///
+  /// 返回一个包含 base64 编码图片列表的 `LlmImageResponse`。
+  Future<LlmImageResponse> generateImage({
+    required String prompt,
+    required ApiConfig apiConfig,
+    int n = 1,
+  });
 }

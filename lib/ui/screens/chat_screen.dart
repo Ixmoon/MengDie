@@ -27,22 +27,43 @@ import '../../data/database/sync/sync_service.dart'; // 导入同步服务
 
 // 本文件包含了应用的核心聊天界面。
 //
+// #############################################################################
+// # 核心设计与关键问题修复记录
+// #############################################################################
+//
+// 1. **异步操作后的安全导航 (Safe Navigation After Async Operations)**:
+//    - **问题**: 在 `_ChatAppBar` 的菜单中，如果一个菜单项的操作包含 `await`（例如“另存为模板”），
+//      并且在 `await` 之后立即调用 `context.push()` 进行导航，会引发 "deactivated widget" 错误。
+//    - **根源**: 这是 `PopupMenuButton` 的生命周期与 `GoRouter` 导航之间的竞态条件。`onSelected`
+//      回调是同步触发的，当 `await` 暂停函数执行时，`PopupMenu` 开始关闭动画并自我销毁。当 `await`
+//      完成后，`PopupMenu` 的 `context` 已失效或处于不稳定状态，此时执行导航就会崩溃。
+//    - **最终解决方案**: 将 `PopupMenuButton` 重构为手动的 `IconButton` + `showMenu` 调用。
+//      `showMenu` 函数返回一个 `Future`，该 `Future` 会在菜单完全关闭后完成。通过 `await showMenu(...)`，
+//      我们可以确保在执行任何后续操作（包括导航）之前，弹出菜单的生命周期已完全结束，从而根除此问题。
+//      这是处理 Flutter 中异步UI事件流的黄金标准。
+//
+// 2. **PageView 与 Riverpod 状态同步**:
+//    - `ChatScreen` 使用 `PageController` 来同步 `activeChatIdProvider` 的状态。当用户滑动页面时，
+//      `onPageChanged` 会更新 `activeChatIdProvider`。反之，当 `activeChatIdProvider` 从外部
+//      改变时（例如，从列表页点击进入），`_ChatScreenState` 的 `build` 方法会检测到索引不一致，
+//      并通过 `jumpToPage` 更新 `PageController` 的位置，实现了双向同步。
+//
+// #############################################################################
+//
 // 主要功能和组件包括：
 // 1. **ChatScreen**: 使用 PageView 实现的可左右滑动的聊天容器，用于在同一文件夹内的聊天之间切换。
 // 2. **ChatPageContent**: 单个聊天页面的完整内容，包括消息列表、输入框和应用栏。
-// 3. **_ChatAppBar**: 顶部的应用栏，显示聊天标题并提供一个包含多种操作的弹出菜单，
-//    例如：聊天设置、封面管理（设置/导出/移除）、输出模式切换、导出聊天等。
+// 3. **_ChatAppBar**: 顶部的应用栏，显示聊天标题并提供一个通过 `showMenu` 实现的、生命周期安全的操作菜单。
 // 4. **_MessageList**: 显示聊天消息的列表，支持无限滚动加载和消息项的交互。
 // 5. **_ChatInputBar**: 底部的输入区域，支持文本和文件附件的发送。
 // 6. **封面图片管理**: 提供了从菜单直接设置、导出和移除聊天背景封面的功能。
 //
 // 文件结构：
 // - `ChatScreen` (StatefulWidget): 作为 PageView 的宿主，管理页面切换逻辑。
-// - `_ChatPageContentState` (State): 管理单个聊天页面的状态和核心业务逻辑，
-//   如消息发送、编辑、删除、图片处理等。
-// - `_ChatAppBar` (StatelessWidget): 接收回调函数以处理菜单操作。
-// - `_MessageList` (StatefulWidget): 负责消息的展示和相关UI逻辑。
-// - `_ChatInputBar` (StatefulWidget): 负责用户输入的处理。
+// - `_ChatPageContentState` (State): 管理单个聊天页面的状态和核心业务逻辑。
+// - `_ChatAppBar` (ConsumerWidget): 接收回调函数以处理菜单操作。
+// - `_MessageList` (ConsumerStatefulWidget): 负责消息的展示和相关UI逻辑。
+// - `_ChatInputBar` (ConsumerStatefulWidget): 负责用户输入的处理。
   
 // --- 聊天屏幕 ---
 // 使用 ConsumerStatefulWidget 以便访问 Ref 并管理本地状态（控制器、滚动等）。
@@ -59,6 +80,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    // 当整个 ChatScreen 被销毁时（例如，用户返回到列表页），触发一次最终的静默同步。
+    // 这是确保“退出时保存”的正确位置，因为它不受内部 PageView 页面切换的影响。
+    SyncService.instance.forcePushChanges();
     _pageController?.dispose();
     super.dispose();
   }
@@ -213,9 +237,9 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
 
   @override
   void dispose() {
-    // 退出时，在后台静默触发一次快速上传，无需等待或处理结果。
-    // 这是一个“即发即忘”的操作，确保在离开页面时能保存最新的更改。
-    SyncService.instance.forcePushChanges();
+    // 退出时自动保存的逻辑已被移除，因为它会导致在克隆等非导航操作中意外触发。
+    // 数据的持久化应由更明确的操作（如发送消息、编辑、手动同步）来保证。
+    // SyncService.instance.forcePushChanges();
 
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
@@ -584,16 +608,35 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     if (message.parts.isEmpty) return;
 
     final part = message.parts.first;
-    if (part.base64Data == null || part.fileName == null) {
-      notifier.showTopMessage('无法保存：文件数据不完整', backgroundColor: Colors.red);
+
+    // Check for data integrity first
+    if (part.base64Data == null) {
+      notifier.showTopMessage('无法保存：文件数据为空', backgroundColor: Colors.red);
       return;
+    }
+
+    String fileName;
+    // Special handling for generated images that don't have an initial file name
+    if (part.type == MessagePartType.generatedImage) {
+      // For generated images, the prompt is stored in the 'text' field.
+      final promptText = part.text ?? 'generated_image';
+      // Sanitize and shorten the prompt to create a valid file name.
+      final sanitizedPrompt = promptText.replaceAll(RegExp(r'[\s\\/:*?"<>|]+'), '_');
+      final snippet = sanitizedPrompt.substring(0, sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length);
+      fileName = '${snippet}_${DateTime.now().millisecondsSinceEpoch}.png';
+    } else if (part.fileName == null) {
+      // For other types, if fileName is still null, then it's an error
+      notifier.showTopMessage('无法保存：文件名丢失', backgroundColor: Colors.red);
+      return;
+    } else {
+      fileName = part.fileName!;
     }
 
     try {
       final bytes = base64Decode(part.base64Data!);
       final String? savePath = await FilePicker.platform.saveFile(
         dialogTitle: '请选择保存位置',
-        fileName: part.fileName!,
+        fileName: fileName, // Use the determined or generated file name
         bytes: bytes,
       );
 
@@ -952,128 +995,128 @@ class _ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 tooltip: '上传本地变更',
                 onPressed: onForcePush,
               ),
-        PopupMenuButton<String>(
+        IconButton(
           icon: const Icon(Icons.more_vert),
           tooltip: '更多选项',
-          onSelected: (String result) {
-            // 使用 addPostFrameCallback 延迟执行，以避免在 PopupMenu 关闭动画期间
-            // 操作 context，从而导致 "deactivated widget" 错误。
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              // 检查 widget 是否仍然挂载在树上，确保安全。
-              if (!context.mounted) return;
+          onPressed: () async {
+            final renderBox = context.findRenderObject() as RenderBox;
+            final position = renderBox.localToGlobal(Offset.zero) & renderBox.size;
 
-              final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-              switch (result) {
-                case 'settings':
-                  context.push('/chat/settings');
-                  break;
-                case 'setCoverImage':
-                  onSetCoverImage();
-                  break;
-                case 'exportCoverImage':
-                  onExportCoverImage();
-                  break;
-                case 'removeCoverImage':
-                  onRemoveCoverImage();
-                  break;
-                case 'toggleOutputMode':
-                  notifier.toggleOutputMode();
-                  break;
-                case 'debug':
-                  context.push('/chat/debug');
-                  break;
-                case 'toggleBubbleTransparency':
-                  notifier.toggleBubbleTransparency();
-                  break;
-                case 'toggleBubbleWidth':
-                  notifier.toggleBubbleWidthMode();
-                  break;
-                case 'toggleMessageListHeight':
-                  notifier.toggleMessageListHeightMode();
-                  break;
-                case 'exportChat':
-                  notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
-                  try {
-                    final finalExportPath = await ref.read(chatExportImportServiceProvider).exportChat(chat.id);
-                    if (!context.mounted) return;
-                    if (finalExportPath != null) {
-                      notifier.showTopMessage('聊天已成功导出到: $finalExportPath', backgroundColor: Colors.green, duration: const Duration(seconds: 4));
-                    } else if (!kIsWeb) {
-                      notifier.showTopMessage('导出操作已取消或未能成功完成。', backgroundColor: Colors.orange, duration: const Duration(seconds: 3));
-                    }
-                  } catch (e) {
-                    debugPrint("导出聊天时发生错误: $e");
-                    if (context.mounted) {
-                      notifier.showTopMessage('导出失败: $e', backgroundColor: Colors.red);
-                    }
-                  } finally {
-                    if (context.mounted && ref.read(chatStateNotifierProvider(chat.id)).topMessageText == '正在准备导出文件...') {
-                      notifier.clearTopMessage();
-                    }
+            final String? result = await showMenu<String>(
+              context: context,
+              position: RelativeRect.fromLTRB(position.right, position.top, position.right, position.bottom),
+              items: <PopupMenuEntry<String>>[
+                buildPopupMenuItem(value: 'settings', icon: Icons.tune, label: '聊天设置'),
+                const PopupMenuDivider(),
+                buildPopupMenuItem(value: 'setCoverImage', icon: Icons.photo_library_outlined, label: '设置封面'),
+                buildPopupMenuItem(
+                  value: 'exportCoverImage',
+                  icon: Icons.upload_file_outlined,
+                  label: '导出封面',
+                  enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+                ),
+                buildPopupMenuItem(
+                  value: 'removeCoverImage',
+                  icon: Icons.delete_outline,
+                  label: '移除封面',
+                  enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+                ),
+                const PopupMenuDivider(),
+                buildPopupMenuItem(value: 'toggleOutputMode', icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble, label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出'),
+                buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
+                buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
+                buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
+                const PopupMenuDivider(),
+                buildPopupMenuItem(value: 'exportChat', icon: Icons.file_download_outlined, label: '导出到文件'),
+                buildPopupMenuItem(value: 'exportAsTemplate', icon: Icons.flip_to_front_outlined, label: '另存为模板'),
+                buildPopupMenuItem(value: 'exportAsChat', icon: Icons.control_point_duplicate_outlined, label: '克隆为新聊天'),
+                const PopupMenuDivider(),
+                buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
+              ],
+            );
+
+            // 在 await 之后，PopupMenu 已经完全关闭，可以安全地执行任何操作。
+            if (result == null || !context.mounted) return;
+
+            final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+            switch (result) {
+              case 'settings':
+                context.push('/chat/settings');
+                break;
+              case 'setCoverImage':
+                onSetCoverImage();
+                break;
+              case 'exportCoverImage':
+                onExportCoverImage();
+                break;
+              case 'removeCoverImage':
+                onRemoveCoverImage();
+                break;
+              case 'toggleOutputMode':
+                notifier.toggleOutputMode();
+                break;
+              case 'debug':
+                context.push('/chat/debug');
+                break;
+              case 'toggleBubbleTransparency':
+                notifier.toggleBubbleTransparency();
+                break;
+              case 'toggleBubbleWidth':
+                notifier.toggleBubbleWidthMode();
+                break;
+              case 'toggleMessageListHeight':
+                notifier.toggleMessageListHeightMode();
+                break;
+              case 'exportChat':
+                notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
+                try {
+                  final finalExportPath = await ref.read(chatExportImportServiceProvider).exportChat(chat.id);
+                  if (!context.mounted) return;
+                  if (finalExportPath != null) {
+                    notifier.showTopMessage('聊天已成功导出到: $finalExportPath', backgroundColor: Colors.green, duration: const Duration(seconds: 4));
+                  } else if (!kIsWeb) {
+                    notifier.showTopMessage('导出操作已取消或未能成功完成。', backgroundColor: Colors.orange, duration: const Duration(seconds: 3));
                   }
-                  break;
-                case 'exportAsTemplate':
-                  try {
-                    final repo = ref.read(chatRepositoryProvider);
-                    // cloneChat 现在会自动处理用户绑定
-                    await repo.cloneChat(chat.id, asTemplate: true);
-                    if (!context.mounted) return;
-                    notifier.showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
-                    // 刷新模板列表
-                    ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
-                    context.push('/list?mode=manage');
-                  } catch (e) {
-                    if (context.mounted) {
-                      notifier.showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
-                    }
+                } catch (e) {
+                  debugPrint("导出聊天时发生错误: $e");
+                  if (context.mounted) {
+                    notifier.showTopMessage('导出失败: $e', backgroundColor: Colors.red);
                   }
-                  break;
-                case 'exportAsChat':
-                  try {
-                    final repo = ref.read(chatRepositoryProvider);
-                    // cloneChat 现在会自动处理用户绑定
-                    final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
-                    if (!context.mounted) return;
-                    notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
-                    ref.read(activeChatIdProvider.notifier).state = newChatId;
-                    // 页面将通过 activeChatIdProvider 的变化自动更新
-                  } catch (e) {
-                    if (context.mounted) {
-                      notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
-                    }
+                } finally {
+                  if (context.mounted && ref.read(chatStateNotifierProvider(chat.id)).topMessageText == '正在准备导出文件...') {
+                    notifier.clearTopMessage();
                   }
-                  break;
-              }
-            });
+                }
+                break;
+              case 'exportAsTemplate':
+                try {
+                  final repo = ref.read(chatRepositoryProvider);
+                  await repo.cloneChat(chat.id, asTemplate: true);
+                  if (!context.mounted) return;
+                  notifier.showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
+                  ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+                  // 导航已移除，以避免触发额外的保存操作。用户可手动返回查看。
+                } catch (e) {
+                  if (context.mounted) {
+                    notifier.showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
+                  }
+                }
+                break;
+              case 'exportAsChat':
+                try {
+                  final repo = ref.read(chatRepositoryProvider);
+                  final newChatId = await repo.cloneChat(chat.id, asTemplate: false);
+                  if (!context.mounted) return;
+                  notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
+                  // 自动切换页面已移除，以避免触发额外的保存操作。新聊天可在列表中找到。
+                } catch (e) {
+                  if (context.mounted) {
+                    notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
+                  }
+                }
+                break;
+            }
           },
-          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-            buildPopupMenuItem(value: 'settings', icon: Icons.tune, label: '聊天设置'),
-            const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'setCoverImage', icon: Icons.photo_library_outlined, label: '设置封面'),
-            buildPopupMenuItem(
-              value: 'exportCoverImage',
-              icon: Icons.upload_file_outlined,
-              label: '导出封面',
-              enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
-            ),
-            buildPopupMenuItem(
-              value: 'removeCoverImage',
-              icon: Icons.delete_outline,
-              label: '移除封面',
-              enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
-            ),
-            const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'toggleOutputMode', icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble, label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出'),
-            buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
-            buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
-            buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
-            const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'exportChat', icon: Icons.file_download_outlined, label: '导出到文件'),
-            buildPopupMenuItem(value: 'exportAsTemplate', icon: Icons.flip_to_front_outlined, label: '另存为模板'),
-            buildPopupMenuItem(value: 'exportAsChat', icon: Icons.control_point_duplicate_outlined, label: '克隆为新聊天'),
-            const PopupMenuDivider(),
-            buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
-          ],
         ),
       ],
     );
@@ -1452,9 +1495,10 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
  final FocusNode _inputFocusNode = FocusNode();
  final FocusNode _keyboardListenerFocusNode = FocusNode();
  final List<PlatformFile> _attachments = [];
+ bool _isImageGenerationMode = false;
 
- @override
- void initState() {
+  @override
+  void initState() {
    super.initState();
    // No longer need to listen to the controller to rebuild the whole widget
    // widget.messageController.addListener(_onTextChanged);
@@ -1472,10 +1516,24 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
    final text = widget.messageController.text.trim();
 
+   // 如果文本和附件都为空，并且不是在图片生成模式下，则不执行任何操作
    if (text.isEmpty && _attachments.isEmpty) {
      return;
    }
-   
+
+   // 图片生成模式逻辑
+   if (_isImageGenerationMode) {
+     if (text.isNotEmpty) {
+       notifier.generateImage(text);
+       widget.messageController.clear();
+       if (mounted) FocusScope.of(context).unfocus();
+     } else {
+       notifier.showTopMessage('请输入图片描述。', backgroundColor: Colors.orange);
+     }
+     return; // 图片生成后直接返回
+   }
+
+   // 普通聊天模式逻辑
    List<MessagePart> parts = [];
    if (text.isNotEmpty) {
      parts.add(MessagePart.text(text));
@@ -1486,6 +1544,12 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
        final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
        if (mimeType.startsWith('image/')) {
          parts.add(MessagePart.image(
+           mimeType: mimeType,
+           base64Data: base64Encode(file.bytes!),
+           fileName: file.name,
+         ));
+       } else if (mimeType.startsWith('audio/')) {
+         parts.add(MessagePart.audio(
            mimeType: mimeType,
            base64Data: base64Encode(file.bytes!),
            fileName: file.name,
@@ -1506,7 +1570,6 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
        notifier.showTopMessage('错误：无法获取当前聊天信息', backgroundColor: Colors.red);
        return;
      }
-     // 新逻辑：检查全局是否有任何可用的API配置
      final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
      if (apiConfigs.isEmpty) {
        notifier.showTopMessage('请先在全局设置中添加至少一个 API 配置', backgroundColor: Colors.orange);
@@ -1518,7 +1581,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
      setState(() {
        _attachments.clear();
      });
-     if(mounted) FocusScope.of(context).unfocus();
+     if (mounted) FocusScope.of(context).unfocus();
    }
  }
 
@@ -1557,7 +1620,58 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
        itemCount: _attachments.length,
        itemBuilder: (context, index) {
          final file = _attachments[index];
-         final isImage = (lookupMimeType(file.name) ?? '').startsWith('image/');
+         final mimeType = lookupMimeType(file.name) ?? '';
+         final isImage = mimeType.startsWith('image/');
+         final isAudio = mimeType.startsWith('audio/');
+
+         Widget previewChild;
+         if (isImage) {
+           previewChild = ClipRRect(
+             borderRadius: BorderRadius.circular(8),
+             child: CachedImageFromBase64(
+               base64String: base64Encode(file.bytes!),
+               fit: BoxFit.cover,
+               width: 80,
+               height: 80,
+               cacheWidth: (80 * MediaQuery.of(context).devicePixelRatio).round(),
+               cacheHeight: (80 * MediaQuery.of(context).devicePixelRatio).round(),
+             ),
+           );
+         } else if (isAudio) {
+           previewChild = Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+               const Icon(Icons.audiotrack_outlined, size: 32),
+               Padding(
+                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                 child: Text(
+                   file.name,
+                   maxLines: 2,
+                   overflow: TextOverflow.ellipsis,
+                   style: const TextStyle(fontSize: 10),
+                   textAlign: TextAlign.center,
+                 ),
+               ),
+             ],
+           );
+         } else {
+           previewChild = Column(
+             mainAxisAlignment: MainAxisAlignment.center,
+             children: [
+               const Icon(Icons.insert_drive_file_outlined, size: 32),
+               Padding(
+                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                 child: Text(
+                   file.name,
+                   maxLines: 2,
+                   overflow: TextOverflow.ellipsis,
+                   style: const TextStyle(fontSize: 10),
+                   textAlign: TextAlign.center,
+                 ),
+               ),
+             ],
+           );
+         }
          
          return Padding(
            padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -1571,34 +1685,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                    borderRadius: BorderRadius.circular(8),
                    border: Border.all(color: Colors.grey.shade400),
                  ),
-                 child: isImage
-                     ? ClipRRect(
-                         borderRadius: BorderRadius.circular(8),
-                         child: CachedImageFromBase64(
-                           base64String: base64Encode(file.bytes!),
-                           fit: BoxFit.cover,
-                           width: 80,
-                           height: 80,
-                           cacheWidth: (80 * MediaQuery.of(context).devicePixelRatio).round(),
-                           cacheHeight: (80 * MediaQuery.of(context).devicePixelRatio).round(),
-                         ),
-                       )
-                     : Column(
-                         mainAxisAlignment: MainAxisAlignment.center,
-                         children: [
-                           const Icon(Icons.insert_drive_file_outlined, size: 32),
-                           Padding(
-                             padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                             child: Text(
-                               file.name,
-                               maxLines: 2,
-                               overflow: TextOverflow.ellipsis,
-                               style: const TextStyle(fontSize: 10),
-                               textAlign: TextAlign.center,
-                             ),
-                           ),
-                         ],
-                       ),
+                 child: previewChild,
                ),
                Positioned(
                  top: -8,
@@ -1680,14 +1767,35 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
              child: Row(
                crossAxisAlignment: CrossAxisAlignment.end,
                children: [
+                // --- 切换图片生成模式按钮 ---
+                IconButton(
+                  icon: const Icon(Icons.image_outlined),
+                  tooltip: '切换图片生成模式',
+                  color: _isImageGenerationMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                  style: _isImageGenerationMode
+                    ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1))
+                    : null,
+                  onPressed: () {
+                    setState(() {
+                      _isImageGenerationMode = !_isImageGenerationMode;
+                      if (_isImageGenerationMode && _attachments.isNotEmpty) {
+                        _attachments.clear(); // 进入图片模式时清除附件
+                        ref.read(chatStateNotifierProvider(widget.chatId).notifier)
+                          .showTopMessage('附件已清除，图片生成模式不支持附件', backgroundColor: Colors.orange);
+                      }
+                    });
+                  },
+                ),
                  Flexible(
                    child: TextField(
                      controller: widget.messageController,
                      focusNode: _inputFocusNode,
                      decoration: InputDecoration(
-                       hintText: (chatState.isLoading || chatState.isProcessingInBackground) // Removed isGeneratingSuggestions check
-                           ? '处理中... (${chatState.elapsedSeconds ?? 0}s)'
-                           : '输入消息',
+                       hintText: _isImageGenerationMode
+                          ? '输入图片描述...'
+                          : ((chatState.isLoading || chatState.isProcessingInBackground)
+                              ? '处理中... (${chatState.elapsedSeconds ?? 0}s)'
+                              : '输入消息'),
                        border: OutlineInputBorder(
                          borderRadius: BorderRadius.circular(25.0),
                          borderSide: BorderSide.none,
@@ -1750,13 +1858,13 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                        final isSendMode = value.text.trim().isNotEmpty;
                        final canSendMessage = (value.text.trim().isNotEmpty || _attachments.isNotEmpty);
 
-                       if (isSendMode) {
+                       if (isSendMode || _isImageGenerationMode) {
                          // Send Button
                          return GestureDetector(
-                           onLongPress: chatState.isLoading ? null : _pickFiles,
+                           onLongPress: (chatState.isLoading || _isImageGenerationMode) ? null : _pickFiles,
                            child: IconButton(
                              icon: const Icon(Icons.send),
-                             tooltip: '发送 (长按添加文件)',
+                             tooltip: _isImageGenerationMode ? '生成图片' : '发送 (长按添加文件)',
                              onPressed: canSendMessage ? _sendMessage : null,
                              style: IconButton.styleFrom(
                                padding: const EdgeInsets.all(12),
@@ -1785,7 +1893,7 @@ class _ChatInputBarState extends ConsumerState<_ChatInputBar> {
                          return IconButton(
                            icon: const Icon(Icons.add_circle_outline),
                            tooltip: '添加文件',
-                           onPressed: chatState.isLoading ? null : _pickFiles,
+                           onPressed: (chatState.isLoading || _isImageGenerationMode) ? null : _pickFiles,
                            style: IconButton.styleFrom(
                              padding: const EdgeInsets.all(12),
                            ),

@@ -174,6 +174,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                                           });
                                         },
                                         itemBuilder: (BuildContext context) {
+                                          // The list from the provider should not contain nulls.
                                           return models.map((model) {
                                             return PopupMenuItem<String>(
                                               value: model.id,

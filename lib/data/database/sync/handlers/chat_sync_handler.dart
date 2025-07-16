@@ -73,8 +73,8 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
           systemPrompt: map['system_prompt'],
           createdAt: map['created_at'] ?? DateTime.now(),
           updatedAt: map['updated_at'] ?? DateTime.now(),
-          coverImageBase64: null,
-          backgroundImagePath: null,
+          coverImageBase64: null, // coverImageBase64 is not synced.
+          backgroundImagePath: map['background_image_path'],
           orderIndex: map['order_index'],
           isFolder: map['is_folder'],
           parentFolderId: map['parent_folder_id'],
@@ -235,7 +235,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         INSERT INTO chats (
           id, title, system_prompt, created_at, updated_at,
           order_index, is_folder, parent_folder_id,
-          context_config, xml_rules, api_config_id,
+          background_image_path, context_config, xml_rules, api_config_id,
           enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id,
           enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
           continue_prompt, enable_help_me_reply, help_me_reply_prompt,
@@ -244,7 +244,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         SELECT
           c.id, c.title, c.system_prompt, c.created_at, c.updated_at,
           c.order_index, c.is_folder, c.parent_folder_id,
-          c.context_config, c.xml_rules, c.api_config_id,
+          c.background_image_path, c.context_config, c.xml_rules, c.api_config_id,
           c.enable_preprocessing, c.preprocessing_prompt, c.context_summary, c.preprocessing_api_config_id,
           c.enable_secondary_xml, c.secondary_xml_prompt, c.secondary_xml_api_config_id,
           c.continue_prompt, c.enable_help_me_reply, c.help_me_reply_prompt,
@@ -252,7 +252,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         FROM UNNEST(
           @ids::integer[], @titles::text[], @system_prompts::text[], @created_ats::timestamp[], @updated_ats::timestamp[],
           @order_indexes::integer[], @is_folders::boolean[], @parent_folder_ids::integer[],
-          @context_configs::text[], @xml_rules_list::text[], @api_config_ids::text[],
+          @background_image_paths::text[], @context_configs::text[], @xml_rules_list::text[], @api_config_ids::text[],
           @enable_preprocessings::boolean[], @preprocessing_prompts::text[], @context_summaries::text[], @preprocessing_api_config_ids::text[],
           @enable_secondary_xmls::boolean[], @secondary_xml_prompts::text[], @secondary_xml_api_config_ids::text[],
           @continue_prompts::text[], @enable_help_me_replies::boolean[], @help_me_reply_prompts::text[],
@@ -260,7 +260,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         ) AS c(
           id, title, system_prompt, created_at, updated_at,
           order_index, is_folder, parent_folder_id,
-          context_config, xml_rules, api_config_id,
+          background_image_path, context_config, xml_rules, api_config_id,
           enable_preprocessing, preprocessing_prompt, context_summary, preprocessing_api_config_id,
           enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
           continue_prompt, enable_help_me_reply, help_me_reply_prompt,
@@ -269,7 +269,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title, system_prompt = EXCLUDED.system_prompt, updated_at = EXCLUDED.updated_at,
           order_index = EXCLUDED.order_index, is_folder = EXCLUDED.is_folder, parent_folder_id = EXCLUDED.parent_folder_id,
-          context_config = EXCLUDED.context_config, xml_rules = EXCLUDED.xml_rules,
+          background_image_path = EXCLUDED.background_image_path, context_config = EXCLUDED.context_config, xml_rules = EXCLUDED.xml_rules,
           api_config_id = EXCLUDED.api_config_id,
           enable_preprocessing = EXCLUDED.enable_preprocessing, preprocessing_prompt = EXCLUDED.preprocessing_prompt,
           context_summary = EXCLUDED.context_summary, preprocessing_api_config_id = EXCLUDED.preprocessing_api_config_id,
@@ -288,6 +288,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         'order_indexes': TypedValue(Type.integerArray, chats.map((c) => c.orderIndex).toList()),
         'is_folders': TypedValue(Type.booleanArray, chats.map((c) => c.isFolder).toList()),
         'parent_folder_ids': TypedValue(Type.integerArray, chats.map((c) => c.parentFolderId).toList()),
+        'background_image_paths': TypedValue(Type.textArray, chats.map((c) => c.backgroundImagePath).toList()),
         'context_configs': TypedValue(Type.textArray, chats.map((c) => const ContextConfigConverter().toSql(c.contextConfig)).toList()),
         'xml_rules_list': TypedValue(Type.textArray, chats.map((c) => const XmlRuleListConverter().toSql(c.xmlRules)).toList()),
         'api_config_ids': TypedValue(Type.textArray, chats.map((c) => c.apiConfigId).toList()),

@@ -26,8 +26,16 @@ class LlmContent {
           return LlmTextPart(part.text!);
         case MessagePartType.image:
           return LlmDataPart(part.mimeType!, part.base64Data!);
+        case MessagePartType.audio:
+          return LlmAudioPart(part.mimeType!, part.base64Data!);
         case MessagePartType.file:
-          // 文件不会发送给 LLM，所以我们返回 null 并在稍后过滤掉。
+           // 假设未来 MessagePart 会包含 fileUri
+           // if (part.fileUri != null) {
+           //   return LlmFilePart(part.mimeType!, part.fileUri!);
+           // }
+           return null; // 当前暂时忽略
+        case MessagePartType.generatedImage:
+          // 生成的图片不会直接发送给 LLM，所以我们返回 null 并在稍后过滤掉。
           return null;
       }
     }).whereType<LlmPart>().toList(); // 使用 whereType 过滤掉 null
@@ -61,6 +69,24 @@ class LlmDataPart extends LlmPart {
   final String mimeType;
   final String base64Data; // 保持为 base64 字符串以保持一致性
   const LlmDataPart(this.mimeType, this.base64Data);
+}
+
+/// 表示内容的音频部分。
+/// 相当于 OpenAI 的 "input_audio"
+@immutable
+class LlmAudioPart extends LlmPart {
+  final String mimeType;
+  final String base64Data;
+  const LlmAudioPart(this.mimeType, this.base64Data);
+}
+
+/// 表示通过 File API 上传的文件部分。
+/// 相当于 genai.FilePart
+@immutable
+class LlmFilePart extends LlmPart {
+  final String mimeType;
+  final String fileUri; // The URI returned by the File API
+  const LlmFilePart(this.mimeType, this.fileUri);
 }
 
 
@@ -131,7 +157,7 @@ class LlmResponse {
   final String? error;
 
   // 为方便访问文本内容而设的 Getter，用于兼容
-  String get rawText => parts.where((p) => p.type == MessagePartType.text).map((p) => p.text).join();
+  String get rawText => parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join();
 
   const LlmResponse({
     required this.parts,
@@ -144,4 +170,53 @@ class LlmResponse {
     parts = const [],
     isSuccess = false,
     error = message;
+}
+
+// --- Provider-Specific Models ---
+
+/// Represents the data structure for a single model returned by the OpenAI `/models` endpoint.
+@immutable
+class OpenAIModel {
+final String id;
+final String object;
+final int created;
+final String ownedBy;
+
+const OpenAIModel({
+required this.id,
+required this.object,
+required this.created,
+required this.ownedBy,
+});
+
+factory OpenAIModel.fromJson(Map<String, dynamic> json) {
+return OpenAIModel(
+  id: json['id'] ?? '',
+  object: json['object'] ?? '',
+  created: json['created'] ?? 0,
+  ownedBy: json['owned_by'] ?? '',
+);
+}
+}
+
+/// 表示图像生成请求的响应。
+@immutable
+class LlmImageResponse {
+  final List<String> base64Images; // A list of base64 encoded image strings
+  final String? text; // Add a field for the text response
+  final bool isSuccess;
+  final String? error;
+
+  const LlmImageResponse({
+    this.base64Images = const [],
+    this.text,
+    this.isSuccess = true,
+    this.error,
+  });
+
+  const LlmImageResponse.error(String message)
+      : base64Images = const [],
+        text = null,
+        isSuccess = false,
+        error = message;
 }

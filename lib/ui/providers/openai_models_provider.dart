@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
+import '../../service/llmapi/llm_models.dart';
 import '../../service/llmapi/openai_service.dart'; // Updated import
 import '../../data/models/api_config.dart';
 

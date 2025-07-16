@@ -20,6 +20,7 @@ import '../screens/chat_settings_screen.dart' show defaultHelpMeReplyPrompt;
  
  
 import '../../data/models/api_config.dart';
+import '../../data/database/sync/sync_service.dart';
 
 
 // 本文件包含与聊天数据和聊天界面状态相关的 Riverpod 提供者。
@@ -581,6 +582,45 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     }
   }
 
+  Future<void> leaveChat() async {
+    if (!mounted) return;
+    await SyncService.instance.forcePushChanges();
+    _ref.read(activeChatIdProvider.notifier).state = null;
+  }
+
+  Future<void> cloneChatAsTemplate() async {
+    if (!mounted) return;
+    try {
+      final repo = _ref.read(chatRepositoryProvider);
+      await repo.cloneChat(_chatId, asTemplate: true);
+      if (mounted) {
+        showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
+        _ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+      }
+    } catch (e) {
+      if (mounted) {
+        showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
+      }
+    }
+  }
+
+  Future<int?> cloneChatAsNew() async {
+    if (!mounted) return null;
+    try {
+      final repo = _ref.read(chatRepositoryProvider);
+      final newChatId = await repo.cloneChat(_chatId, asTemplate: false);
+      if (mounted) {
+        showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
+      }
+      return newChatId;
+    } catch (e) {
+      if (mounted) {
+        showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
+      }
+      return null;
+    }
+  }
+
   Future<int?> forkChat(Message fromMessage) async {
     if (!mounted) return null;
 
@@ -740,6 +780,104 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState> {
     }
 
     await sendMessage(isContinuation: true);
+  }
+
+  Future<void> generateImage(String prompt) async {
+    if (state.isLoading) {
+      debugPrint("generateImage ($_chatId) cancelled: already loading.");
+      return;
+    }
+
+    final messageRepo = _ref.read(messageRepositoryProvider);
+
+    // 1. Immediately save the user's prompt to the database for instant UI feedback.
+    final userMessage = Message(
+      chatId: _chatId,
+      role: MessageRole.user,
+      parts: [MessagePart.text(prompt)],
+    );
+    await messageRepo.saveMessage(userMessage);
+
+    // 2. Set loading state and show a temporary placeholder message in the UI.
+    final tempMessageId = -DateTime.now().millisecondsSinceEpoch;
+    final placeholderMessage = Message(
+      id: tempMessageId,
+      chatId: _chatId,
+      role: MessageRole.model,
+      parts: [MessagePart.text("正在生成图片...")],
+    );
+
+    state = state.copyWith(
+      isLoading: true,
+      isPrimaryResponseLoading: true,
+      isCancelled: false,
+      clearError: true,
+      clearTopMessage: true,
+      generationStartTime: DateTime.now(),
+      elapsedSeconds: 0,
+      streamingMessage: placeholderMessage,
+      isStreamingMessageVisible: true,
+    );
+    _startUpdateTimer();
+
+    try {
+      final llmService = _ref.read(llmServiceProvider);
+      final apiConfig = getEffectiveApiConfig();
+
+      final response = await llmService.generateImage(prompt: prompt, apiConfig: apiConfig);
+
+      if (!mounted || state.isCancelled) {
+        // If cancelled, the finally block will handle cleanup.
+        return;
+      }
+
+      if (response.isSuccess && (response.base64Images.isNotEmpty || (response.text?.isNotEmpty ?? false))) {
+        // 3. Create and save separate messages for text and images.
+
+        // Save text message if it exists
+        if (response.text != null && response.text!.isNotEmpty) {
+          final textMessage = Message(
+            chatId: _chatId,
+            role: MessageRole.model,
+            parts: [MessagePart.text(response.text!)],
+          );
+          await messageRepo.saveMessage(textMessage);
+        }
+
+        // Save image message(s) if they exist
+        if (response.base64Images.isNotEmpty) {
+           final imageMessage = Message(
+              chatId: _chatId,
+              role: MessageRole.model,
+              parts: response.base64Images
+                  .map((base64) => MessagePart.generatedImage(base64Data: base64, prompt: prompt))
+                  .toList(),
+            );
+            await messageRepo.saveMessage(imageMessage);
+        }
+        
+        showTopMessage('生成成功', backgroundColor: Colors.green);
+
+      } else {
+        showTopMessage(response.error ?? "图片生成失败", backgroundColor: Colors.red);
+      }
+    } catch (e) {
+      if (mounted) {
+        showTopMessage('生成图片时出错: $e', backgroundColor: Colors.red);
+      }
+    } finally {
+      // 5. Clean up the state regardless of success or failure.
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          isPrimaryResponseLoading: false,
+          clearGenerationStartTime: true,
+          clearElapsedSeconds: true,
+          clearStreamingMessage: true, // This removes the placeholder
+        );
+        _stopUpdateTimer();
+      }
+    }
   }
 
   Future<void> sendMessage({
