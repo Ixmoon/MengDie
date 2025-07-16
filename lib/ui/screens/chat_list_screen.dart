@@ -693,9 +693,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             final prefs = await ref.read(sharedPreferencesProvider.future);
             await prefs.setInt('last_open_chat_id', chat.id);
             ref.read(activeChatIdProvider.notifier).state = chat.id;
-            if (context.mounted) {
-              context.go('/chat');
-            }
+            if (!mounted) return;
+            context.go('/chat');
           }
           break;
         case ChatListMode.templateSelection:
@@ -707,9 +706,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ref.read(activeChatIdProvider.notifier).state = newChatId;
             // 关键修复：创建后重置 currentFolderIdProvider，确保返回时回到正确的聊天列表层级
             ref.read(currentFolderIdProvider.notifier).state = widget.fromFolderId;
-            if (context.mounted) {
-              context.go('/chat'); // 直接进入新创建的聊天
-            }
+            if (!mounted) return;
+            context.go('/chat'); // 直接进入新创建的聊天
           }
           break;
         case ChatListMode.templateManagement:

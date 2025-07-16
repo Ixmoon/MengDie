@@ -289,7 +289,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                    tooltip: '切换图片生成模式',
                    color: _isImageGenerationMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
                    style: _isImageGenerationMode
-                     ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1))
+                     ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary.withAlpha((255 * 0.1).round()))
                      : null,
                    onPressed: () {
                      setState(() {

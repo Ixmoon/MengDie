@@ -158,7 +158,7 @@ class HelpMeReplyTriggerModeConverter extends TypeConverter<HelpMeReplyTriggerMo
   }
 }
 
-/// Type converter for List<int> to be stored as a JSON string.
+/// Type converter for `List<int>` to be stored as a JSON string.
 class IntListConverter extends TypeConverter<List<int>, String> {
   const IntListConverter();
 

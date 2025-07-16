@@ -7,7 +7,7 @@ import 'base_sync_handler.dart';
 import '../../type_converters.dart';
 
 class UserSyncHandler extends BaseSyncHandler<DriftUser> {
-  UserSyncHandler(AppDatabase db, Connection? remoteConnection) : super(db, remoteConnection);
+  UserSyncHandler(super.db, super.remoteConnection);
 
   @override
   String get entityType => 'users';

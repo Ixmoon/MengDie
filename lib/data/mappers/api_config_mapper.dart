@@ -25,8 +25,8 @@ class ApiConfigMapper {
       topK: data.topK,
       maxOutputTokens: data.maxOutputTokens,
       stopSequences: data.stopSequences ?? [],
-      createdAt: data.createdAt ?? DateTime.now(),
-      updatedAt: data.updatedAt ?? DateTime.now(),
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
       enableReasoningEffort: data.enableReasoningEffort ?? false,
       reasoningEffort: data.reasoningEffort,
     );

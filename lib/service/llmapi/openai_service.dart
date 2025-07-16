@@ -150,16 +150,11 @@ class OpenAIService implements BaseLlmService {
 
 abstract class OpenAIPayload extends HttpRequestPayload {
   OpenAIPayload({
-    required ApiConfig apiConfig,
-    required Map<String, dynamic> generationParams,
-    List<LlmContent>? llmContext,
-    String? prompt,
-  }) : super(
-          apiConfig: apiConfig,
-          generationParams: generationParams,
-          llmContext: llmContext,
-          prompt: prompt,
-        );
+    required super.apiConfig,
+    required super.generationParams,
+    super.llmContext,
+    super.prompt,
+  });
 
   @override
   Map<String, String> buildHeaders() {
@@ -184,14 +179,10 @@ class OpenAIChatPayload extends OpenAIPayload {
 
   OpenAIChatPayload({
     required this.stream,
-    required ApiConfig apiConfig,
-    required Map<String, dynamic> generationParams,
-    required List<LlmContent> llmContext,
-  }) : super(
-          apiConfig: apiConfig,
-          generationParams: generationParams,
-          llmContext: llmContext,
-        );
+    required super.apiConfig,
+    required super.generationParams,
+    required super.llmContext,
+  });
 
   @override
   String buildUrl() => _buildApiUrl('chat/completions');
@@ -267,14 +258,10 @@ class OpenAIChatPayload extends OpenAIPayload {
 
 class OpenAIImagePayload extends OpenAIPayload {
   OpenAIImagePayload({
-    required ApiConfig apiConfig,
-    required Map<String, dynamic> generationParams,
-    required String prompt,
-  }) : super(
-          apiConfig: apiConfig,
-          generationParams: generationParams,
-          prompt: prompt,
-        );
+    required super.apiConfig,
+    required super.generationParams,
+    required super.prompt,
+  });
 
   @override
   String buildUrl() => _buildApiUrl('images/generations');

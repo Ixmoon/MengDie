@@ -13,7 +13,7 @@ import '../../../models/enums.dart';
 class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
   final int? userId;
 
-  ApiConfigSyncHandler(AppDatabase db, Connection? remoteConnection, this.userId) : super(db, remoteConnection);
+  ApiConfigSyncHandler(super.db, super.remoteConnection, this.userId);
 
   @override
   String get entityType => 'api_configs';
