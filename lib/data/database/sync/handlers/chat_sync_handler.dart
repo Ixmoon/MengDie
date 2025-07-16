@@ -8,7 +8,7 @@ import '../../type_converters.dart';
 import '../../../models/enums.dart';
 
 class ChatSyncHandler extends BaseSyncHandler<ChatData> {
-  ChatSyncHandler(AppDatabase db, Connection? remoteConnection) : super(db, remoteConnection);
+  ChatSyncHandler(super.db, super.remoteConnection);
 
   @override
   String get entityType => 'chats';

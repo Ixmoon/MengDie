@@ -29,18 +29,7 @@ part 'app_database.g.dart'; // Drift will generate this file
 
 @DriftDatabase(tables: [Chats, Messages, ApiConfigs, Users], daos: [ChatDao, MessageDao, ApiConfigDao, UserDao])
 class AppDatabase extends _$AppDatabase {
-  // Manual DAO initialization to prevent null issues with generated getters
-  late final ChatDao chatDao;
-  late final MessageDao messageDao;
-  late final ApiConfigDao apiConfigDao;
-  late final UserDao userDao;
-
-  AppDatabase() : super(connect()) {
-    chatDao = ChatDao(this);
-    messageDao = MessageDao(this);
-    apiConfigDao = ApiConfigDao(this);
-    userDao = UserDao(this);
-  }
+  AppDatabase() : super(connect());
 
   AppDatabase.forTesting(super.connection);
 

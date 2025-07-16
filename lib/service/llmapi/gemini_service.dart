@@ -171,17 +171,17 @@ class GeminiChatPayload extends HttpRequestPayload {
   GeminiChatPayload({
     required this.apiKey,
     required this.stream,
-    required ApiConfig apiConfig,
-    required Map<String, dynamic> generationParams,
-    required List<LlmContent> llmContext,
-  }) : super(apiConfig: apiConfig, generationParams: generationParams, llmContext: llmContext);
+    required super.apiConfig,
+    required super.generationParams,
+    required super.llmContext,
+  });
 
   @override
   String buildUrl() {
     const defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true ? apiConfig.baseUrl! : defaultBaseUrl;
     final action = stream ? "streamGenerateContent" : "generateContent";
-    return "$baseUrl/models/${apiConfig.model}:$action?key=$apiKey" + (stream ? "&alt=sse" : "");
+    return "$baseUrl/models/${apiConfig.model}:$action?key=$apiKey${stream ? '&alt=sse' : ''}";
   }
   
   @override
@@ -253,10 +253,10 @@ class GeminiImagePayload extends HttpRequestPayload {
 
   GeminiImagePayload({
     required this.apiKey,
-    required ApiConfig apiConfig,
-    required Map<String, dynamic> generationParams,
-    required String prompt,
-  }) : super(apiConfig: apiConfig, generationParams: generationParams, prompt: prompt);
+    required super.apiConfig,
+    required super.generationParams,
+    required super.prompt,
+  });
 
   @override
   String buildUrl() {
@@ -284,9 +284,9 @@ class GeminiCountTokensPayload extends HttpRequestPayload {
 
   GeminiCountTokensPayload({
     required this.apiKey,
-    required ApiConfig apiConfig,
-    required List<LlmContent> llmContext,
-  }) : super(apiConfig: apiConfig, llmContext: llmContext, generationParams: {});
+    required super.apiConfig,
+    required super.llmContext,
+  }) : super(generationParams: {});
 
   @override
   String buildUrl() {

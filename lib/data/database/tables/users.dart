@@ -28,7 +28,7 @@ class Users extends Table {
   TextColumn get passwordHash => text()();
 
   /// 存储用户拥有的聊天ID列表。
-  /// 使用自定义的 TypeConverter 将 List<int> 转换为 String 进行存储。
+  /// 使用自定义的 TypeConverter 将 `List<int>` 转换为 String 进行存储。
   TextColumn get chatIds => text().map(const IntListConverter()).nullable()();
 
   // --- 全局设置 ---

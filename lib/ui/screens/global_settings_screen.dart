@@ -82,11 +82,12 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
       _localSyncSettings = syncSettings;
     }
 
-    return WillPopScope(
-      onWillPop: () async {
-        // 当用户尝试返回时，保存设置
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) {
+        if (didPop) return;
         _saveSettingsIfDirty();
-        return true;
+        context.pop();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -99,7 +100,7 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
               context.pop();
             },
             style: ButtonStyle(
-              iconColor: MaterialStateProperty.all(
+              iconColor: WidgetStateProperty.all(
                 Theme.of(context).iconTheme.color?.withAlpha((255 * 0.7).round())
               ),
             ),
