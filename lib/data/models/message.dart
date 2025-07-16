@@ -44,6 +44,28 @@ class MessagePart {
     );
   }
 
+  // Factory constructor for audio part
+  factory MessagePart.audio({required String mimeType, required String base64Data, required String fileName}) {
+    return MessagePart(
+      type: MessagePartType.audio,
+      mimeType: mimeType,
+      base64Data: base64Data,
+      fileName: fileName,
+    );
+  }
+
+  // Factory constructor for a generated image part
+  factory MessagePart.generatedImage({required String base64Data, String? prompt}) {
+    // Generated images are typically PNG, but we store them as base64.
+    // The 'prompt' can be stored in the 'text' field for convenience.
+    return MessagePart(
+      type: MessagePartType.generatedImage,
+      mimeType: 'image/png', // Assuming PNG format for generated images
+      base64Data: base64Data,
+      text: prompt, // Use text field to store the prompt
+    );
+  }
+
   // JSON serialization
   Map<String, dynamic> toJson() {
     return {
@@ -94,7 +116,7 @@ class Message {
             parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n'));
 
   String get rawText {
-    return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text).join('\n');
+    return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
   }
 
   Message copyWith(Map<String, dynamic> updates) {

@@ -23,6 +23,9 @@ class ApiConfig {
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
 
+  // Gemini specific settings
+  final int? thinkingBudget;
+
   const ApiConfig({
     required this.id,
     required this.name,
@@ -42,6 +45,7 @@ class ApiConfig {
     required this.updatedAt,
     this.enableReasoningEffort,
     this.reasoningEffort = OpenAIReasoningEffort.auto,
+    this.thinkingBudget,
   });
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) {
@@ -66,6 +70,7 @@ class ApiConfig {
       reasoningEffort: json['reasoning_effort'] != null
           ? OpenAIReasoningEffort.values.byName(json['reasoning_effort'])
           : OpenAIReasoningEffort.auto,
+      thinkingBudget: json['thinking_budget'],
     );
   }
 
@@ -89,6 +94,7 @@ class ApiConfig {
       'updated_at': updatedAt.toIso8601String(),
       'enable_reasoning_effort': enableReasoningEffort,
       'reasoning_effort': reasoningEffort?.name,
+      'thinking_budget': thinkingBudget,
     };
   }
 }

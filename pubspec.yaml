@@ -11,7 +11,6 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  google_generative_ai: ^0.4.7 # Check pub.dev for latest version
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
   flutter_secure_storage: ^10.0.0-beta.4 # Check pub.dev for latest version
   shared_preferences: ^2.5.3  # Check pub.dev for latest version

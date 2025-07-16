@@ -141,15 +141,16 @@ class MessageBubble extends StatelessWidget {
 Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
   switch (part.type) {
     case MessagePartType.image:
+    case MessagePartType.generatedImage:
       if (part.base64Data != null) {
         return ConstrainedBox(
           constraints: const BoxConstraints(
-            maxHeight: 300, // Limit image height
+            maxHeight: 400, // Allow larger images
           ),
           child: CachedImageFromBase64(
             base64String: part.base64Data!,
             fit: BoxFit.contain,
-            cacheHeight: (300 * MediaQuery.of(context).devicePixelRatio).round(),
+            cacheHeight: (400 * MediaQuery.of(context).devicePixelRatio).round(),
           ),
         );
       }
@@ -163,6 +164,21 @@ Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor
           Flexible(
             child: Text(
               part.fileName ?? '未知文件',
+              style: TextStyle(color: textColor),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    case MessagePartType.audio:
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.audiotrack_outlined, color: textColor, size: 24),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              part.fileName ?? '音频文件',
               style: TextStyle(color: textColor),
               overflow: TextOverflow.ellipsis,
             ),
