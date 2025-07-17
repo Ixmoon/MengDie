@@ -29,7 +29,15 @@ class ContextConfig {
     );
   }
 
-  factory ContextConfig.fromJson(Map<String, dynamic> json) => _$ContextConfigFromJson(json);
+  factory ContextConfig.fromJson(Map<String, dynamic> json) {
+    if (json['mode'] is String) {
+      final modeString = json['mode'] as String;
+      if (modeString.startsWith('ContextManagementMode.')) {
+        json['mode'] = modeString.split('.').last;
+      }
+    }
+    return _$ContextConfigFromJson(json);
+  }
 
   Map<String, dynamic> toJson() => _$ContextConfigToJson(this);
 }
