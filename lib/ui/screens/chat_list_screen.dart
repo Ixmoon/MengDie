@@ -350,7 +350,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       final List<Chat> chatsToUpdate = [];
       for (int i = 0; i < reorderedChats.length; i++) {
         if (reorderedChats[i].orderIndex != i) {
-          chatsToUpdate.add(reorderedChats[i].copyWith({'orderIndex': i}));
+          chatsToUpdate.add(reorderedChats[i].copyWith(orderIndex: i));
         }
       }
 
@@ -656,7 +656,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       final List<Chat> chatsToUpdate = [];
       for (int i = 0; i < reorderedChats.length; i++) {
         if (reorderedChats[i].orderIndex != i) {
-          chatsToUpdate.add(reorderedChats[i].copyWith({'orderIndex': i}));
+          chatsToUpdate.add(reorderedChats[i].copyWith(orderIndex: i));
         }
       }
 

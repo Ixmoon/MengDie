@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'enums.dart';
 import '../../service/process/xml_processor.dart';
 
+part 'message.g.dart';
+
 // --- 消息内容部分模型 ---
+@JsonSerializable()
 @immutable
 class MessagePart {
   final MessagePartType type;
@@ -66,32 +70,14 @@ class MessagePart {
     );
   }
 
-  // JSON serialization
-  Map<String, dynamic> toJson() {
-    return {
-      'type': type.name,
-      'text': text,
-      'mimeType': mimeType,
-      'base64Data': base64Data,
-      'fileName': fileName,
-    };
-  }
+  factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
 
-  // JSON deserialization
-  factory MessagePart.fromJson(Map<String, dynamic> json) {
-    final type = MessagePartType.values.byName(json['type']);
-    return MessagePart(
-      type: type,
-      text: json['text'],
-      mimeType: json['mimeType'],
-      base64Data: json['base64Data'],
-      fileName: json['fileName'],
-    );
-  }
+  Map<String, dynamic> toJson() => _$MessagePartToJson(this);
 }
 
 
 // --- 消息模型 ---
+@JsonSerializable(explicitToJson: true)
 @immutable
 class Message {
   final int id;
@@ -99,6 +85,7 @@ class Message {
   final List<MessagePart> parts;
   final MessageRole role;
   final DateTime timestamp;
+  final DateTime? updatedAt;
   final String? originalXmlContent;
   final String? secondaryXmlContent;
   final String displayText;
@@ -109,6 +96,7 @@ class Message {
     required this.parts,
     required this.role,
     DateTime? timestamp,
+    this.updatedAt,
     this.originalXmlContent,
     this.secondaryXmlContent,
   })  : timestamp = timestamp ?? DateTime.now(),
@@ -119,15 +107,29 @@ class Message {
     return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
   }
 
-  Message copyWith(Map<String, dynamic> updates) {
+  Message copyWith({
+    int? id,
+    int? chatId,
+    List<MessagePart>? parts,
+    MessageRole? role,
+    DateTime? timestamp,
+    DateTime? updatedAt,
+    String? originalXmlContent,
+    String? secondaryXmlContent,
+  }) {
     return Message(
-      id: updates.containsKey('id') ? updates['id'] : id,
-      chatId: updates.containsKey('chatId') ? updates['chatId'] : chatId,
-      parts: updates.containsKey('parts') ? updates['parts'] : parts,
-      role: updates.containsKey('role') ? updates['role'] : role,
-      timestamp: updates.containsKey('timestamp') ? updates['timestamp'] : timestamp,
-      originalXmlContent: updates.containsKey('originalXmlContent') ? updates['originalXmlContent'] : originalXmlContent,
-      secondaryXmlContent: updates.containsKey('secondaryXmlContent') ? updates['secondaryXmlContent'] : secondaryXmlContent,
+      id: id ?? this.id,
+      chatId: chatId ?? this.chatId,
+      parts: parts ?? this.parts,
+      role: role ?? this.role,
+      timestamp: timestamp ?? this.timestamp,
+      updatedAt: updatedAt ?? this.updatedAt,
+      originalXmlContent: originalXmlContent ?? this.originalXmlContent,
+      secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
     );
   }
+
+  factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
+
+  Map<String, dynamic> toJson() => _$MessageToJson(this);
 }

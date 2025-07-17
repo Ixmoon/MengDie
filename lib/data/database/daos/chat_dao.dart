@@ -2,11 +2,10 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
-import '../../models/export_import_dtos.dart';
+import '../../models/chat.dart';
+import '../../models/message.dart';
 import '../app_database.dart';
 import '../common_enums.dart' as drift_enums;
-import '../models/drift_context_config.dart';
-import '../models/drift_xml_rule.dart';
 import '../tables/chats.dart';
 import '../tables/messages.dart';
 
@@ -169,73 +168,54 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     return query.get();
   }
 
-  // --- Import Chat ---
-  Future<int> importChatFromDto(ChatExportDto chatDto, AppDatabase attachedDb, {int? parentFolderId}) async {
-    final contextConfigDrift = DriftContextConfig(
-        mode: drift_enums.ContextManagementMode.values.firstWhere(
-                  (e) => e.name == chatDto.contextConfig.mode.name,
-                  orElse:()=> drift_enums.ContextManagementMode.turns),
-        maxTurns: chatDto.contextConfig.maxTurns,
-        maxContextTokens: chatDto.contextConfig.maxContextTokens,
-      );
-
-    final xmlRulesDrift = chatDto.xmlRules.map((dto) =>
-        DriftXmlRule(
-          tagName: dto.tagName,
-          action: drift_enums.XmlAction.values.firstWhere(
-                      (e) => e.name == dto.action.name,
-                      orElse: ()=> drift_enums.XmlAction.ignore)
-        )
-      ).toList();
-    
+  // --- Import Chat (Refactored to use Domain Model) ---
+  Future<int> importChat(Chat chat, AppDatabase attachedDb, {int? parentFolderId}) async {
     final now = DateTime.now();
 
+    // The manual mapping to Drift models is no longer needed.
+    // We pass the domain models directly to the companion, and Drift's TypeConverters
+    // will handle the conversion to a JSON string for the database.
+
     final chatCompanion = ChatsCompanion.insert(
-      title: Value(chatDto.title),
-      systemPrompt: Value(chatDto.systemPrompt),
-      isFolder: Value(chatDto.isFolder),
-      contextConfig: contextConfigDrift,
-      xmlRules: xmlRulesDrift,
-      // 优先使用 DTO 中的时间戳，否则使用当前时间作为备用
-      createdAt: Value(chatDto.createdAt ?? now),
-      updatedAt: chatDto.updatedAt ?? now,
-      apiConfigId: Value(chatDto.apiConfigId),
+      title: Value(chat.title),
+      systemPrompt: Value(chat.systemPrompt),
+      isFolder: Value(chat.isFolder),
+      contextConfig: chat.contextConfig,
+      xmlRules: chat.xmlRules,
+      createdAt: Value(chat.createdAt),
+      updatedAt: chat.updatedAt,
+      apiConfigId: Value(chat.apiConfigId),
       parentFolderId: Value(parentFolderId),
-      orderIndex: Value(chatDto.orderIndex),
-      coverImageBase64: Value(chatDto.coverImageBase64),
-      backgroundImagePath: const Value(null),
-      // new fields
-      enablePreprocessing: Value(chatDto.enablePreprocessing),
-      preprocessingPrompt: Value(chatDto.preprocessingPrompt),
-      preprocessingApiConfigId: Value(chatDto.preprocessingApiConfigId),
-      enableSecondaryXml: Value(chatDto.enableSecondaryXml),
-      secondaryXmlPrompt: Value(chatDto.secondaryXmlPrompt),
-      secondaryXmlApiConfigId: Value(chatDto.secondaryXmlApiConfigId),
-      contextSummary: Value(chatDto.contextSummary),
-      continuePrompt: Value(chatDto.continuePrompt),
+      orderIndex: Value(chat.orderIndex),
+      coverImageBase64: Value(chat.coverImageBase64),
+      backgroundImagePath: Value(chat.backgroundImagePath),
+      enablePreprocessing: Value(chat.enablePreprocessing),
+      preprocessingPrompt: Value(chat.preprocessingPrompt),
+      preprocessingApiConfigId: Value(chat.preprocessingApiConfigId),
+      enableSecondaryXml: Value(chat.enableSecondaryXml),
+      secondaryXmlPrompt: Value(chat.secondaryXmlPrompt),
+      secondaryXmlApiConfigId: Value(chat.secondaryXmlApiConfigId),
+      contextSummary: Value(chat.contextSummary),
+      continuePrompt: Value(chat.continuePrompt),
+      enableHelpMeReply: Value(chat.enableHelpMeReply),
+      helpMeReplyPrompt: Value(chat.helpMeReplyPrompt),
+      helpMeReplyApiConfigId: Value(chat.helpMeReplyApiConfigId),
+      helpMeReplyTriggerMode: Value(chat.helpMeReplyTriggerMode),
     );
 
     return attachedDb.transaction(() async {
       final newChatId = await attachedDb.into(attachedDb.chats).insert(chatCompanion);
 
       final List<MessagesCompanion> messageCompanions = [];
-      for (final messageDto in chatDto.messages) {
-        String rawText;
-        // Prioritize the new 'parts' field if it exists and is not empty
-        if (messageDto.parts != null && messageDto.parts!.isNotEmpty) {
-          rawText = jsonEncode(messageDto.parts);
-        } else {
-          // Fallback to legacy 'rawText'
-          final parts = [{'type': 'text', 'text': messageDto.rawText}];
-          rawText = jsonEncode(parts);
-        }
-
+      for (final message in chat.messages) {
+        final rawText = jsonEncode(message.parts.map((p) => p.toJson()).toList());
         messageCompanions.add(
           MessagesCompanion.insert(
             chatId: newChatId,
             rawText: rawText,
-            role: messageDto.role, // DTO now uses the same enum
-            timestamp: DateTime.now(), // MessageExportDto does not have timestamp, generate new
+            role: message.role,
+            timestamp: message.timestamp, // Use timestamp from the imported message
+            updatedAt: Value(message.updatedAt ?? now),
           )
         );
       }
@@ -247,7 +227,6 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       }
       return newChatId;
     });
-    // return Future.value(0); // Remove dummy return
   }
 
   /// 通用方法，用于分叉或克隆聊天。

@@ -47,7 +47,7 @@ class ChatSettingsNotifier extends StateNotifier<ChatSettingsState> {
       }
       state = state.copyWith(
         initialChat: AsyncValue.data(chat),
-        updatedChat: chat.copyWith({}), // Create a mutable copy for editing
+        updatedChat: chat.copyWith(), // Create a mutable copy for editing
       );
     } catch (e, st) {
       state = state.copyWith(initialChat: AsyncValue.error(e, st));

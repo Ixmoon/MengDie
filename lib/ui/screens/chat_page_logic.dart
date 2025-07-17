@@ -288,11 +288,11 @@ class ChatPageLogic {
                     Message updatedMessage;
                     if (message.role == MessageRole.model) {
                       final bool useSecondaryXml = chat.enableSecondaryXml;
-                      updatedMessage = message.copyWith({
-                        'parts': [MessagePart.text(newDisplayText)],
-                        'secondaryXmlContent': useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
-                        'originalXmlContent': !useSecondaryXml ? newXmlContent : message.originalXmlContent,
-                      });
+                      updatedMessage = message.copyWith(
+                        parts: [MessagePart.text(newDisplayText)],
+                        secondaryXmlContent: useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
+                        originalXmlContent: !useSecondaryXml ? newXmlContent : message.originalXmlContent,
+                      );
                     } else {
                       final newParts = List<MessagePart>.from(message.parts);
                       final textPartIndex = newParts.indexWhere((p) => p.type == MessagePartType.text);
@@ -301,7 +301,7 @@ class ChatPageLogic {
                       } else {
                         newParts.add(MessagePart.text(newDisplayText));
                       }
-                      updatedMessage = message.copyWith({'parts': newParts});
+                      updatedMessage = message.copyWith(parts: newParts);
                     }
                     
                     Navigator.pop(dialogContext);
@@ -462,7 +462,7 @@ class ChatPageLogic {
 
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat != null) {
-        final chatToUpdate = chat.copyWith({'coverImageBase64': newBase64String});
+        final chatToUpdate = chat.copyWith(coverImageBase64: newBase64String);
         await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
         if (!context.mounted) return;
         ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已更新', backgroundColor: Colors.green);
@@ -510,7 +510,7 @@ class ChatPageLogic {
   Future<void> removeCoverImage() async {
     final chatToUpdate = ref.read(currentChatProvider(chatId)).value;
     if (chatToUpdate != null) {
-      final updatedChat = chatToUpdate.copyWith({'coverImageBase64': null});
+      final updatedChat = chatToUpdate.copyWith(coverImageBase64: null);
       await ref.read(chatRepositoryProvider).saveChat(updatedChat);
       if (!context.mounted) return;
       ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);

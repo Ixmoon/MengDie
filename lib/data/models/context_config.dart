@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'enums.dart';
 
+part 'context_config.g.dart';
+
+@JsonSerializable()
 @immutable
 class ContextConfig {
   final ContextManagementMode mode;
@@ -24,4 +28,8 @@ class ContextConfig {
       maxContextTokens: maxContextTokens ?? this.maxContextTokens,
     );
   }
+
+  factory ContextConfig.fromJson(Map<String, dynamic> json) => _$ContextConfigFromJson(json);
+
+  Map<String, dynamic> toJson() => _$ContextConfigToJson(this);
 }

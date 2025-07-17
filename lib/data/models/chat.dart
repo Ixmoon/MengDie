@@ -1,8 +1,14 @@
 import 'package:flutter/foundation.dart';
+import 'package:json_annotation/json_annotation.dart';
+
 import 'context_config.dart';
+import 'message.dart';
 import 'xml_rule.dart';
 import 'enums.dart';
 
+part 'chat.g.dart';
+
+@JsonSerializable(explicitToJson: true)
 @immutable
 class Chat {
   final int id;
@@ -31,7 +37,12 @@ class Chat {
   final String? helpMeReplyApiConfigId;
   final HelpMeReplyTriggerMode helpMeReplyTriggerMode;
 
+  // Not part of the database, used for export/import
+  @JsonKey(includeIfNull: false, defaultValue: [])
+  final List<Message> messages;
+
   /// 如果背景图片路径包含 '/template'，则该聊天被视为模板。
+  @JsonKey(includeFromJson: false, includeToJson: false)
   bool get isTemplate => backgroundImagePath?.contains('/template') ?? false;
 
   const Chat({
@@ -60,36 +71,68 @@ class Chat {
     this.helpMeReplyPrompt,
     this.helpMeReplyApiConfigId,
     this.helpMeReplyTriggerMode = HelpMeReplyTriggerMode.manual,
+    this.messages = const [],
   });
 
-  Chat copyWith(Map<String, dynamic> changes) {
-    // 允许通过传入 'key: null' 来将可选字段设置为空
+  Chat copyWith({
+    int? id,
+    String? title,
+    String? systemPrompt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? coverImageBase64,
+    String? backgroundImagePath,
+    int? orderIndex,
+    bool? isFolder,
+    int? parentFolderId,
+    String? apiConfigId,
+    ContextConfig? contextConfig,
+    List<XmlRule>? xmlRules,
+    bool? enablePreprocessing,
+    String? preprocessingPrompt,
+    String? contextSummary,
+    String? preprocessingApiConfigId,
+    bool? enableSecondaryXml,
+    String? secondaryXmlPrompt,
+    String? secondaryXmlApiConfigId,
+    String? continuePrompt,
+    bool? enableHelpMeReply,
+    String? helpMeReplyPrompt,
+    String? helpMeReplyApiConfigId,
+    HelpMeReplyTriggerMode? helpMeReplyTriggerMode,
+    List<Message>? messages,
+  }) {
     return Chat(
-      id: changes['id'] as int? ?? id,
-      title: changes.containsKey('title') ? changes['title'] as String? : title,
-      systemPrompt: changes.containsKey('systemPrompt') ? changes['systemPrompt'] as String? : systemPrompt,
-      createdAt: changes['createdAt'] as DateTime? ?? createdAt,
-      updatedAt: changes['updatedAt'] as DateTime? ?? updatedAt,
-      coverImageBase64: changes.containsKey('coverImageBase64') ? changes['coverImageBase64'] as String? : coverImageBase64,
-      backgroundImagePath: changes.containsKey('backgroundImagePath') ? changes['backgroundImagePath'] as String? : backgroundImagePath,
-      orderIndex: changes.containsKey('orderIndex') ? changes['orderIndex'] as int? : orderIndex,
-      isFolder: changes['isFolder'] as bool? ?? isFolder,
-      parentFolderId: changes.containsKey('parentFolderId') ? changes['parentFolderId'] as int? : parentFolderId,
-      apiConfigId: changes.containsKey('apiConfigId') ? changes['apiConfigId'] as String? : apiConfigId,
-      contextConfig: changes['contextConfig'] as ContextConfig? ?? contextConfig,
-      xmlRules: changes['xmlRules'] as List<XmlRule>? ?? xmlRules,
-      enablePreprocessing: changes['enablePreprocessing'] as bool? ?? enablePreprocessing,
-      preprocessingPrompt: changes.containsKey('preprocessingPrompt') ? changes['preprocessingPrompt'] as String? : preprocessingPrompt,
-      contextSummary: changes.containsKey('contextSummary') ? changes['contextSummary'] as String? : contextSummary,
-      preprocessingApiConfigId: changes.containsKey('preprocessingApiConfigId') ? changes['preprocessingApiConfigId'] as String? : preprocessingApiConfigId,
-      enableSecondaryXml: changes['enableSecondaryXml'] as bool? ?? enableSecondaryXml,
-      secondaryXmlPrompt: changes.containsKey('secondaryXmlPrompt') ? changes['secondaryXmlPrompt'] as String? : secondaryXmlPrompt,
-      secondaryXmlApiConfigId: changes.containsKey('secondaryXmlApiConfigId') ? changes['secondaryXmlApiConfigId'] as String? : secondaryXmlApiConfigId,
-      continuePrompt: changes.containsKey('continuePrompt') ? changes['continuePrompt'] as String? : continuePrompt,
-      enableHelpMeReply: changes['enableHelpMeReply'] as bool? ?? enableHelpMeReply,
-      helpMeReplyPrompt: changes.containsKey('helpMeReplyPrompt') ? changes['helpMeReplyPrompt'] as String? : helpMeReplyPrompt,
-      helpMeReplyApiConfigId: changes.containsKey('helpMeReplyApiConfigId') ? changes['helpMeReplyApiConfigId'] as String? : helpMeReplyApiConfigId,
-      helpMeReplyTriggerMode: changes['helpMeReplyTriggerMode'] as HelpMeReplyTriggerMode? ?? helpMeReplyTriggerMode,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      coverImageBase64: coverImageBase64 ?? this.coverImageBase64,
+      backgroundImagePath: backgroundImagePath ?? this.backgroundImagePath,
+      orderIndex: orderIndex ?? this.orderIndex,
+      isFolder: isFolder ?? this.isFolder,
+      parentFolderId: parentFolderId ?? this.parentFolderId,
+      apiConfigId: apiConfigId ?? this.apiConfigId,
+      contextConfig: contextConfig ?? this.contextConfig,
+      xmlRules: xmlRules ?? this.xmlRules,
+      enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
+      preprocessingPrompt: preprocessingPrompt ?? this.preprocessingPrompt,
+      contextSummary: contextSummary ?? this.contextSummary,
+      preprocessingApiConfigId: preprocessingApiConfigId ?? this.preprocessingApiConfigId,
+      enableSecondaryXml: enableSecondaryXml ?? this.enableSecondaryXml,
+      secondaryXmlPrompt: secondaryXmlPrompt ?? this.secondaryXmlPrompt,
+      secondaryXmlApiConfigId: secondaryXmlApiConfigId ?? this.secondaryXmlApiConfigId,
+      continuePrompt: continuePrompt ?? this.continuePrompt,
+      enableHelpMeReply: enableHelpMeReply ?? this.enableHelpMeReply,
+      helpMeReplyPrompt: helpMeReplyPrompt ?? this.helpMeReplyPrompt,
+      helpMeReplyApiConfigId: helpMeReplyApiConfigId ?? this.helpMeReplyApiConfigId,
+      helpMeReplyTriggerMode: helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
+      messages: messages ?? this.messages,
     );
   }
+
+  factory Chat.fromJson(Map<String, dynamic> json) => _$ChatFromJson(json);
+
+  Map<String, dynamic> toJson() => _$ChatToJson(this);
 }

@@ -11,7 +11,7 @@ import 'package:file_picker/file_picker.dart'; // 选择文件
 import 'package:exif/exif.dart'; // 读写 EXIF
 
 // 导入模型、DTO 和仓库
-import '../../data/models/export_import_dtos.dart';
+import '../../data/models/models.dart';
 import '../../data/repositories/chat_repository.dart';
 import '../../data/repositories/message_repository.dart';
 import '../../ui/providers/repository_providers.dart';
@@ -29,9 +29,12 @@ class ChatExportImportService {
   final Ref _ref;
   final ChatRepository _chatRepository;
   final MessageRepository _messageRepository;
-  // static const _jsonExifTag = 'UserComment'; // 不再使用 UserComment
-  static const int _jsonExifTagId = 0x010e; // 使用 ImageDescription Tag ID
-  static const String _jsonExifJsonKey = 'Image ImageDescription'; // exif 库中 ImageDescription 的键
+  // --- 新版 PNG 格式常量 ---
+  static const String _pngCharaKeyword = 'chara';
+
+  // --- 旧版 JPG EXIF 格式常量 (保留用于导入兼容) ---
+  static const int _jsonExifTagId = 0x010e; // ImageDescription Tag ID
+  static const String _jsonExifJsonKey = 'Image ImageDescription';
 
   ChatExportImportService(this._ref, this._chatRepository, this._messageRepository);
 
@@ -96,30 +99,30 @@ class ChatExportImportService {
     }
 
     try {
-      final imageBytesWithExif = await _generateExportData(chatId);
-      if (imageBytesWithExif == null) {
+      // --- 更新：生成新的 PNG 格式 ---
+      final imageBytesWithPngData = await _generateExportData(chatId);
+      if (imageBytesWithPngData == null) {
         throw Exception("未能生成导出数据。");
       }
 
+      final chat = await _chatRepository.getChat(chatId);
+      final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
+      // 文件扩展名改为 .png
+      final suggestedFileName = '$sanitizedTitle.png';
+
       if (kIsWeb) {
-        final chat = await _chatRepository.getChat(chatId);
-        final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
-        final suggestedFileName = '$sanitizedTitle.jpg';
         await FilePicker.platform.saveFile(
           dialogTitle: '请选择保存位置 (Web)',
           fileName: suggestedFileName,
-          bytes: Uint8List.fromList(imageBytesWithExif),
+          bytes: Uint8List.fromList(imageBytesWithPngData),
         );
         debugPrint("ChatExportImportService: Web export initiated for $suggestedFileName.");
         return null;
       } else {
-        final chat = await _chatRepository.getChat(chatId);
-        final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
-        final suggestedFileName = '$sanitizedTitle.jpg';
         String? finalSavePath = await FilePicker.platform.saveFile(
           dialogTitle: '请选择保存位置',
           fileName: suggestedFileName,
-          bytes: Uint8List.fromList(imageBytesWithExif),
+          bytes: Uint8List.fromList(imageBytesWithPngData),
         );
         if (finalSavePath != null) {
           debugPrint("ChatExportImportService: 文件已成功导出到: $finalSavePath");
@@ -206,9 +209,10 @@ class ChatExportImportService {
           }
         } else {
           // It's a chat, generate and add the file
-          final fileName = '$sanitizedTitle.jpg';
+          // 文件扩展名改为 .png
+          final fileName = '$sanitizedTitle.png';
           final filePath = '$currentPath$fileName';
-          
+
           final exportData = await _generateExportData(itemId);
           if (exportData != null) {
             archive.addFile(ArchiveFile(filePath, exportData.length, exportData));
@@ -230,64 +234,40 @@ class ChatExportImportService {
     }
     final messages = await _messageRepository.getMessagesForChat(chatId);
 
-    final messageDtos = messages.map((m) => MessageExportDto(
-      rawText: m.rawText,
-      role: m.role,
-      parts: m.parts.map((p) => p.toJson()).toList(),
-      originalXmlContent: m.originalXmlContent,
-      secondaryXmlContent: m.secondaryXmlContent,
-    )).toList();
+    // Create a new Chat instance that includes the messages for serialization.
+    final chatWithMessages = chat.copyWith(messages: messages);
 
-    final chatDto = ChatExportDto(
-      title: chat.title,
-      systemPrompt: chat.systemPrompt,
-      isFolder: chat.isFolder,
-      apiConfigId: chat.apiConfigId,
-      coverImageBase64: chat.coverImageBase64,
-      enablePreprocessing: chat.enablePreprocessing,
-      preprocessingPrompt: chat.preprocessingPrompt,
-      preprocessingApiConfigId: chat.preprocessingApiConfigId,
-      enableSecondaryXml: chat.enableSecondaryXml,
-      secondaryXmlPrompt: chat.secondaryXmlPrompt,
-      secondaryXmlApiConfigId: chat.secondaryXmlApiConfigId,
-      contextSummary: chat.contextSummary,
-      continuePrompt: chat.continuePrompt,
-      contextConfig: ContextConfigDto(
-        mode: chat.contextConfig.mode,
-        maxTurns: chat.contextConfig.maxTurns,
-        maxContextTokens: chat.contextConfig.maxContextTokens,
-      ),
-      xmlRules: chat.xmlRules.map((r) => XmlRuleDto(tagName: r.tagName, action: r.action)).toList(),
-      messages: messageDtos,
-      hasRealCoverImage: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
-      backgroundImagePath: chat.backgroundImagePath, // 导出模板路径
-      // 填充时间戳
-      createdAt: chat.createdAt,
-      updatedAt: chat.updatedAt,
-      orderIndex: chat.orderIndex, // 导出排序信息
-    );
-
-    final jsonString = jsonEncode(chatDto.toJson());
-    final jsonBytes = utf8.encode(jsonString);
-    final base64String = base64Encode(jsonBytes);
+    // Now, the domain model itself can be converted to JSON.
+    final jsonString = jsonEncode(chatWithMessages.toJson());
+    // --- 更新：使用 Base64 编码以兼容“酒馆”格式 ---
+    final base64String = base64Encode(utf8.encode(jsonString));
 
     img.Image? image;
     if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
       try {
         final coverBytes = base64Decode(chat.coverImageBase64!);
+        // 尝试解码为 PNG 或 JPG
         image = img.decodeImage(coverBytes);
       } catch (e) {
         debugPrint("ChatExportImportService: [_generateExportData] 从 Base64 解码封面图片时出错: $e");
       }
     }
 
+    // 如果没有有效封面，创建一个默认图片
     if (image == null) {
       image = img.Image(width: 200, height: 200);
       img.fill(image, color: img.ColorRgb8(240, 240, 240));
     }
 
-    image.exif.imageIfd[_jsonExifTagId] = base64String;
-    return img.encodeJpg(image);
+    // --- 更新：将数据写入 PNG 的 tEXt 块 ---
+    // 使用 image 库的 addTextData 方法（如果可用）或手动构建
+    // 注意：image 库本身可能没有直接添加任意 tEXt 块的简单方法。
+    // 我们将 Base64 字符串添加到 image 对象的 textData map 中。
+    // encodePng 会处理这个 map 并创建 tEXt 数据块。
+    image.textData = {_pngCharaKeyword: base64String};
+
+    // 返回 PNG 编码的字节
+    return img.encodePng(image);
   }
 
   // --- 更新：导入聊天（支持批量图片和 ZIP 压缩包），可指定父文件夹 ---
@@ -325,7 +305,7 @@ class ChatExportImportService {
             successCount += count;
           } else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png')) {
             // 根据 isBatchImport 标志决定如何导入图片
-            await _importFromImage(file.bytes!, parentFolderId, isBatch: isBatchImport);
+            await _importFromImageBytes(file.bytes!, parentFolderId, isBatch: isBatchImport, fileName: file.name);
             successCount++;
           }
         } catch (e, s) {
@@ -365,7 +345,7 @@ class ChatExportImportService {
           final parentFolderId = await _getOrCreateFolderIdByPath(parentPath, createdFolderIds, baseParentFolderId);
 
           // ZIP 包内的文件总是作为批量导入的一部分，保留其排序信息
-          await _importFromImage(file.content, parentFolderId, isBatch: true);
+          await _importFromImageBytes(file.content, parentFolderId, isBatch: true, fileName: file.name);
           successCount++;
         } catch (e, s) {
           debugPrint("ChatExportImportService: 从 ZIP 中的文件 ${file.name} 导入失败: $e\n$s");
@@ -395,9 +375,15 @@ class ChatExportImportService {
       if (!createdFolderIds.containsKey(currentPath)) {
         // This folder part doesn't exist, create it under the current parent
         debugPrint("ChatExportImportService: 正在创建文件夹: $currentPath in parent $currentParentId");
-        final folderDto = ChatExportDto.createFolder(title: part);
-        // importChat 现在会自动处理用户绑定
-        final newFolderId = await _chatRepository.importChat(folderDto, parentFolderId: currentParentId);
+        final now = DateTime.now();
+        final folderToCreate = Chat(
+            title: part,
+            isFolder: true,
+            createdAt: now,
+            updatedAt: now,
+        );
+        // importChat now handles the domain model directly.
+        final newFolderId = await _chatRepository.importChat(folderToCreate, parentFolderId: currentParentId);
         createdFolderIds[currentPath] = newFolderId;
         currentParentId = newFolderId;
       } else {
@@ -408,7 +394,66 @@ class ChatExportImportService {
     return currentParentId;
   }
 
-  Future<void> _importFromImage(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
+  // --- 分发器，根据文件类型决定使用哪个导入方法 ---
+  Future<void> _importFromImageBytes(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false, required String fileName}) async {
+    final lowerCaseFileName = fileName.toLowerCase();
+    
+    // 优先尝试基于文件扩展名的解析
+    if (lowerCaseFileName.endsWith('.png')) {
+      try {
+        await _importFromPngTavern(imageBytes, parentFolderId, isBatch: isBatch);
+        return; // PNG 成功，直接返回
+      } catch (e) {
+        debugPrint("ChatExportImportService: 将 '$fileName' 作为 PNG 导入失败: $e. 将尝试作为 JPG 回退。");
+        // 如果失败，可能是个伪装成 PNG 的 JPG，尝试 EXIF
+      }
+    }
+
+    // 对于 .jpg, .jpeg, 或 .png 解析失败的情况，尝试 EXIF
+    if (lowerCaseFileName.endsWith('.jpg') || lowerCaseFileName.endsWith('.jpeg') || lowerCaseFileName.endsWith('.png')) {
+      try {
+        await _importFromJpgExif(imageBytes, parentFolderId, isBatch: isBatch);
+      } catch (e) {
+        throw Exception("无法将文件 '$fileName' 作为任何已知格式（PNG Tavern 或 JPG EXIF）导入。");
+      }
+    } else {
+      throw Exception("不支持的文件类型: $fileName");
+    }
+  }
+
+  // --- 新增：从 PNG tEXt 数据块导入（酒馆角色卡格式） ---
+  Future<void> _importFromPngTavern(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
+    final image = img.decodePng(imageBytes);
+    if (image == null) {
+      throw Exception("无法解码 PNG 图片。");
+    }
+
+    if (image.textData == null || !image.textData!.containsKey(_pngCharaKeyword)) {
+      throw Exception("PNG 文件中未找到 '$_pngCharaKeyword' 数据块。");
+    }
+
+    final base64String = image.textData![_pngCharaKeyword]!;
+    if (base64String.isEmpty) {
+      throw Exception("PNG '$_pngCharaKeyword' 数据块为空。");
+    }
+
+    String? jsonString;
+    try {
+      final decodedBytes = base64Decode(base64String);
+      jsonString = utf8.decode(decodedBytes);
+    } catch (e) {
+      throw Exception("无法解码存储在 PNG 中的聊天数据 (Base64/UTF8 解码失败)。");
+    }
+
+    if (jsonString == null || jsonString.isEmpty) {
+      throw Exception("未能从 PNG 中恢复有效的聊天数据。");
+    }
+    
+    await _processImportedJson(jsonString, imageBytes, parentFolderId, isBatch: isBatch);
+  }
+
+  // --- 重构：从 JPG EXIF 数据导入（旧版格式） ---
+  Future<void> _importFromJpgExif(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
     final exifData = await readExifFromBytes(imageBytes);
     if (exifData.isEmpty) {
       throw Exception("无法读取图片的元数据。");
@@ -420,7 +465,6 @@ class ChatExportImportService {
     if (exifData.containsKey(descriptionKey)) {
       final tag = exifData[descriptionKey];
       if (tag != null) {
-        // ... [EXIF parsing logic remains the same]
         dynamic rawValue = tag.values;
         String? base64String;
         if (rawValue is IfdBytes) {
@@ -459,30 +503,40 @@ class ChatExportImportService {
     }
 
     if (jsonString == null || jsonString.isEmpty) {
-      throw Exception("未能从图片中恢复有效的聊天数据。");
+      throw Exception("未能从图片 EXIF 中恢复有效的聊天数据。");
     }
 
-    ChatExportDto chatDtoFromJson;
+    await _processImportedJson(jsonString, imageBytes, parentFolderId, isBatch: isBatch);
+  }
+
+  // --- 新增：处理已解析 JSON 的共享逻辑 ---
+  Future<void> _processImportedJson(String jsonString, Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
+    Chat chatFromJson;
     try {
-      chatDtoFromJson = ChatExportDto.fromJson(jsonDecode(jsonString));
+      // Directly deserialize into the domain model.
+      chatFromJson = Chat.fromJson(jsonDecode(jsonString));
     } on FormatException {
       throw Exception("导入失败：文件中的数据格式无效或已损坏。");
     }
 
-    // Override the cover image with the importing image itself, only if it's a real one
-    String? importedCoverImageBase64String;
-    if (chatDtoFromJson.hasRealCoverImage) {
-      importedCoverImageBase64String = base64Encode(imageBytes);
-    }
+    // The logic to decide whether to use the imported image as a cover
+    // is now handled by checking the `coverImageBase64` field in the JSON itself.
+    // If it's null or empty, it means the original chat didn't have a "real" cover.
+    // We only override with the container image if the original had a real cover.
+    bool hasRealCoverInJson = chatFromJson.coverImageBase64 != null && chatFromJson.coverImageBase64!.isNotEmpty;
+    String? finalCoverImageBase64 = hasRealCoverInJson
+        ? base64Encode(imageBytes)
+        : chatFromJson.coverImageBase64;
 
-    // 如果不是批量导入（即单个文件导入），则强制将 orderIndex 设为 null 以实现置顶。
-    // 否则，保留从文件中解析出的 orderIndex。
-    final finalChatDto = chatDtoFromJson.copyWith(
-      coverImageBase64: importedCoverImageBase64String,
-      orderIndex: isBatch ? chatDtoFromJson.orderIndex : null,
+
+    // If it's a single file import, force orderIndex to null to place it at the top.
+    // Otherwise, respect the orderIndex from the file.
+    final finalChat = chatFromJson.copyWith(
+      coverImageBase64: finalCoverImageBase64,
+      orderIndex: isBatch ? chatFromJson.orderIndex : null,
     );
-    
-    // importChat 现在会自动处理用户绑定
-    await _chatRepository.importChat(finalChatDto, parentFolderId: parentFolderId);
+
+    // importChat now takes the domain model directly.
+    await _chatRepository.importChat(finalChat, parentFolderId: parentFolderId);
   }
 }

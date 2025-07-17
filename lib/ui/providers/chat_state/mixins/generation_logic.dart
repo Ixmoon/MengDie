@@ -201,7 +201,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         final messageRepo = ref.read(messageRepositoryProvider);
         await messageRepo.saveMessages(messagesToSave); // Batch save
         final chatRepo = ref.read(chatRepositoryProvider);
-        await chatRepo.saveChat(chat.copyWith({'updatedAt': DateTime.now()}));
+        await chatRepo.saveChat(chat.copyWith(updatedAt: DateTime.now()));
         debugPrint("用户发送的 ${messagesToSave.length} 条原子消息已保存。");
       } catch (e) {
         debugPrint("保存用户消息时出错: $e");
@@ -333,10 +333,10 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         final combinedRawText = initialRawText + accumulatedNewText;
         
         // Update the message object in the state, not the database.
-        final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith({
-          'id': targetMessageId,
-          'parts': [MessagePart.text(combinedRawText)]
-        });
+        final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith(
+          id: targetMessageId,
+          parts: [MessagePart.text(combinedRawText)]
+        );
 
         if (mounted) {
           state = state.copyWith(streamingMessage: messageToUpdate);
@@ -389,7 +389,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           final initialRawText = combinedBuffer.toString();
           final combinedRawText = initialRawText + newContent;
           // 我们将完整的合并文本暂时放入parts中，后续处理会分离它们
-          messageToProcess = baseMessage.copyWith({'parts': [MessagePart.text(combinedRawText)]});
+          messageToProcess = baseMessage.copyWith(parts: [MessagePart.text(combinedRawText)]);
         } else {
           messageToProcess = Message(
             chatId: chatId,

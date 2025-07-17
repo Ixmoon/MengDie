@@ -1,40 +1,40 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
-import 'models/drift_context_config.dart';
-import 'models/drift_xml_rule.dart';
+import '../../data/models/context_config.dart';
+import '../../data/models/xml_rule.dart';
 import '../../data/models/enums.dart';
 
 // Note: GenerationConfigConverter is removed as its fields are now part of the ApiConfigs table.
 // Note: OpenAIAPIConfigConverter is removed for the same reason.
 
 // For ContextConfig
-class ContextConfigConverter extends TypeConverter<DriftContextConfig, String> {
+class ContextConfigConverter extends TypeConverter<ContextConfig, String> {
   const ContextConfigConverter();
 
   @override
-  DriftContextConfig fromSql(String fromDb) {
-    return DriftContextConfig.fromJson(json.decode(fromDb) as Map<String, dynamic>);
+  ContextConfig fromSql(String fromDb) {
+    return ContextConfig.fromJson(json.decode(fromDb) as Map<String, dynamic>);
   }
 
   @override
-  String toSql(DriftContextConfig value) {
+  String toSql(ContextConfig value) {
     return json.encode(value.toJson());
   }
 }
 
-// For List<DriftXmlRule>
-class XmlRuleListConverter extends TypeConverter<List<DriftXmlRule>, String> {
+// For List<XmlRule>
+class XmlRuleListConverter extends TypeConverter<List<XmlRule>, String> {
   const XmlRuleListConverter();
 
   @override
-  List<DriftXmlRule> fromSql(String fromDb) {
+  List<XmlRule> fromSql(String fromDb) {
     if (fromDb.isEmpty) return [];
     final List<dynamic> jsonData = json.decode(fromDb) as List<dynamic>;
-    return jsonData.map((item) => DriftXmlRule.fromJson(item as Map<String, dynamic>)).toList();
+    return jsonData.map((item) => XmlRule.fromJson(item as Map<String, dynamic>)).toList();
   }
 
   @override
-  String toSql(List<DriftXmlRule> value) {
+  String toSql(List<XmlRule> value) {
     return json.encode(value.map((rule) => rule.toJson()).toList());
   }
 }

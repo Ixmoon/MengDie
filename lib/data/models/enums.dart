@@ -1,6 +1,7 @@
 // ignore_for_file: constant_identifier_names
 
 import 'package:flutter/material.dart';
+import 'package:json_annotation/json_annotation.dart';
 
 // 本文件包含项目中使用的所有枚举类型。
 // Most enums are now re-exported from Drift's common_enums.dart
@@ -16,6 +17,7 @@ export '../database/common_enums.dart'
 		ContextManagementMode;
 
 // --- “帮我回复”触发模式 ---
+@JsonEnum()
 enum HelpMeReplyTriggerMode {
 		manual, // 手动触发
 		auto,   // 自动触发
@@ -41,6 +43,7 @@ enum ThemeModeSetting {
 }
 
 // --- 消息内容部分类型 ---
+@JsonEnum()
 enum MessagePartType {
   text,
   image,
