@@ -51,7 +51,10 @@ class LlmRequestHandler {
   }
 
   /// Executes a request that returns a single, complete response.
-  Future<LlmResponse> executeOnce(HttpRequestPayload payload) async {
+  Future<LlmResponse> executeOnce(
+    HttpRequestPayload payload, {
+    required LlmResponse Function(Map<String, dynamic> data) responseParser,
+  }) async {
     try {
       final response = await _dio.post(
         payload.buildUrl(),
@@ -61,13 +64,7 @@ class LlmRequestHandler {
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        // This part is generic, but parsing the actual text is specific.
-        // For simplicity in this refactor, we assume a common 'text' field.
-        // A more robust solution might pass a parser function.
-        final responseData = response.data as Map<String, dynamic>;
-        final candidates = responseData['candidates'] as List?;
-        final text = candidates?.first['content']['parts'].first['text'] as String? ?? '';
-        return LlmResponse(parts: [MessagePart.text(text)], isSuccess: true);
+        return responseParser(response.data as Map<String, dynamic>);
       } else {
         return LlmResponse.error("API Error: ${response.statusCode} ${response.statusMessage}");
       }
@@ -277,11 +274,12 @@ class LlmRequestHandler {
     String errorMsg = "$serviceName API DioException: ${e.message}";
     if (e.response != null) {
       errorMsg += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
-      try {
-        final errorBody = jsonEncode(e.response?.data);
-        errorMsg += "\nBody: $errorBody";
-      } catch (_) {
-        errorMsg += "\nBody: (Could not parse error body)";
+      // Use .toString() for robustness. It handles maps, strings, and other types gracefully.
+      // This avoids errors if the body is not a valid JSON map (e.g., HTML error page).
+      if (e.response?.data != null) {
+        errorMsg += "\nBody: ${e.response!.data.toString()}";
+      } else {
+        errorMsg += "\nBody: (No response body)";
       }
     }
     return errorMsg;

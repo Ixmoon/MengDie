@@ -17,6 +17,7 @@ import 'package:intl/intl.dart';
 import '../../data/models/models.dart';
 import '../providers/chat_state_providers.dart';
 import 'cached_image.dart';
+import '../providers/chat_state/chat_data_providers.dart';
 
 /// 列表视图中的聊天项小部件
 class ChatListItem extends ConsumerWidget {

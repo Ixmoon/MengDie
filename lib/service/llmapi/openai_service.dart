@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tiktoken/tiktoken.dart' as tiktoken;
+import 'package:collection/collection.dart';
 
 import '../../data/models/models.dart';
 import 'base_llm_service.dart';
@@ -59,17 +61,30 @@ class OpenAIService implements BaseLlmService {
       stream: false,
     );
     
-    return _requestHandler.executeOnce(payload);
+    return _requestHandler.executeOnce(payload, responseParser: _parseOpenAIResponse);
   }
 
   @override
   Future<LlmImageResponse> generateImage({
-    required String prompt,
+    required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
+
+    // OpenAI 的 DALL-E API 只接受一个简单的文本提示。
+    // 为了构建一个干净、准确的提示，我们只合并来自'user'角色的文本部分。
+    // 这可以防止模型的历史回复污染最终的生成指令。
+    final prompt = llmContext
+        .where((content) => content.role == 'user')
+        .expand((content) => content.parts)
+        .whereType<LlmTextPart>()
+        .map((part) => part.text)
+        .join('\n');
+    if (prompt.isEmpty) {
+      return Future.value(const LlmImageResponse.error("Image generation requires a text prompt."));
+    }
 
     final payload = OpenAIImagePayload(
       apiConfig: apiConfig,
@@ -103,6 +118,18 @@ class OpenAIService implements BaseLlmService {
       return delta?['content'] as String? ?? '';
     }
     return '';
+  }
+
+  LlmResponse _parseOpenAIResponse(Map<String, dynamic> data) {
+    final choices = data['choices'] as List?;
+    if (choices != null && choices.isNotEmpty) {
+      final message = choices.first['message'] as Map<String, dynamic>?;
+      final content = message?['content'] as String?;
+      if (content != null) {
+        return LlmResponse(parts: [MessagePart.text(content)]);
+      }
+    }
+    return const LlmResponse.error("Invalid response format from OpenAI.");
   }
 
   // This method is kept separate as it's a distinct 'GET' utility
@@ -203,56 +230,94 @@ class OpenAIChatPayload extends OpenAIPayload {
     if (generationParams['reasoning_effort'] != null) config['reasoning_effort'] = generationParams['reasoning_effort'];
 
     requestBody.addAll(config);
+
+    if (apiConfig.toolChoice != null && apiConfig.toolChoice!.isNotEmpty) {
+      // It could be a simple string like "auto" or a JSON object.
+      try {
+        final toolChoiceJson = jsonDecode(apiConfig.toolChoice!);
+        requestBody['tool_choice'] = toolChoiceJson;
+      } catch (e) {
+        // If it's not a valid JSON, treat it as a plain string (e.g., "auto", "none").
+        requestBody['tool_choice'] = apiConfig.toolChoice;
+      }
+    }
+
     return requestBody;
   }
 
   List<Map<String, dynamic>> _buildOpenAIMessages() {
     final openAIMessages = <Map<String, dynamic>>[];
-    LlmContent? systemPrompt;
+    if (llmContext == null || llmContext!.isEmpty) {
+      return openAIMessages;
+    }
 
-    final otherContent = <LlmContent>[];
-    for (var content in llmContext!) {
-      if (content.role == "system") {
-        systemPrompt = content;
-      } else {
-        otherContent.add(content);
+    // First, extract system prompt if it exists.
+    final systemPrompt = llmContext!.firstWhereOrNull((c) => c.role == "system");
+    if (systemPrompt != null) {
+      final systemText = systemPrompt.parts
+          .whereType<LlmTextPart>()
+          .map((p) => p.text)
+          .join("\n");
+      if (systemText.isNotEmpty) {
+        openAIMessages.add({"role": "system", "content": systemText});
       }
     }
 
-    if (systemPrompt != null) {
-      final systemText = systemPrompt.parts.whereType<LlmTextPart>().map((p) => p.text).join("\n");
-      if (systemText.isNotEmpty) openAIMessages.add({"role": "system", "content": systemText});
-    }
+    // Process the rest of the messages (user and model).
+    final messages = llmContext!.where((c) => c.role != "system").toList();
+    
+    for (final currentMsg in messages) {
+      final role = currentMsg.role == 'model' ? 'assistant' : currentMsg.role;
 
-    for (var content in otherContent) {
-      final role = content.role == 'model' ? 'assistant' : content.role;
-      final contentParts = <Map<String, dynamic>>[];
-      String textBuffer = "";
+      if (role == 'assistant') {
+        // Special handling for assistant messages as per user's request
+        final textParts = currentMsg.parts.whereType<LlmTextPart>().toList();
+        final imageParts = currentMsg.parts.whereType<LlmDataPart>().toList();
 
-      for (var part in content.parts) {
-        if (part is LlmTextPart) {
-          textBuffer += "${part.text}\n";
-        } else if (part is LlmDataPart) {
-          contentParts.add({"type": "image_url", "image_url": {"url": "data:${part.mimeType};base64,${part.base64Data}"}});
-        } else if (part is LlmAudioPart) {
-           contentParts.add({"type": "input_audio", "input_audio": {"data": part.base64Data, "format": part.mimeType.split('/').last}});
-        } else if (part is LlmFilePart) {
-           debugPrint("Warning: LlmFilePart is currently not supported by OpenAIService.");
+        // 1. Add the text part as an assistant message
+        if (textParts.isNotEmpty) {
+          final assistantContent = _convertParts(textParts);
+          final messageContent = (assistantContent.length == 1 && assistantContent.first['type'] == 'text')
+              ? assistantContent.first['text']
+              : assistantContent;
+          openAIMessages.add({"role": "assistant", "content": messageContent});
+        }
+
+        // 2. Add the image part as a new user message to circumvent API limitations
+        if (imageParts.isNotEmpty) {
+          final userContent = _convertParts(imageParts);
+           openAIMessages.add({"role": "user", "content": userContent});
+        }
+      } else { // role == 'user'
+        // Standard handling for user messages
+        final contentParts = _convertParts(currentMsg.parts);
+        if (contentParts.isNotEmpty) {
+          final messageContent = (contentParts.length == 1 && contentParts.first['type'] == 'text')
+              ? contentParts.first['text']
+              : contentParts;
+          openAIMessages.add({"role": "user", "content": messageContent});
         }
       }
+    }
 
-      if (textBuffer.isNotEmpty) {
-        contentParts.insert(0, {"type": "text", "text": textBuffer.trim()});
-      }
+    return openAIMessages;
+  }
 
-      if (contentParts.isNotEmpty) {
-        final messageContent = (contentParts.length == 1 && contentParts.first['type'] == 'text')
-            ? contentParts.first['text']
-            : contentParts;
-        openAIMessages.add({"role": role, "content": messageContent});
+  /// Helper to convert a list of LlmPart into a list of OpenAI-compatible content maps.
+  List<Map<String, dynamic>> _convertParts(List<LlmPart> parts) {
+    final contentParts = <Map<String, dynamic>>[];
+    for (var part in parts) {
+      if (part is LlmTextPart) {
+        contentParts.add({"type": "text", "text": part.text});
+      } else if (part is LlmDataPart) {
+        contentParts.add({"type": "image_url", "image_url": {"url": "data:${part.mimeType};base64,${part.base64Data}"}});
+      } else if (part is LlmAudioPart) {
+         contentParts.add({"type": "input_audio", "input_audio": {"data": part.base64Data, "format": part.mimeType.split('/').last}});
+      } else if (part is LlmFilePart) {
+         debugPrint("Warning: LlmFilePart is currently not supported by OpenAIService.");
       }
     }
-    return openAIMessages;
+    return contentParts;
   }
 }
 

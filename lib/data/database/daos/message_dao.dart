@@ -49,8 +49,23 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
         .getSingleOrNull();
   }
 
-  Future<int> saveMessage(MessagesCompanion message) {
-    return into(messages).insert(message, mode: InsertMode.insertOrReplace);
+  Future<int> _updateWithTimestamp(int messageId, MessagesCompanion message) {
+    // When updating, we explicitly set the updatedAt field to the current time.
+    final companionWithTimestamp = message.copyWith(updatedAt: Value(DateTime.now().toUtc()));
+    return (update(messages)..where((t) => t.id.equals(messageId))).write(companionWithTimestamp);
+  }
+
+  /// Saves a new message or updates an existing one, ensuring `updatedAt` is handled correctly.
+  Future<int> saveOrUpdateMessage(MessagesCompanion message) {
+    if (message.id.present && message.id.value > 0) {
+      // If an ID is present and valid, it's an update.
+      print("Updating message with id: ${message.id.value}");
+      return _updateWithTimestamp(message.id.value, message);
+    } else {
+      // Otherwise, it's a new message.
+      print("Inserting new message");
+      return into(messages).insert(message.copyWith(id: const Value.absent()));
+    }
   }
 
   Future<void> saveMessages(List<MessagesCompanion> messageEntries) {

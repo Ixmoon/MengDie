@@ -29,7 +29,8 @@ import '../llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
 import '../../ui/providers/repository_providers.dart';
-import '../../ui/providers/chat_state_providers.dart'; // Import for ChatStateNotifier
+import '../../ui/providers/chat_state_providers.dart';
+import '../../ui/providers/chat_state/chat_data_providers.dart';
 class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;
@@ -158,208 +159,222 @@ class ContextXmlService {
       }
     }
     return XmlProcessor.serializeCarriedOver(cumulativeStateMap);
+  return XmlProcessor.serializeCarriedOver(cumulativeStateMap);
+}
+
+/// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
+/// This refactored version respects the `ContextManagementMode` to apply EITHER token OR turn limits.
+Future<_HistoryLimitResult> _limitHistoryForPrompt({
+  required int chatId,
+  required List<Message> fullHistory,
+  required int historyTokenBudget,
+  required int historyTurnBudget,
+}) async {
+  if (fullHistory.isEmpty) return _HistoryLimitResult([], []);
+
+  final chat = _ref.read(currentChatProvider(chatId)).value;
+  if (chat == null) {
+    // Failsafe: if chat is gone, drop all history.
+    return _HistoryLimitResult([], fullHistory);
   }
 
-  /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
-  /// This refactored version respects the `ContextManagementMode` to apply EITHER token OR turn limits.
-  Future<_HistoryLimitResult> _limitHistoryForPrompt({
-    required int chatId,
-    required List<Message> fullHistory,
-    required int historyTokenBudget,
-    required int historyTurnBudget,
-  }) async {
-    if (fullHistory.isEmpty) return _HistoryLimitResult([], []);
-
-    final chat = _ref.read(currentChatProvider(chatId)).value;
-    if (chat == null) {
-      // Failsafe: if chat is gone, drop all history.
-      return _HistoryLimitResult([], fullHistory);
-    }
-
-    switch (chat.contextConfig.mode) {
-      // --- A) Limit by Turns ---
-      case ContextManagementMode.turns:
-        final turnLimit = historyTurnBudget * 2;
-        if (turnLimit <= 0) {
-          return _HistoryLimitResult([], fullHistory);
-        }
-        if (fullHistory.length > turnLimit) {
-          final kept = fullHistory.sublist(fullHistory.length - turnLimit);
-          final dropped = fullHistory.sublist(0, fullHistory.length - turnLimit);
-          return _HistoryLimitResult(kept, dropped);
-        }
-        return _HistoryLimitResult(fullHistory, []);
-
-      // --- B) Limit by Tokens ---
-      case ContextManagementMode.tokens:
-        if (historyTokenBudget <= 0) {
-          return _HistoryLimitResult([], fullHistory);
-        }
-        
-        final llmService = _ref.read(llmServiceProvider);
-        debugPrint("ContextXmlService: Limiting history by tokens. Budget: $historyTokenBudget");
-
-        try {
-          final apiConfig = _ref.read(chatStateNotifierProvider(chatId).notifier).getEffectiveApiConfig();
-          final tokenFutures = fullHistory.map((msg) {
-            return llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
-              .then((count) => {'message': msg, 'tokens': count})
-              .catchError((e) {
-                debugPrint("  - Token counting failed for message ID ${msg.id}: $e. Counting as 0.");
-                return {'message': msg, 'tokens': 0};
-              });
-          });
-          final messageTokenPairs = await Future.wait(tokenFutures);
-
-          int currentTotalTokens = 0;
-          final List<Message> keptHistory = [];
-          
-          for (var i = messageTokenPairs.length - 1; i >= 0; i--) {
-            final pair = messageTokenPairs[i];
-            final messageTokens = pair['tokens'] as int;
-            
-            if (currentTotalTokens + messageTokens <= historyTokenBudget) {
-              currentTotalTokens += messageTokens;
-              keptHistory.insert(0, pair['message'] as Message);
-            } else {
-              break;
-            }
-          }
-
-          debugPrint("  - Token count is within budget. Kept ${keptHistory.length} messages with $currentTotalTokens tokens.");
-          final Set<int> keptIds = keptHistory.map((m) => m.id).toSet();
-          final List<Message> droppedHistory = fullHistory.where((m) => !keptIds.contains(m.id)).toList();
-
-          return _HistoryLimitResult(keptHistory, droppedHistory);
-
-        } catch (e) {
-          debugPrint("  - Token counting process failed during history limitation: $e. Aborting safely.");
-          return _HistoryLimitResult([], fullHistory);
-        }
-    }
-  }
-
-
-  /// Builds the list of LlmContent to be sent to the LLM API, respecting all context rules.
-  /// This is the primary method for constructing the prompt.
-  ///
-  /// The new logic is:
-  /// 1. Concurrently calculate tokens for all "fixed" context parts (system prompt, summary, XML).
-  /// 2. Calculate the remaining token and turn budget for the message history.
-  /// 3. Call a helper to truncate the message history within this specific budget.
-  /// 4. Assemble all parts into the final context.
-  Future<ApiRequestContext> buildApiRequestContext({
-    required int chatId, // 重构：传入 chatId
-    required Message currentUserMessage,
-    String? lastMessageOverride,
-    int? messageIdToPreserveXml,
-    String? chatSystemPromptOverride,
-    bool? keepAsSystemPrompt,
-    List<Message>? historyOverride, // New: Allows providing a custom history list, skipping DB fetch.
-  }) async {
-    final messageRepo = _ref.read(messageRepositoryProvider);
-    final llmService = _ref.read(llmServiceProvider);
-    // 重构：从 Notifier 获取 chat 和 apiConfig
-    final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
-    final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
-    final apiConfig = notifier.getEffectiveApiConfig();
-
-    // Use the historyOverride if provided, otherwise fetch from the database.
-    final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
-
-    final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
-
-    // --- 1. Prepare all "fixed" (non-history) context parts ---
-    final List<LlmContent> fixedContextParts = [];
-    final effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
-    final bool systemPromptExists = effectiveSystemPrompt != null && effectiveSystemPrompt.trim().isNotEmpty;
-    final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
-    final bool xmlExists = calculatedCarriedOverXml != null && calculatedCarriedOverXml.isNotEmpty;
-
-    if (systemPromptExists) {
-      fixedContextParts.add(LlmContent("system", [LlmTextPart(effectiveSystemPrompt)]));
-    }
-
-    final bool shouldDemoteSystemPrompt = !(keepAsSystemPrompt ?? (chatSystemPromptOverride == null));
-    if (shouldDemoteSystemPrompt && (chat.systemPrompt != null && chat.systemPrompt!.trim().isNotEmpty)) {
-       fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.systemPrompt!)]));
-    }
-
-    if (summaryExists) {
-      fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.contextSummary!)]));
-    }
-    if (xmlExists) {
-      fixedContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
-    }
-
-    // --- 2. Calculate budget for history ---
-    int fixedTokens = 0;
-    int fixedTurns = 0; // Summary and/or XML count as one turn
-    int historyTokenBudget = chat.contextConfig.maxContextTokens ?? 256000; 
-    int historyTurnBudget = chat.contextConfig.maxTurns;
-
-    // Concurrently calculate tokens for all fixed parts
-    if (fixedContextParts.isNotEmpty) {
-      try {
-        final tokenFutures = fixedContextParts.map((part) => llmService.countTokens(llmContext: [part], apiConfig: apiConfig));
-        final tokenCounts = await Future.wait(tokenFutures);
-        fixedTokens = tokenCounts.sum;
-        debugPrint("ContextXmlService: Calculated fixed tokens: $fixedTokens");
-      } catch (e) {
-        debugPrint("ContextXmlService: Error calculating fixed tokens: $e. Aborting.");
-        // If we can't calculate fixed tokens, we can't safely build context.
-        return ApiRequestContext(contextParts: [], carriedOverXml: calculatedCarriedOverXml, droppedMessages: fullHistory);
+  switch (chat.contextConfig.mode) {
+    // --- A) Limit by Turns ---
+    case ContextManagementMode.turns:
+      final turnLimit = historyTurnBudget * 2;
+      if (turnLimit <= 0) {
+        return _HistoryLimitResult([], fullHistory);
       }
+      if (fullHistory.length > turnLimit) {
+        final kept = fullHistory.sublist(fullHistory.length - turnLimit);
+        final dropped = fullHistory.sublist(0, fullHistory.length - turnLimit);
+        return _HistoryLimitResult(kept, dropped);
+      }
+      return _HistoryLimitResult(fullHistory, []);
+
+    // --- B) Limit by Tokens ---
+    case ContextManagementMode.tokens:
+      if (historyTokenBudget <= 0) {
+        return _HistoryLimitResult([], fullHistory);
+      }
+      
+      final llmService = _ref.read(llmServiceProvider);
+      debugPrint("ContextXmlService: Limiting history by tokens. Budget: $historyTokenBudget");
+
+      try {
+        final apiConfig = _ref.read(chatStateNotifierProvider(chatId).notifier).getEffectiveApiConfig();
+        final tokenFutures = fullHistory.map((msg) {
+          return llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
+            .then((count) => {'message': msg, 'tokens': count})
+            .catchError((e) {
+              debugPrint("  - Token counting failed for message ID ${msg.id}: $e. Counting as 0.");
+              return {'message': msg, 'tokens': 0};
+            });
+        });
+        final messageTokenPairs = await Future.wait(tokenFutures);
+
+        int currentTotalTokens = 0;
+        final List<Message> keptHistory = [];
+        
+        for (var i = messageTokenPairs.length - 1; i >= 0; i--) {
+          final pair = messageTokenPairs[i];
+          final messageTokens = pair['tokens'] as int;
+          
+          if (currentTotalTokens + messageTokens <= historyTokenBudget) {
+            currentTotalTokens += messageTokens;
+            keptHistory.insert(0, pair['message'] as Message);
+          } else {
+            break;
+          }
+        }
+
+        debugPrint("  - Token count is within budget. Kept ${keptHistory.length} messages with $currentTotalTokens tokens.");
+        final Set<int> keptIds = keptHistory.map((m) => m.id).toSet();
+        final List<Message> droppedHistory = fullHistory.where((m) => !keptIds.contains(m.id)).toList();
+
+        return _HistoryLimitResult(keptHistory, droppedHistory);
+      } catch (e) {
+        debugPrint("  - Token counting process failed during history limitation: $e. Aborting safely.");
+        return _HistoryLimitResult([], fullHistory);
+      }
+    default:
+      // Failsafe, should not be reached
+      return _HistoryLimitResult(fullHistory, []);
+  }
+}
+
+/// Builds the list of LlmContent to be sent to the LLM API, respecting all context rules.
+/// This is the primary method for constructing the prompt.
+///
+/// The new logic is:
+/// 1. Concurrently calculate tokens for all "fixed" context parts (system prompt, summary, XML).
+/// 2. Calculate the remaining token and turn budget for the message history.
+/// 3. Call a helper to truncate the message history within this specific budget.
+/// 4. Assemble all parts into the final context.
+Future<ApiRequestContext> buildApiRequestContext({
+  required int chatId, // 重构：传入 chatId
+  required Message currentUserMessage,
+  String? lastMessageOverride,
+  int? messageIdToPreserveXml,
+  String? chatSystemPromptOverride,
+  bool? keepAsSystemPrompt,
+  List<Message>? historyOverride, // New: Allows providing a custom history list, skipping DB fetch.
+}) async {
+  final messageRepo = _ref.read(messageRepositoryProvider);
+  final llmService = _ref.read(llmServiceProvider);
+  // 重构：从 Notifier 获取 chat 和 apiConfig
+  final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
+  final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
+  final apiConfig = notifier.getEffectiveApiConfig();
+
+  // Use the historyOverride if provided, otherwise fetch from the database.
+  final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
+
+  final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
+
+  // --- 1. Prepare all "fixed" (non-history) context parts ---
+  final List<LlmContent> fixedContextParts = [];
+  final effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
+  final bool systemPromptExists = effectiveSystemPrompt != null && effectiveSystemPrompt.trim().isNotEmpty;
+  final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
+  final bool xmlExists = calculatedCarriedOverXml != null && calculatedCarriedOverXml.isNotEmpty;
+
+  if (systemPromptExists) {
+    fixedContextParts.add(LlmContent("system", [LlmTextPart(effectiveSystemPrompt)]));
+  }
+
+  final bool shouldDemoteSystemPrompt = !(keepAsSystemPrompt ?? (chatSystemPromptOverride == null));
+  if (shouldDemoteSystemPrompt && (chat.systemPrompt != null && chat.systemPrompt!.trim().isNotEmpty)) {
+     fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.systemPrompt!)]));
+  }
+
+  if (summaryExists) {
+    fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.contextSummary!)]));
+  }
+  if (xmlExists) {
+    fixedContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
+  }
+
+  // --- 2. Calculate budget for history ---
+  int fixedTokens = 0;
+  int fixedTurns = 0; // Summary and/or XML count as one turn
+  int historyTokenBudget = chat.contextConfig.maxContextTokens ?? 256000;
+  int historyTurnBudget = chat.contextConfig.maxTurns;
+
+  // Concurrently calculate tokens for all fixed parts
+  if (fixedContextParts.isNotEmpty) {
+    try {
+      final tokenFutures = fixedContextParts.map((part) => llmService.countTokens(llmContext: [part], apiConfig: apiConfig));
+      final tokenCounts = await Future.wait(tokenFutures);
+      fixedTokens = tokenCounts.sum;
+      debugPrint("ContextXmlService: Calculated fixed tokens: $fixedTokens");
+    } catch (e) {
+      debugPrint("ContextXmlService: Error calculating fixed tokens: $e. Aborting.");
+      // If we can't calculate fixed tokens, we can't safely build context.
+      return ApiRequestContext(contextParts: [], carriedOverXml: calculatedCarriedOverXml, droppedMessages: fullHistory);
     }
+  }
 
-    if (summaryExists || xmlExists) {
-      fixedTurns = 1;
-    }
+  if (summaryExists || xmlExists) {
+    fixedTurns = 1;
+  }
 
-    historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 256000) - fixedTokens;
-    historyTurnBudget = chat.contextConfig.maxTurns - fixedTurns;
+  historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 256000) - fixedTokens;
+  historyTurnBudget = chat.contextConfig.maxTurns - fixedTurns;
 
-    // --- 3. Limit history using the calculated budget ---
-    final historyResult = await _limitHistoryForPrompt(
-      chatId: chatId,
-      fullHistory: fullHistory,
-      historyTokenBudget: historyTokenBudget,
-      historyTurnBudget: historyTurnBudget,
-    );
-    final List<Message> limitedHistoryForPrompt = historyResult.kept;
-    final List<Message> droppedMessages = historyResult.dropped;
+  // --- 3. Limit history using the calculated budget ---
+  final historyResult = await _limitHistoryForPrompt(
+    chatId: chatId,
+    fullHistory: fullHistory,
+    historyTokenBudget: historyTokenBudget,
+    historyTurnBudget: historyTurnBudget,
+  );
+  final List<Message> limitedHistoryForPrompt = historyResult.kept;
+  final List<Message> droppedMessages = historyResult.dropped;
 
-    // --- 4. Assemble the final context ---
-    final List<LlmContent> finalContextParts = List.from(fixedContextParts);
+  // --- 4. Assemble the final context ---
+  final List<LlmContent> finalContextParts = List.from(fixedContextParts);
 
-    for (final message in limitedHistoryForPrompt) {
-      if (message.role == MessageRole.model) {
-        if (message.id == messageIdToPreserveXml) {
-          if (message.rawText.isNotEmpty) {
-            finalContextParts.add(LlmContent("model", [LlmTextPart(message.rawText)]));
+  for (final message in limitedHistoryForPrompt) {
+    if (message.role == MessageRole.model) {
+      // For model messages, we manually build the LlmContent to handle XML stripping.
+      final List<LlmPart> modelParts = [];
+      for (final part in message.parts) {
+        if (part.type == MessagePartType.text && part.text != null) {
+          // Apply XML stripping only to the text part of model messages.
+          final filteredText = (message.id == messageIdToPreserveXml)
+              ? part.text!
+              : XmlProcessor.stripXmlContent(part.text!);
+          if (filteredText.isNotEmpty) {
+            modelParts.add(LlmTextPart(filteredText));
           }
         } else {
-          final filteredText = XmlProcessor.stripXmlContent(message.rawText);
-          if (filteredText.isNotEmpty) {
-            finalContextParts.add(LlmContent("model", [LlmTextPart(filteredText)]));
+          // For non-text parts (like generated images), convert them directly.
+          final llmPart = LlmContent.fromMessage(Message(chatId: chatId, role: MessageRole.model, parts: [part])).parts.firstOrNull;
+          if (llmPart != null) {
+            modelParts.add(llmPart);
           }
         }
-      } else {
-        finalContextParts.add(LlmContent.fromMessage(message));
       }
+      if (modelParts.isNotEmpty) {
+        finalContextParts.add(LlmContent("model", modelParts));
+      }
+    } else {
+      // For user messages, the standard conversion is sufficient.
+      finalContextParts.add(LlmContent.fromMessage(message));
     }
-
-    if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
-      finalContextParts.add(LlmContent("user", [LlmTextPart(lastMessageOverride)]));
-    }
-    
-    debugPrint("ContextXmlService:buildApiRequestContext - Returning context with ${finalContextParts.length} parts. Kept ${limitedHistoryForPrompt.length} history messages, dropped ${droppedMessages.length}.");
-
-    return ApiRequestContext(
-      contextParts: finalContextParts,
-      carriedOverXml: calculatedCarriedOverXml,
-      droppedMessages: droppedMessages,
-    );
   }
 
+  if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+    finalContextParts.add(LlmContent("user", [LlmTextPart(lastMessageOverride)]));
+  }
+  
+  debugPrint("ContextXmlService:buildApiRequestContext - Returning context with ${finalContextParts.length} parts. Kept ${limitedHistoryForPrompt.length} history messages, dropped ${droppedMessages.length}.");
+
+  return ApiRequestContext(
+    contextParts: finalContextParts,
+    carriedOverXml: calculatedCarriedOverXml,
+    droppedMessages: droppedMessages,
+  );
+}
 }

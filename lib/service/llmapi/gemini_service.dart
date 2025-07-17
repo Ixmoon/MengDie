@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +38,11 @@ class GeminiService implements BaseLlmService {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
     
-    final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+    // New API key logic: Prioritize the key from the config, fallback to the pool.
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
     if (apiKey == null || apiKey.isEmpty) {
       return Stream.value(LlmStreamChunk.error("没有可用的 Gemini API Key。", ''));
     }
@@ -62,7 +67,11 @@ class GeminiService implements BaseLlmService {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
 
-    final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+    // New API key logic: Prioritize the key from the config, fallback to the pool.
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
     if (apiKey == null || apiKey.isEmpty) {
       return Future.value(const LlmResponse.error("没有可用的 Gemini API Key。"));
     }
@@ -75,30 +84,34 @@ class GeminiService implements BaseLlmService {
       stream: false,
     );
     
-    // Note: The generic executeOnce in handler might need adjustment
-    // if Gemini's response structure differs significantly.
-    return _requestHandler.executeOnce(payload);
+    return _requestHandler.executeOnce(payload, responseParser: _parseGeminiResponse);
   }
 
   @override
   Future<LlmImageResponse> generateImage({
-    required String prompt,
+    required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
   }) {
      _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
 
-    final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+    // New API key logic: Prioritize the key from the config, fallback to the pool.
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
     if (apiKey == null || apiKey.isEmpty) {
       return Future.value(const LlmImageResponse.error("没有可用的 Gemini API Key。"));
     }
     
+    // Gemini 的图片生成 API（通过 generateContent）可以处理更丰富的上下文。
+    // 我们直接将上下文传递给 Payload。
     final payload = GeminiImagePayload(
       apiKey: apiKey,
       apiConfig: apiConfig,
       generationParams: {}, // n is not a standard generation param here
-      prompt: prompt,
+      llmContext: llmContext,
     );
     
     return _requestHandler.executeImage(payload);
@@ -126,7 +139,11 @@ class GeminiService implements BaseLlmService {
     }
 
     // If remote is enabled, run both local and remote concurrently.
-    final apiKey = _apiKeyNotifier.getNextGeminiApiKey();
+    // New API key logic: Prioritize the key from the config, fallback to the pool.
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+        
     if (apiKey == null || apiKey.isEmpty) {
       return await localCalculation; // Fallback if no key.
     }
@@ -158,6 +175,22 @@ class GeminiService implements BaseLlmService {
       }
     }
     return '';
+  }
+
+  LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
+    final candidates = data['candidates'] as List?;
+    if (candidates != null && candidates.isNotEmpty) {
+      final content = candidates.first['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List?;
+      if (parts != null && parts.isNotEmpty) {
+        // Assuming the response for once-off is a single text part
+        final text = parts.first['text'] as String?;
+        if (text != null) {
+          return LlmResponse(parts: [MessagePart.text(text)]);
+        }
+      }
+    }
+    return const LlmResponse.error("Invalid response format from Gemini.");
   }
 }
 
@@ -216,12 +249,26 @@ class GeminiChatPayload extends HttpRequestPayload {
     final body = <String, dynamic>{
       'contents': history,
       'generationConfig': _buildGenerationConfig(),
-      'safetySettings': _defaultSafetySettingsAsJson(),
     };
+
+    if (apiConfig.useDefaultSafetySettings) {
+      body['safetySettings'] = _defaultSafetySettingsAsJson();
+    }
 
     if (systemInstruction != null) {
       body['system_instruction'] = systemInstruction;
     }
+    
+    // Add tool_config if present
+    if (apiConfig.toolConfig != null && apiConfig.toolConfig!.isNotEmpty) {
+      try {
+        final toolConfigJson = jsonDecode(apiConfig.toolConfig!);
+        body['tool_config'] = toolConfigJson;
+      } catch (e) {
+        debugPrint("Error decoding tool_config JSON: $e");
+      }
+    }
+    
     return body;
   }
 
@@ -255,8 +302,8 @@ class GeminiImagePayload extends HttpRequestPayload {
     required this.apiKey,
     required super.apiConfig,
     required super.generationParams,
-    required super.prompt,
-  });
+    required super.llmContext,
+  }) : super(prompt: ''); // prompt is not directly used, but required by super
 
   @override
   String buildUrl() {
@@ -272,8 +319,25 @@ class GeminiImagePayload extends HttpRequestPayload {
 
   @override
   Map<String, dynamic> buildBody() {
+    // Re-use the logic from GeminiChatPayload to build the contents
+     List<Map<String, dynamic>> history = [];
+     for (var c in llmContext!) {
+      final parts = c.parts.map((part) {
+        if (part is LlmTextPart) return {'text': part.text};
+        if (part is LlmDataPart) return {'inline_data': {'mime_type': part.mimeType, 'data': part.base64Data}};
+        if (part is LlmFilePart) return {'file_data': {'mime_type': part.mimeType, 'file_uri': part.fileUri}};
+        if (part is LlmAudioPart) return {'inline_data': {'mime_type': part.mimeType, 'data': part.base64Data}};
+        return null;
+      }).where((p) => p != null).toList();
+
+      if (parts.isEmpty) continue;
+
+      // Image generation with Gemini uses the 'user' role.
+      history.add({'role': 'user', 'parts': parts});
+    }
+
     return {
-      "contents": [{"parts": [{"text": prompt}]}],
+      "contents": history,
       "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]}
     };
   }

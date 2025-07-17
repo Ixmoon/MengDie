@@ -97,6 +97,9 @@ class ApiConfigsScreen extends ConsumerWidget {
     final baseUrlController = TextEditingController(text: existingConfig?.baseUrl ?? '');
     final maxTokensController = TextEditingController(text: existingConfig?.maxOutputTokens?.toString() ?? '');
     final stopSequencesController = TextEditingController(text: existingConfig?.stopSequences?.join(', ') ?? '');
+    final thinkingBudgetController = TextEditingController(text: existingConfig?.thinkingBudget?.toString() ?? '');
+    final toolConfigController = TextEditingController(text: existingConfig?.toolConfig ?? '');
+    final toolChoiceController = TextEditingController(text: existingConfig?.toolChoice ?? '');
     
     var selectedApiType = existingConfig?.apiType ?? LlmType.gemini;
     var useCustomTemperature = existingConfig?.useCustomTemperature ?? false;
@@ -107,6 +110,7 @@ class ApiConfigsScreen extends ConsumerWidget {
     var topK = existingConfig?.topK?.toDouble() ?? 40.0;
     var enableReasoningEffort = existingConfig?.enableReasoningEffort ?? false;
     var reasoningEffort = existingConfig?.reasoningEffort ?? OpenAIReasoningEffort.auto;
+    var useDefaultSafetySettings = existingConfig?.useDefaultSafetySettings ?? true;
 
     // Reset the state of the models provider when opening the dialog to ensure data isolation.
     Future.microtask(() => ref.read(openAIModelsProvider.notifier).resetState());
@@ -188,16 +192,56 @@ class ApiConfigsScreen extends ConsumerWidget {
                           },
                         ),
                         const SizedBox(height: 16),
-                        TextFormField(controller: baseUrlController, decoration: const InputDecoration(labelText: 'Base URL')),
                       ] else ...[
                         TextFormField(controller: modelController, decoration: const InputDecoration(labelText: '模型名称')),
                       ],
                       const SizedBox(height: 16),
-                      if (selectedApiType != LlmType.gemini)
-                        TextFormField(controller: apiKeyController, decoration: const InputDecoration(labelText: 'API Key'), obscureText: true),
+                      TextFormField(controller: baseUrlController, decoration: const InputDecoration(labelText: '自定义 URL (可选)', hintText: '将覆盖默认 API 地址')),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: apiKeyController,
+                        decoration: InputDecoration(
+                          labelText: selectedApiType == LlmType.openai ? 'API Key (必填)' : '专用 API Key (可选)',
+                          hintText: selectedApiType == LlmType.gemini ? '留空则使用全局密钥池' : '',
+                        ),
+                        obscureText: true,
+                      ),
                       const SizedBox(height: 24),
                       const Text('高级生成设置', style: TextStyle(fontWeight: FontWeight.bold)),
                       const Divider(),
+                      if (selectedApiType == LlmType.gemini) ...[
+                        TextFormField(
+                          controller: thinkingBudgetController,
+                          decoration: const InputDecoration(labelText: '思考预算 (可选)', hintText: '例如: 10000 或 -1'),
+                          keyboardType: const TextInputType.numberWithOptions(signed: true),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (selectedApiType == LlmType.openai) ...[
+                        SwitchListTile(
+                          title: const Text('启用推理强度'),
+                          subtitle: Text(enableReasoningEffort ? '已启用' : '已关闭'),
+                          value: enableReasoningEffort,
+                          onChanged: (val) => setDialogState(() => enableReasoningEffort = val),
+                        ),
+                        if (enableReasoningEffort)
+                          DropdownButtonFormField<OpenAIReasoningEffort>(
+                            value: reasoningEffort,
+                            items: OpenAIReasoningEffort.values.map((level) {
+                              return DropdownMenuItem(
+                                value: level,
+                                child: Text(level.name),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setDialogState(() => reasoningEffort = value);
+                              }
+                            },
+                            decoration: const InputDecoration(labelText: '推理强度 (Reasoning Effort)'),
+                          ),
+                        const SizedBox(height: 16),
+                      ],
                       TextFormField(
                         controller: maxTokensController,
                         decoration: const InputDecoration(labelText: '最大输出 Tokens (可选)'),
@@ -208,6 +252,28 @@ class ApiConfigsScreen extends ConsumerWidget {
                         controller: stopSequencesController,
                         decoration: const InputDecoration(labelText: '停止序列 (可选)', hintText: '用逗号分隔'),
                       ),
+                      if (selectedApiType == LlmType.openai) ...[
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: toolChoiceController,
+                          decoration: const InputDecoration(labelText: 'Tool Choice (可选)', hintText: 'auto, none, or JSON'),
+                        ),
+                      ],
+                      if (selectedApiType == LlmType.gemini) ...[
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: toolConfigController,
+                          decoration: const InputDecoration(labelText: 'Tool Config (可选)', hintText: 'JSON string'),
+                           maxLines: null, // Allow multiple lines
+                        ),
+                        const SizedBox(height: 16),
+                        SwitchListTile(
+                          title: const Text('使用默认安全设置'),
+                          subtitle: Text(useDefaultSafetySettings ? '开启 (全部设为 OFF)' : '关闭 (不发送)'),
+                          value: useDefaultSafetySettings,
+                          onChanged: (val) => setDialogState(() => useDefaultSafetySettings = val),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       SwitchListTile(
                         title: const Text('自定义 Temperature'),
@@ -251,31 +317,6 @@ class ApiConfigsScreen extends ConsumerWidget {
                         label: topK.round().toString(),
                         onChanged: useCustomTopK ? (val) => setDialogState(() => topK = val) : null,
                       ),
-                      if (selectedApiType == LlmType.openai) ...[
-                        const SizedBox(height: 16),
-                        SwitchListTile(
-                          title: const Text('启用推理强度'),
-                          subtitle: Text(enableReasoningEffort ? '已启用' : '已关闭'),
-                          value: enableReasoningEffort,
-                          onChanged: (val) => setDialogState(() => enableReasoningEffort = val),
-                        ),
-                        if (enableReasoningEffort)
-                          DropdownButtonFormField<OpenAIReasoningEffort>(
-                            value: reasoningEffort,
-                            items: OpenAIReasoningEffort.values.map((level) {
-                              return DropdownMenuItem(
-                                value: level,
-                                child: Text(level.name),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setDialogState(() => reasoningEffort = value);
-                              }
-                            },
-                            decoration: const InputDecoration(labelText: '推理强度 (Reasoning Effort)'),
-                          ),
-                      ],
                     ],
                   ),
                 ),
@@ -307,13 +348,21 @@ class ApiConfigsScreen extends ConsumerWidget {
                         return;
                       }
 
+                      // Validation for OpenAI API Key
+                      if (selectedApiType == LlmType.openai && apiKeyController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('OpenAI 配置需要填写 API Key')),
+                        );
+                        return;
+                      }
+
                       ref.read(apiKeyNotifierProvider.notifier).saveConfig(
                         id: null, // Force creation of a new config
                         name: newName,
                         apiType: selectedApiType,
                         model: modelController.text,
-                        apiKey: selectedApiType == LlmType.gemini ? null : apiKeyController.text,
-                        baseUrl: selectedApiType == LlmType.openai ? baseUrlController.text : null,
+                        apiKey: apiKeyController.text.isNotEmpty ? apiKeyController.text : null,
+                        baseUrl: (selectedApiType == LlmType.openai || selectedApiType == LlmType.gemini) && baseUrlController.text.isNotEmpty ? baseUrlController.text : null,
                         useCustomTemperature: useCustomTemperature,
                         temperature: useCustomTemperature ? temperature : null,
                         useCustomTopP: useCustomTopP,
@@ -324,6 +373,10 @@ class ApiConfigsScreen extends ConsumerWidget {
                         stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
                         enableReasoningEffort: enableReasoningEffort,
                         reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
+                        thinkingBudget: int.tryParse(thinkingBudgetController.text),
+                        toolConfig: toolConfigController.text.isNotEmpty ? toolConfigController.text : null,
+                        toolChoice: toolChoiceController.text.isNotEmpty ? toolChoiceController.text : null,
+                        useDefaultSafetySettings: useDefaultSafetySettings,
                       );
                       Navigator.pop(context);
                     },
@@ -348,13 +401,21 @@ class ApiConfigsScreen extends ConsumerWidget {
                       return;
                     }
 
+                    // Validation for OpenAI API Key
+                    if (selectedApiType == LlmType.openai && apiKeyController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('OpenAI 配置需要填写 API Key')),
+                      );
+                      return;
+                    }
+
                     ref.read(apiKeyNotifierProvider.notifier).saveConfig(
                       id: existingConfig?.id,
                       name: configName,
                       apiType: selectedApiType,
                       model: modelController.text,
-                      apiKey: selectedApiType == LlmType.gemini ? null : apiKeyController.text,
-                      baseUrl: selectedApiType == LlmType.openai ? baseUrlController.text : null,
+                      apiKey: apiKeyController.text.isNotEmpty ? apiKeyController.text : null,
+                      baseUrl: (selectedApiType == LlmType.openai || selectedApiType == LlmType.gemini) && baseUrlController.text.isNotEmpty ? baseUrlController.text : null,
                       useCustomTemperature: useCustomTemperature,
                       temperature: useCustomTemperature ? temperature : null,
                       useCustomTopP: useCustomTopP,
@@ -365,9 +426,13 @@ class ApiConfigsScreen extends ConsumerWidget {
                       stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
                       enableReasoningEffort: enableReasoningEffort,
                       reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
+                      thinkingBudget: int.tryParse(thinkingBudgetController.text),
+                      toolConfig: toolConfigController.text.isNotEmpty ? toolConfigController.text : null,
+                      toolChoice: toolChoiceController.text.isNotEmpty ? toolChoiceController.text : null,
+                      useDefaultSafetySettings: useDefaultSafetySettings,
                     );
                     Navigator.pop(context);
-                  },
+                 },
                   child: Text(isNew ? '添加' : '保存'),
                 ),
               ],

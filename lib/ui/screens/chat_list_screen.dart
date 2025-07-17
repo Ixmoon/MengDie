@@ -12,6 +12,7 @@ import '../providers/repository_providers.dart';
 import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
 import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
 import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPreferences
+import '../providers/chat_state/chat_data_providers.dart';
 import '../widgets/chat_list_app_bar.dart';
 import '../widgets/chat_list_body.dart';
 

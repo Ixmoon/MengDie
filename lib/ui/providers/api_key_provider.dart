@@ -80,9 +80,14 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
     int? topK,
     int? maxOutputTokens,
     List<String>? stopSequences,
-    // Gemini specific settings
+    // OpenAI specific settings
     bool enableReasoningEffort = false,
     OpenAIReasoningEffort? reasoningEffort,
+    String? toolChoice,
+    // Gemini specific settings
+    int? thinkingBudget,
+    String? toolConfig,
+    bool useDefaultSafetySettings = true,
   }) async {
     final now = DateTime.now();
     final configId = id ?? const Uuid().v4();
@@ -107,6 +112,10 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       updatedAt: now,
       enableReasoningEffort: enableReasoningEffort,
       reasoningEffort: reasoningEffort,
+      thinkingBudget: thinkingBudget,
+      toolConfig: toolConfig,
+      toolChoice: toolChoice,
+      useDefaultSafetySettings: useDefaultSafetySettings,
     );
 
     if (_userId == null) {

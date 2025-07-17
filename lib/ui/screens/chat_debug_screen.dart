@@ -9,6 +9,7 @@ import '../../service/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../service/process/context_xml_service.dart';
 import '../widgets/app_card.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
+import '../providers/chat_state/chat_data_providers.dart';
 
 
 

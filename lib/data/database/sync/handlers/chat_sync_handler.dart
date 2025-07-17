@@ -53,10 +53,10 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   Future<void> push(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final chatIds = ids.cast<int>();
-    final (chatsToPush, messagesToPush) = await _getChatsWithMessagesToPush(chatIds);
+    final chatsToPush = await (db.select(db.chats)..where((t) => t.id.isIn(chatIds))).get();
     if (chatsToPush.isEmpty) return;
     
-    await _batchPushChatsAndMessages(remoteConnection!, chatsToPush, messagesToPush);
+    await _batchPushChats(remoteConnection!, chatsToPush);
   }
 
   @override
@@ -97,28 +97,8 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     }).toList();
     if (chatsToPull.isEmpty) return;
 
-    // Fetch messages for chats that need to be pulled
-    final Map<int, List<MessageData>> messagesToPullByChat = {};
-    final allChatIdsToPull = chatsToPull.map((c) => c.id).toList();
-    final allMessagesToPull = await remoteConnection!.execute(Sql.named('SELECT * FROM messages WHERE chat_id = ANY(@ids)'), parameters: {'ids': allChatIdsToPull})
-      .then((rows) => rows.map((r) => MessageData.fromJson(r.toColumnMap())).toList());
-    for (final message in allMessagesToPull) {
-      (messagesToPullByChat[message.chatId] ??= []).add(message);
-    }
-
-    await db.transaction(() async {
-      await db.batch((batch) {
-        batch.insertAll(db.chats, chatsToPull.map((c) => c.toCompanion(true)), mode: InsertMode.insertOrReplace);
-      });
-
-      // By using InsertMode.insertOrReplace, we perform an "upsert" operation,
-      // avoiding the need to delete all existing messages first.
-      final allMessagesToUpsert = messagesToPullByChat.values.expand((list) => list).toList();
-      if (allMessagesToUpsert.isNotEmpty) {
-        await db.batch((batch) {
-          batch.insertAll(db.messages, allMessagesToUpsert.map((m) => m.toCompanion(true)), mode: InsertMode.insertOrReplace);
-        });
-      }
+    await db.batch((batch) {
+      batch.insertAll(db.chats, chatsToPull.map((c) => c.toCompanion(true)), mode: InsertMode.insertOrReplace);
     });
   }
 
@@ -218,16 +198,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
 
   // ============== PRIVATE DATA FETCHING & BATCH PUSH HELPERS (moved from SyncService) ==============
 
-  Future<(List<ChatData>, List<MessageData>)> _getChatsWithMessagesToPush(List<int> chatIds) async {
-    if (chatIds.isEmpty) {
-      return (<ChatData>[], <MessageData>[]);
-    }
-    final chats = await (db.select(db.chats)..where((t) => t.id.isIn(chatIds))).get();
-    final messages = await (db.select(db.messages)..where((t) => t.chatId.isIn(chatIds))).get();
-    return (chats, messages);
-  }
-
-  Future<void> _batchPushChatsAndMessages(Connection remoteConnection, List<ChatData> chats, List<MessageData> messages) async {
+  Future<void> _batchPushChats(Connection remoteConnection, List<ChatData> chats) async {
     if (chats.isEmpty) return;
     
     await remoteConnection.execute(
@@ -306,37 +277,5 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         'help_me_reply_trigger_modes': TypedValue(Type.textArray, chats.map((c) => c.helpMeReplyTriggerMode?.name).toList()),
       }
     );
-
-    // The 'DELETE' call is removed to switch to an upsert strategy.
-    if (messages.isNotEmpty) {
-      await remoteConnection.execute(
-        Sql.named('''
-          INSERT INTO messages (id, chat_id, role, raw_text, "timestamp", original_xml_content, secondary_xml_content)
-          SELECT
-            m.id, m.chat_id, m.role, m.raw_text, m.timestamp, m.original_xml_content, m.secondary_xml_content
-          FROM UNNEST(
-            @ids::integer[], @chat_ids::integer[], @roles::text[], @raw_texts::text[], @timestamps::timestamp[], @original_xml_contents::text[], @secondary_xml_contents::text[]
-          ) AS m(
-            id, chat_id, role, raw_text, "timestamp", original_xml_content, secondary_xml_content
-          )
-          ON CONFLICT (id) DO UPDATE SET
-            role = EXCLUDED.role,
-            raw_text = EXCLUDED.raw_text,
-            "timestamp" = EXCLUDED."timestamp",
-            original_xml_content = EXCLUDED.original_xml_content,
-            secondary_xml_content = EXCLUDED.secondary_xml_content,
-            chat_id = EXCLUDED.chat_id;
-        '''),
-        parameters: {
-          'ids': TypedValue(Type.integerArray, messages.map((m) => m.id).toList()),
-          'chat_ids': TypedValue(Type.integerArray, messages.map((m) => m.chatId).toList()),
-          'roles': TypedValue(Type.textArray, messages.map((m) => m.role.name).toList()),
-          'raw_texts': TypedValue(Type.textArray, messages.map((m) => m.rawText).toList()),
-          'timestamps': TypedValue(Type.timestampArray, messages.map((m) => m.timestamp).toList()),
-          'original_xml_contents': TypedValue(Type.textArray, messages.map((m) => m.originalXmlContent).toList()),
-          'secondary_xml_contents': TypedValue(Type.textArray, messages.map((m) => m.secondaryXmlContent).toList()),
-        }
-      );
-    }
   }
 }

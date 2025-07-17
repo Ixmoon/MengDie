@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/models/models.dart';
 import '../providers/chat_state_providers.dart';
+import '../providers/chat_state/chat_data_providers.dart';
 
 class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final ChatListMode mode;

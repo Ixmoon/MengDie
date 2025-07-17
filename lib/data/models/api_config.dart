@@ -22,9 +22,12 @@ class ApiConfig {
   // OpenAI specific settings
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
+  final String? toolChoice; // e.g., "auto", "none", or '{"type": "function", "function": {"name": "my_function"}}'
 
   // Gemini specific settings
   final int? thinkingBudget;
+  final String? toolConfig; // JSON string for ToolConfig
+  final bool useDefaultSafetySettings;
 
   const ApiConfig({
     required this.id,
@@ -46,6 +49,9 @@ class ApiConfig {
     this.enableReasoningEffort,
     this.reasoningEffort = OpenAIReasoningEffort.auto,
     this.thinkingBudget,
+    this.toolConfig,
+    this.toolChoice,
+    this.useDefaultSafetySettings = true,
   });
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) {
@@ -71,6 +77,9 @@ class ApiConfig {
           ? OpenAIReasoningEffort.values.byName(json['reasoning_effort'])
           : OpenAIReasoningEffort.auto,
       thinkingBudget: json['thinking_budget'],
+      toolConfig: json['tool_config'],
+      toolChoice: json['tool_choice'],
+      useDefaultSafetySettings: json['use_default_safety_settings'] ?? true,
     );
   }
 
@@ -95,6 +104,9 @@ class ApiConfig {
       'enable_reasoning_effort': enableReasoningEffort,
       'reasoning_effort': reasoningEffort?.name,
       'thinking_budget': thinkingBudget,
+      'tool_config': toolConfig,
+      'tool_choice': toolChoice,
+      'use_default_safety_settings': useDefaultSafetySettings,
     };
   }
 }

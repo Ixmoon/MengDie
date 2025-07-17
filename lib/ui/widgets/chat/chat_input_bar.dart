@@ -9,6 +9,7 @@ import '../../../data/models/models.dart';
 import '../../providers/api_key_provider.dart';
 import '../../providers/chat_state_providers.dart';
 import '../cached_image.dart';
+import '../../providers/chat_state/chat_data_providers.dart';
 
 class ChatInputBar extends ConsumerStatefulWidget {
   final int chatId;
@@ -23,7 +24,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final FocusNode _inputFocusNode = FocusNode();
   final FocusNode _keyboardListenerFocusNode = FocusNode();
   final List<PlatformFile> _attachments = [];
-  bool _isImageGenerationMode = false;
 
   @override
   void dispose() {
@@ -40,16 +40,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       return;
     }
 
-    if (_isImageGenerationMode) {
-      if (text.isNotEmpty) {
-        notifier.generateImage(text);
-        widget.messageController.clear();
-        if (mounted) FocusScope.of(context).unfocus();
-      } else {
-        notifier.showTopMessage('请输入图片描述。', backgroundColor: Colors.orange);
-      }
-      return;
-    }
+    // The mode-specific logic is now handled in the notifier.
+    // The UI's only job is to gather all parts (text and attachments)
+    // and send them to the single `sendMessage` entry point.
 
     List<MessagePart> parts = [];
     if (text.isNotEmpty) {
@@ -83,6 +76,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     
     if (parts.isNotEmpty) {
       final currentChat = await ref.read(currentChatProvider(widget.chatId).future);
+      if (!mounted) return;
       if (currentChat == null) {
         notifier.showTopMessage('错误：无法获取当前聊天信息', backgroundColor: Colors.red);
         return;
@@ -287,19 +281,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                  IconButton(
                    icon: const Icon(Icons.image_outlined),
                    tooltip: '切换图片生成模式',
-                   color: _isImageGenerationMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
-                   style: _isImageGenerationMode
+                   color: chatState.isImageGenerationMode ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+                   style: chatState.isImageGenerationMode
                      ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary.withAlpha((255 * 0.1).round()))
                      : null,
                    onPressed: () {
-                     setState(() {
-                       _isImageGenerationMode = !_isImageGenerationMode;
-                       if (_isImageGenerationMode && _attachments.isNotEmpty) {
-                         _attachments.clear();
-                         ref.read(chatStateNotifierProvider(widget.chatId).notifier)
-                           .showTopMessage('附件已清除，图片生成模式不支持附件', backgroundColor: Colors.orange);
-                       }
-                     });
+                     final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+                     notifier.toggleImageGenerationMode();
                    },
                  ),
                   Flexible(
@@ -307,10 +295,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       controller: widget.messageController,
                       focusNode: _inputFocusNode,
                       decoration: InputDecoration(
-                        hintText: _isImageGenerationMode
+                        hintText: chatState.isImageGenerationMode
                            ? '输入图片描述...'
                            : ((chatState.isLoading || chatState.isProcessingInBackground)
-                               ? '处理中... (${chatState.elapsedSeconds ?? 0}s)'
+                               ? '处理中... (${ref.watch(generationElapsedSecondsProvider)}s)'
                                : '输入消息'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(25.0),
@@ -357,7 +345,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                   ],
                                 ),
                               ) ?? false;
-                          if (mounted && confirm) {
+                          if (!mounted) return;
+                          if (confirm) {
                             ref.read(chatStateNotifierProvider(widget.chatId).notifier).cancelGeneration();
                           }
                         },
@@ -374,12 +363,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         final isSendMode = value.text.trim().isNotEmpty;
                         final canSendMessage = (value.text.trim().isNotEmpty || _attachments.isNotEmpty);
 
-                        if (isSendMode || _isImageGenerationMode) {
+                        if (isSendMode) {
                           return GestureDetector(
-                            onLongPress: (chatState.isLoading || _isImageGenerationMode) ? null : _pickFiles,
+                            onLongPress: chatState.isLoading ? null : _pickFiles,
                             child: IconButton(
                               icon: const Icon(Icons.send),
-                              tooltip: _isImageGenerationMode ? '生成图片' : '发送 (长按添加文件)',
+                              tooltip: chatState.isImageGenerationMode ? '生成图片 (长按添加文件)' : '发送 (长按添加文件)',
                               onPressed: canSendMessage ? _sendMessage : null,
                               style: IconButton.styleFrom(
                                 padding: const EdgeInsets.all(12),
@@ -407,7 +396,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           return IconButton(
                             icon: const Icon(Icons.add_circle_outline),
                             tooltip: '添加文件',
-                            onPressed: (chatState.isLoading || _isImageGenerationMode) ? null : _pickFiles,
+                            onPressed: chatState.isLoading ? null : _pickFiles,
                             style: IconButton.styleFrom(
                               padding: const EdgeInsets.all(12),
                             ),

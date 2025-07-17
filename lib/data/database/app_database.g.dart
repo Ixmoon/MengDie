@@ -1290,8 +1290,8 @@ class $MessagesTable extends Messages
       'chat_id', aliasedName, false,
       type: DriftSqlType.int,
       requiredDuringInsert: true,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('REFERENCES chats (id)'));
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES chats (id) ON DELETE CASCADE'));
   static const VerificationMeta _rawTextMeta =
       const VerificationMeta('rawText');
   @override
@@ -1309,6 +1309,12 @@ class $MessagesTable extends Messages
   late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
       'timestamp', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _originalXmlContentMeta =
       const VerificationMeta('originalXmlContent');
   @override
@@ -1328,6 +1334,7 @@ class $MessagesTable extends Messages
         rawText,
         role,
         timestamp,
+        updatedAt,
         originalXmlContent,
         secondaryXmlContent
       ];
@@ -1362,6 +1369,10 @@ class $MessagesTable extends Messages
     } else if (isInserting) {
       context.missing(_timestampMeta);
     }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     if (data.containsKey('original_xml_content')) {
       context.handle(
           _originalXmlContentMeta,
@@ -1393,6 +1404,8 @@ class $MessagesTable extends Messages
           .read(DriftSqlType.string, data['${effectivePrefix}role'])!),
       timestamp: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}timestamp'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
       originalXmlContent: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}original_xml_content']),
       secondaryXmlContent: attachedDatabase.typeMapping.read(
@@ -1415,6 +1428,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final String rawText;
   final MessageRole role;
   final DateTime timestamp;
+  final DateTime? updatedAt;
   final String? originalXmlContent;
   final String? secondaryXmlContent;
   const MessageData(
@@ -1423,6 +1437,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       required this.rawText,
       required this.role,
       required this.timestamp,
+      this.updatedAt,
       this.originalXmlContent,
       this.secondaryXmlContent});
   @override
@@ -1435,6 +1450,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       map['role'] = Variable<String>($MessagesTable.$converterrole.toSql(role));
     }
     map['timestamp'] = Variable<DateTime>(timestamp);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     if (!nullToAbsent || originalXmlContent != null) {
       map['original_xml_content'] = Variable<String>(originalXmlContent);
     }
@@ -1451,6 +1469,9 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       rawText: Value(rawText),
       role: Value(role),
       timestamp: Value(timestamp),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
       originalXmlContent: originalXmlContent == null && nullToAbsent
           ? const Value.absent()
           : Value(originalXmlContent),
@@ -1469,6 +1490,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       rawText: serializer.fromJson<String>(json['rawText']),
       role: serializer.fromJson<MessageRole>(json['role']),
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       originalXmlContent:
           serializer.fromJson<String?>(json['originalXmlContent']),
       secondaryXmlContent:
@@ -1484,6 +1506,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'rawText': serializer.toJson<String>(rawText),
       'role': serializer.toJson<MessageRole>(role),
       'timestamp': serializer.toJson<DateTime>(timestamp),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'originalXmlContent': serializer.toJson<String?>(originalXmlContent),
       'secondaryXmlContent': serializer.toJson<String?>(secondaryXmlContent),
     };
@@ -1495,6 +1518,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           String? rawText,
           MessageRole? role,
           DateTime? timestamp,
+          Value<DateTime?> updatedAt = const Value.absent(),
           Value<String?> originalXmlContent = const Value.absent(),
           Value<String?> secondaryXmlContent = const Value.absent()}) =>
       MessageData(
@@ -1503,6 +1527,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         rawText: rawText ?? this.rawText,
         role: role ?? this.role,
         timestamp: timestamp ?? this.timestamp,
+        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
         originalXmlContent: originalXmlContent.present
             ? originalXmlContent.value
             : this.originalXmlContent,
@@ -1517,6 +1542,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       rawText: data.rawText.present ? data.rawText.value : this.rawText,
       role: data.role.present ? data.role.value : this.role,
       timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       originalXmlContent: data.originalXmlContent.present
           ? data.originalXmlContent.value
           : this.originalXmlContent,
@@ -1534,6 +1560,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           ..write('rawText: $rawText, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('originalXmlContent: $originalXmlContent, ')
           ..write('secondaryXmlContent: $secondaryXmlContent')
           ..write(')'))
@@ -1542,7 +1569,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
 
   @override
   int get hashCode => Object.hash(id, chatId, rawText, role, timestamp,
-      originalXmlContent, secondaryXmlContent);
+      updatedAt, originalXmlContent, secondaryXmlContent);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1552,6 +1579,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           other.rawText == this.rawText &&
           other.role == this.role &&
           other.timestamp == this.timestamp &&
+          other.updatedAt == this.updatedAt &&
           other.originalXmlContent == this.originalXmlContent &&
           other.secondaryXmlContent == this.secondaryXmlContent);
 }
@@ -1562,6 +1590,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   final Value<String> rawText;
   final Value<MessageRole> role;
   final Value<DateTime> timestamp;
+  final Value<DateTime?> updatedAt;
   final Value<String?> originalXmlContent;
   final Value<String?> secondaryXmlContent;
   const MessagesCompanion({
@@ -1570,6 +1599,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     this.rawText = const Value.absent(),
     this.role = const Value.absent(),
     this.timestamp = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.originalXmlContent = const Value.absent(),
     this.secondaryXmlContent = const Value.absent(),
   });
@@ -1579,6 +1609,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     required String rawText,
     required MessageRole role,
     required DateTime timestamp,
+    this.updatedAt = const Value.absent(),
     this.originalXmlContent = const Value.absent(),
     this.secondaryXmlContent = const Value.absent(),
   })  : chatId = Value(chatId),
@@ -1591,6 +1622,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     Expression<String>? rawText,
     Expression<String>? role,
     Expression<DateTime>? timestamp,
+    Expression<DateTime>? updatedAt,
     Expression<String>? originalXmlContent,
     Expression<String>? secondaryXmlContent,
   }) {
@@ -1600,6 +1632,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       if (rawText != null) 'raw_text': rawText,
       if (role != null) 'role': role,
       if (timestamp != null) 'timestamp': timestamp,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (originalXmlContent != null)
         'original_xml_content': originalXmlContent,
       if (secondaryXmlContent != null)
@@ -1613,6 +1646,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       Value<String>? rawText,
       Value<MessageRole>? role,
       Value<DateTime>? timestamp,
+      Value<DateTime?>? updatedAt,
       Value<String?>? originalXmlContent,
       Value<String?>? secondaryXmlContent}) {
     return MessagesCompanion(
@@ -1621,6 +1655,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       rawText: rawText ?? this.rawText,
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
+      updatedAt: updatedAt ?? this.updatedAt,
       originalXmlContent: originalXmlContent ?? this.originalXmlContent,
       secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
     );
@@ -1645,6 +1680,9 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     if (timestamp.present) {
       map['timestamp'] = Variable<DateTime>(timestamp.value);
     }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     if (originalXmlContent.present) {
       map['original_xml_content'] = Variable<String>(originalXmlContent.value);
     }
@@ -1663,6 +1701,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
           ..write('rawText: $rawText, ')
           ..write('role: $role, ')
           ..write('timestamp: $timestamp, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('originalXmlContent: $originalXmlContent, ')
           ..write('secondaryXmlContent: $secondaryXmlContent')
           ..write(')'))
@@ -1786,6 +1825,35 @@ class $ApiConfigsTable extends ApiConfigs
               type: DriftSqlType.string, requiredDuringInsert: false)
           .withConverter<OpenAIReasoningEffort?>(
               $ApiConfigsTable.$converterreasoningEffort);
+  static const VerificationMeta _toolChoiceMeta =
+      const VerificationMeta('toolChoice');
+  @override
+  late final GeneratedColumn<String> toolChoice = GeneratedColumn<String>(
+      'tool_choice', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _thinkingBudgetMeta =
+      const VerificationMeta('thinkingBudget');
+  @override
+  late final GeneratedColumn<int> thinkingBudget = GeneratedColumn<int>(
+      'thinking_budget', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _toolConfigMeta =
+      const VerificationMeta('toolConfig');
+  @override
+  late final GeneratedColumn<String> toolConfig = GeneratedColumn<String>(
+      'tool_config', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _useDefaultSafetySettingsMeta =
+      const VerificationMeta('useDefaultSafetySettings');
+  @override
+  late final GeneratedColumn<bool> useDefaultSafetySettings =
+      GeneratedColumn<bool>(
+          'use_default_safety_settings', aliasedName, false,
+          type: DriftSqlType.bool,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'CHECK ("use_default_safety_settings" IN (0, 1))'),
+          defaultValue: const Constant(true));
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -1819,6 +1887,10 @@ class $ApiConfigsTable extends ApiConfigs
         stopSequences,
         enableReasoningEffort,
         reasoningEffort,
+        toolChoice,
+        thinkingBudget,
+        toolConfig,
+        useDefaultSafetySettings,
         createdAt,
         updatedAt
       ];
@@ -1903,6 +1975,31 @@ class $ApiConfigsTable extends ApiConfigs
           enableReasoningEffort.isAcceptableOrUnknown(
               data['enable_reasoning_effort']!, _enableReasoningEffortMeta));
     }
+    if (data.containsKey('tool_choice')) {
+      context.handle(
+          _toolChoiceMeta,
+          toolChoice.isAcceptableOrUnknown(
+              data['tool_choice']!, _toolChoiceMeta));
+    }
+    if (data.containsKey('thinking_budget')) {
+      context.handle(
+          _thinkingBudgetMeta,
+          thinkingBudget.isAcceptableOrUnknown(
+              data['thinking_budget']!, _thinkingBudgetMeta));
+    }
+    if (data.containsKey('tool_config')) {
+      context.handle(
+          _toolConfigMeta,
+          toolConfig.isAcceptableOrUnknown(
+              data['tool_config']!, _toolConfigMeta));
+    }
+    if (data.containsKey('use_default_safety_settings')) {
+      context.handle(
+          _useDefaultSafetySettingsMeta,
+          useDefaultSafetySettings.isAcceptableOrUnknown(
+              data['use_default_safety_settings']!,
+              _useDefaultSafetySettingsMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -1959,6 +2056,15 @@ class $ApiConfigsTable extends ApiConfigs
       reasoningEffort: $ApiConfigsTable.$converterreasoningEffort.fromSql(
           attachedDatabase.typeMapping.read(
               DriftSqlType.string, data['${effectivePrefix}reasoning_effort'])),
+      toolChoice: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tool_choice']),
+      thinkingBudget: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}thinking_budget']),
+      toolConfig: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tool_config']),
+      useDefaultSafetySettings: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool,
+          data['${effectivePrefix}use_default_safety_settings'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -1999,6 +2105,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   final List<String>? stopSequences;
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
+  final String? toolChoice;
+  final int? thinkingBudget;
+  final String? toolConfig;
+  final bool useDefaultSafetySettings;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ApiConfig(
@@ -2019,6 +2129,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       this.stopSequences,
       this.enableReasoningEffort,
       this.reasoningEffort,
+      this.toolChoice,
+      this.thinkingBudget,
+      this.toolConfig,
+      required this.useDefaultSafetySettings,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -2072,6 +2186,17 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       map['reasoning_effort'] = Variable<String>(
           $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort));
     }
+    if (!nullToAbsent || toolChoice != null) {
+      map['tool_choice'] = Variable<String>(toolChoice);
+    }
+    if (!nullToAbsent || thinkingBudget != null) {
+      map['thinking_budget'] = Variable<int>(thinkingBudget);
+    }
+    if (!nullToAbsent || toolConfig != null) {
+      map['tool_config'] = Variable<String>(toolConfig);
+    }
+    map['use_default_safety_settings'] =
+        Variable<bool>(useDefaultSafetySettings);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -2116,6 +2241,16 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       reasoningEffort: reasoningEffort == null && nullToAbsent
           ? const Value.absent()
           : Value(reasoningEffort),
+      toolChoice: toolChoice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolChoice),
+      thinkingBudget: thinkingBudget == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thinkingBudget),
+      toolConfig: toolConfig == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolConfig),
+      useDefaultSafetySettings: Value(useDefaultSafetySettings),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -2145,6 +2280,11 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           serializer.fromJson<bool?>(json['enableReasoningEffort']),
       reasoningEffort:
           serializer.fromJson<OpenAIReasoningEffort?>(json['reasoningEffort']),
+      toolChoice: serializer.fromJson<String?>(json['toolChoice']),
+      thinkingBudget: serializer.fromJson<int?>(json['thinkingBudget']),
+      toolConfig: serializer.fromJson<String?>(json['toolConfig']),
+      useDefaultSafetySettings:
+          serializer.fromJson<bool>(json['useDefaultSafetySettings']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -2171,6 +2311,11 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
       'reasoningEffort':
           serializer.toJson<OpenAIReasoningEffort?>(reasoningEffort),
+      'toolChoice': serializer.toJson<String?>(toolChoice),
+      'thinkingBudget': serializer.toJson<int?>(thinkingBudget),
+      'toolConfig': serializer.toJson<String?>(toolConfig),
+      'useDefaultSafetySettings':
+          serializer.toJson<bool>(useDefaultSafetySettings),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -2194,6 +2339,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           Value<List<String>?> stopSequences = const Value.absent(),
           Value<bool?> enableReasoningEffort = const Value.absent(),
           Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
+          Value<String?> toolChoice = const Value.absent(),
+          Value<int?> thinkingBudget = const Value.absent(),
+          Value<String?> toolConfig = const Value.absent(),
+          bool? useDefaultSafetySettings,
           DateTime? createdAt,
           DateTime? updatedAt}) =>
       ApiConfig(
@@ -2225,6 +2374,12 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
         reasoningEffort: reasoningEffort.present
             ? reasoningEffort.value
             : this.reasoningEffort,
+        toolChoice: toolChoice.present ? toolChoice.value : this.toolChoice,
+        thinkingBudget:
+            thinkingBudget.present ? thinkingBudget.value : this.thinkingBudget,
+        toolConfig: toolConfig.present ? toolConfig.value : this.toolConfig,
+        useDefaultSafetySettings:
+            useDefaultSafetySettings ?? this.useDefaultSafetySettings,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -2262,6 +2417,16 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
       reasoningEffort: data.reasoningEffort.present
           ? data.reasoningEffort.value
           : this.reasoningEffort,
+      toolChoice:
+          data.toolChoice.present ? data.toolChoice.value : this.toolChoice,
+      thinkingBudget: data.thinkingBudget.present
+          ? data.thinkingBudget.value
+          : this.thinkingBudget,
+      toolConfig:
+          data.toolConfig.present ? data.toolConfig.value : this.toolConfig,
+      useDefaultSafetySettings: data.useDefaultSafetySettings.present
+          ? data.useDefaultSafetySettings.value
+          : this.useDefaultSafetySettings,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -2287,6 +2452,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           ..write('stopSequences: $stopSequences, ')
           ..write('enableReasoningEffort: $enableReasoningEffort, ')
           ..write('reasoningEffort: $reasoningEffort, ')
+          ..write('toolChoice: $toolChoice, ')
+          ..write('thinkingBudget: $thinkingBudget, ')
+          ..write('toolConfig: $toolConfig, ')
+          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2294,26 +2463,31 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      userId,
-      id,
-      name,
-      apiType,
-      model,
-      apiKey,
-      baseUrl,
-      useCustomTemperature,
-      temperature,
-      useCustomTopP,
-      topP,
-      useCustomTopK,
-      topK,
-      maxOutputTokens,
-      stopSequences,
-      enableReasoningEffort,
-      reasoningEffort,
-      createdAt,
-      updatedAt);
+  int get hashCode => Object.hashAll([
+        userId,
+        id,
+        name,
+        apiType,
+        model,
+        apiKey,
+        baseUrl,
+        useCustomTemperature,
+        temperature,
+        useCustomTopP,
+        topP,
+        useCustomTopK,
+        topK,
+        maxOutputTokens,
+        stopSequences,
+        enableReasoningEffort,
+        reasoningEffort,
+        toolChoice,
+        thinkingBudget,
+        toolConfig,
+        useDefaultSafetySettings,
+        createdAt,
+        updatedAt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2335,6 +2509,10 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
           other.stopSequences == this.stopSequences &&
           other.enableReasoningEffort == this.enableReasoningEffort &&
           other.reasoningEffort == this.reasoningEffort &&
+          other.toolChoice == this.toolChoice &&
+          other.thinkingBudget == this.thinkingBudget &&
+          other.toolConfig == this.toolConfig &&
+          other.useDefaultSafetySettings == this.useDefaultSafetySettings &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -2357,6 +2535,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
   final Value<List<String>?> stopSequences;
   final Value<bool?> enableReasoningEffort;
   final Value<OpenAIReasoningEffort?> reasoningEffort;
+  final Value<String?> toolChoice;
+  final Value<int?> thinkingBudget;
+  final Value<String?> toolConfig;
+  final Value<bool> useDefaultSafetySettings;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -2378,6 +2560,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.stopSequences = const Value.absent(),
     this.enableReasoningEffort = const Value.absent(),
     this.reasoningEffort = const Value.absent(),
+    this.toolChoice = const Value.absent(),
+    this.thinkingBudget = const Value.absent(),
+    this.toolConfig = const Value.absent(),
+    this.useDefaultSafetySettings = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2400,6 +2586,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.stopSequences = const Value.absent(),
     this.enableReasoningEffort = const Value.absent(),
     this.reasoningEffort = const Value.absent(),
+    this.toolChoice = const Value.absent(),
+    this.thinkingBudget = const Value.absent(),
+    this.toolConfig = const Value.absent(),
+    this.useDefaultSafetySettings = const Value.absent(),
     this.createdAt = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -2425,6 +2615,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     Expression<String>? stopSequences,
     Expression<bool>? enableReasoningEffort,
     Expression<String>? reasoningEffort,
+    Expression<String>? toolChoice,
+    Expression<int>? thinkingBudget,
+    Expression<String>? toolConfig,
+    Expression<bool>? useDefaultSafetySettings,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -2449,6 +2643,11 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       if (enableReasoningEffort != null)
         'enable_reasoning_effort': enableReasoningEffort,
       if (reasoningEffort != null) 'reasoning_effort': reasoningEffort,
+      if (toolChoice != null) 'tool_choice': toolChoice,
+      if (thinkingBudget != null) 'thinking_budget': thinkingBudget,
+      if (toolConfig != null) 'tool_config': toolConfig,
+      if (useDefaultSafetySettings != null)
+        'use_default_safety_settings': useDefaultSafetySettings,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2473,6 +2672,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       Value<List<String>?>? stopSequences,
       Value<bool?>? enableReasoningEffort,
       Value<OpenAIReasoningEffort?>? reasoningEffort,
+      Value<String?>? toolChoice,
+      Value<int?>? thinkingBudget,
+      Value<String?>? toolConfig,
+      Value<bool>? useDefaultSafetySettings,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -2495,6 +2698,11 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       enableReasoningEffort:
           enableReasoningEffort ?? this.enableReasoningEffort,
       reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      toolChoice: toolChoice ?? this.toolChoice,
+      thinkingBudget: thinkingBudget ?? this.thinkingBudget,
+      toolConfig: toolConfig ?? this.toolConfig,
+      useDefaultSafetySettings:
+          useDefaultSafetySettings ?? this.useDefaultSafetySettings,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2561,6 +2769,19 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
           .$converterreasoningEffort
           .toSql(reasoningEffort.value));
     }
+    if (toolChoice.present) {
+      map['tool_choice'] = Variable<String>(toolChoice.value);
+    }
+    if (thinkingBudget.present) {
+      map['thinking_budget'] = Variable<int>(thinkingBudget.value);
+    }
+    if (toolConfig.present) {
+      map['tool_config'] = Variable<String>(toolConfig.value);
+    }
+    if (useDefaultSafetySettings.present) {
+      map['use_default_safety_settings'] =
+          Variable<bool>(useDefaultSafetySettings.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2593,6 +2814,10 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
           ..write('stopSequences: $stopSequences, ')
           ..write('enableReasoningEffort: $enableReasoningEffort, ')
           ..write('reasoningEffort: $reasoningEffort, ')
+          ..write('toolChoice: $toolChoice, ')
+          ..write('thinkingBudget: $thinkingBudget, ')
+          ..write('toolConfig: $toolConfig, ')
+          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -2880,7 +3105,7 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
   final String passwordHash;
 
   /// 存储用户拥有的聊天ID列表。
-  /// 使用自定义的 TypeConverter 将 List<int> 转换为 String 进行存储。
+  /// 使用自定义的 TypeConverter 将 `List<int>` 转换为 String 进行存储。
   final List<int>? chatIds;
 
   /// 是否启用自动生成聊天标题。
@@ -3391,6 +3616,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities =>
       [chats, messages, apiConfigs, users];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
+        [
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('chats',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('messages', kind: UpdateKind.delete),
+            ],
+          ),
+        ],
+      );
 }
 
 typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
@@ -3983,6 +4220,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required String rawText,
   required MessageRole role,
   required DateTime timestamp,
+  Value<DateTime?> updatedAt,
   Value<String?> originalXmlContent,
   Value<String?> secondaryXmlContent,
 });
@@ -3992,6 +4230,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String> rawText,
   Value<MessageRole> role,
   Value<DateTime> timestamp,
+  Value<DateTime?> updatedAt,
   Value<String?> originalXmlContent,
   Value<String?> secondaryXmlContent,
 });
@@ -4037,6 +4276,9 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<DateTime> get timestamp => $composableBuilder(
       column: $table.timestamp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get originalXmlContent => $composableBuilder(
       column: $table.originalXmlContent,
@@ -4088,6 +4330,9 @@ class $$MessagesTableOrderingComposer
   ColumnOrderings<DateTime> get timestamp => $composableBuilder(
       column: $table.timestamp, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get originalXmlContent => $composableBuilder(
       column: $table.originalXmlContent,
       builder: (column) => ColumnOrderings(column));
@@ -4137,6 +4382,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get timestamp =>
       $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<String> get originalXmlContent => $composableBuilder(
       column: $table.originalXmlContent, builder: (column) => column);
@@ -4193,6 +4441,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String> rawText = const Value.absent(),
             Value<MessageRole> role = const Value.absent(),
             Value<DateTime> timestamp = const Value.absent(),
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
             Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
@@ -4202,6 +4451,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             rawText: rawText,
             role: role,
             timestamp: timestamp,
+            updatedAt: updatedAt,
             originalXmlContent: originalXmlContent,
             secondaryXmlContent: secondaryXmlContent,
           ),
@@ -4211,6 +4461,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             required String rawText,
             required MessageRole role,
             required DateTime timestamp,
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
             Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
@@ -4220,6 +4471,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             rawText: rawText,
             role: role,
             timestamp: timestamp,
+            updatedAt: updatedAt,
             originalXmlContent: originalXmlContent,
             secondaryXmlContent: secondaryXmlContent,
           ),
@@ -4294,6 +4546,10 @@ typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
+  Value<String?> toolChoice,
+  Value<int?> thinkingBudget,
+  Value<String?> toolConfig,
+  Value<bool> useDefaultSafetySettings,
   Value<DateTime> createdAt,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -4316,6 +4572,10 @@ typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
   Value<List<String>?> stopSequences,
   Value<bool?> enableReasoningEffort,
   Value<OpenAIReasoningEffort?> reasoningEffort,
+  Value<String?> toolChoice,
+  Value<int?> thinkingBudget,
+  Value<String?> toolConfig,
+  Value<bool> useDefaultSafetySettings,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -4391,6 +4651,20 @@ class $$ApiConfigsTableFilterComposer
           column: $table.reasoningEffort,
           builder: (column) => ColumnWithTypeConverterFilters(column));
 
+  ColumnFilters<String> get toolChoice => $composableBuilder(
+      column: $table.toolChoice, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get thinkingBudget => $composableBuilder(
+      column: $table.thinkingBudget,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get toolConfig => $composableBuilder(
+      column: $table.toolConfig, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get useDefaultSafetySettings => $composableBuilder(
+      column: $table.useDefaultSafetySettings,
+      builder: (column) => ColumnFilters(column));
+
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
 
@@ -4465,6 +4739,20 @@ class $$ApiConfigsTableOrderingComposer
       column: $table.reasoningEffort,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get toolChoice => $composableBuilder(
+      column: $table.toolChoice, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get thinkingBudget => $composableBuilder(
+      column: $table.thinkingBudget,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get toolConfig => $composableBuilder(
+      column: $table.toolConfig, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get useDefaultSafetySettings => $composableBuilder(
+      column: $table.useDefaultSafetySettings,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -4534,6 +4822,18 @@ class $$ApiConfigsTableAnnotationComposer
       get reasoningEffort => $composableBuilder(
           column: $table.reasoningEffort, builder: (column) => column);
 
+  GeneratedColumn<String> get toolChoice => $composableBuilder(
+      column: $table.toolChoice, builder: (column) => column);
+
+  GeneratedColumn<int> get thinkingBudget => $composableBuilder(
+      column: $table.thinkingBudget, builder: (column) => column);
+
+  GeneratedColumn<String> get toolConfig => $composableBuilder(
+      column: $table.toolConfig, builder: (column) => column);
+
+  GeneratedColumn<bool> get useDefaultSafetySettings => $composableBuilder(
+      column: $table.useDefaultSafetySettings, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -4582,6 +4882,10 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
+            Value<String?> toolChoice = const Value.absent(),
+            Value<int?> thinkingBudget = const Value.absent(),
+            Value<String?> toolConfig = const Value.absent(),
+            Value<bool> useDefaultSafetySettings = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -4604,6 +4908,10 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             stopSequences: stopSequences,
             enableReasoningEffort: enableReasoningEffort,
             reasoningEffort: reasoningEffort,
+            toolChoice: toolChoice,
+            thinkingBudget: thinkingBudget,
+            toolConfig: toolConfig,
+            useDefaultSafetySettings: useDefaultSafetySettings,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -4627,6 +4935,10 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<bool?> enableReasoningEffort = const Value.absent(),
             Value<OpenAIReasoningEffort?> reasoningEffort =
                 const Value.absent(),
+            Value<String?> toolChoice = const Value.absent(),
+            Value<int?> thinkingBudget = const Value.absent(),
+            Value<String?> toolConfig = const Value.absent(),
+            Value<bool> useDefaultSafetySettings = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             required DateTime updatedAt,
             Value<int> rowid = const Value.absent(),
@@ -4649,6 +4961,10 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             stopSequences: stopSequences,
             enableReasoningEffort: enableReasoningEffort,
             reasoningEffort: reasoningEffort,
+            toolChoice: toolChoice,
+            thinkingBudget: thinkingBudget,
+            toolConfig: toolConfig,
+            useDefaultSafetySettings: useDefaultSafetySettings,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,

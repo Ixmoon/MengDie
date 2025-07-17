@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/models.dart';
+import '../providers/chat_state/chat_data_providers.dart';
 import '../providers/chat_state_providers.dart';
 import '../widgets/cached_image.dart';
 import '../widgets/chat/chat_app_bar.dart';
@@ -31,6 +32,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
   @override
   void initState() {
     super.initState();
+    debugPrint("[ChatPageContent] initState: chatId=${widget.chatId}");
     _messageController = TextEditingController();
     _logic = ChatPageLogic(
       ref: ref,
@@ -43,6 +45,24 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animate: false);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatPageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    debugPrint("[ChatPageContent] didUpdateWidget: oldChatId=${oldWidget.chatId}, newChatId=${widget.chatId}");
+    if (oldWidget.chatId != widget.chatId) {
+      debugPrint("[ChatPageContent] chatId changed! Re-initializing logic.");
+      // chatId has changed, re-initialize the logic.
+      _logic = ChatPageLogic(
+        ref: ref,
+        chatId: widget.chatId,
+        context: context,
+        onStateChange: () => setState(() {}),
+      );
+      // Optionally, clear the text field when switching chats.
+      _messageController.clear();
+    }
   }
 
   void _scrollListener() {
@@ -95,6 +115,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
   @override
   Widget build(BuildContext context) {
     final chatId = widget.chatId;
+    debugPrint("[ChatPageContent] build: chatId=$chatId");
     final chatAsync = ref.watch(currentChatProvider(chatId));
     final chatState = ref.watch(chatStateNotifierProvider(chatId));
 
@@ -181,7 +202,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                               child: MessageList(
                                 chatId: chatId,
                                 scrollController: _scrollController,
-                                onMessageTap: _logic.handleMessageTap,
+                                onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
                                 onSuggestionSelected: (suggestion) {
                                   _messageController.text = suggestion;
                                 },
@@ -190,7 +211,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                           : MessageList(
                               chatId: chatId,
                               scrollController: _scrollController,
-                              onMessageTap: _logic.handleMessageTap,
+                              onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
                               onSuggestionSelected: (suggestion) {
                                 _messageController.text = suggestion;
                               },

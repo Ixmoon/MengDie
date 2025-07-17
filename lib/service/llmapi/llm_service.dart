@@ -143,9 +143,9 @@ class LlmService {
     );
   }
 
-  /// 根据文本提示生成图片。
+  /// 根据上下文生成图片。
   Future<LlmImageResponse> generateImage({
-    required String prompt,
+    required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
   }) async {
@@ -159,7 +159,7 @@ class LlmService {
 
     try {
       return await service.generateImage(
-        prompt: prompt,
+        llmContext: llmContext,
         apiConfig: apiConfig,
         n: n,
       );

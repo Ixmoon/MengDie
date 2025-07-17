@@ -7,6 +7,7 @@ import '../../data/database/sync/sync_service.dart';
 import '../../data/models/chat.dart';
 import '../providers/chat_state_providers.dart';
 import 'chat_page_content.dart';
+import '../providers/chat_state/chat_data_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -85,7 +86,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final currentIndex = chats.indexWhere((c) => c.id == activeChatId);
 
             if (chats.length <= 1 || currentIndex == -1) {
-              return ChatPageContent(chatId: activeChatId);
+              // Also apply ValueKey here for consistency, ensuring the widget
+              // properly rebuilds if the activeChatId changes for any reason.
+              return ChatPageContent(key: ValueKey(activeChatId), chatId: activeChatId);
             }
 
             if (_pageController == null) {
