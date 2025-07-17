@@ -53,7 +53,7 @@ class MessageRepository {
   Future<int> saveMessage(Message message) async {
     debugPrint("MessageRepository: 保存消息 ID: ${message.id} (Chat ID: ${message.chatId}) (Drift)...");
     final companion = MessageMapper.toCompanion(message);
-    final newId = await _messageDao.saveMessage(companion);
+    final newId = await _messageDao.saveOrUpdateMessage(companion);
     // After saving a message, "touch" the parent chat to update its timestamp.
     await _chatDao.touchChat(message.chatId);
     return newId;

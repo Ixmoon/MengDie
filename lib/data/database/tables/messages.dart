@@ -8,11 +8,12 @@ class Messages extends Table {
   IntColumn get id => integer().autoIncrement()();
   
   // Foreign key to the Chats table
-  IntColumn get chatId => integer().references(Chats, #id)(); 
+  IntColumn get chatId => integer().references(Chats, #id, onDelete: KeyAction.cascade)();
   
   TextColumn get rawText => text().named('raw_text')(); // Mapped from DTO, stores parts as JSON
   TextColumn get role => text().map(const MessageRoleConverter())();
   DateTimeColumn get timestamp => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   // Stores the original XML content if it was overwritten by post-processing
   TextColumn get originalXmlContent => text().nullable()();

@@ -1,4 +1,3 @@
-
 import 'package:drift/drift.dart';
 
 import 'package:uuid/uuid.dart';
@@ -37,7 +36,36 @@ class AppDatabase extends _$AppDatabase {
   // the transaction() method directly to ensure a proper transaction context.
 
   @override
-  int get schemaVersion => 1; // Latest schema version.
+  int get schemaVersion => 4; // Bumped version to 4 for messages.updatedAt
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (m) => m.createAll(),
+      onUpgrade: (m, from, to) async {
+        if (from < 2) {
+          // This logic is for users migrating from version 1.
+          await m.addColumn(apiConfigs, apiConfigs.thinkingBudget);
+          await m.addColumn(apiConfigs, apiConfigs.toolConfig);
+          await m.addColumn(apiConfigs, apiConfigs.toolChoice);
+          await m.addColumn(apiConfigs, apiConfigs.useDefaultSafetySettings);
+          // Set a default value for existing rows.
+          await customStatement('UPDATE api_configs SET use_default_safety_settings = TRUE WHERE use_default_safety_settings IS NULL');
+        }
+        if (from < 3) {
+          // This logic is for users who were on version 2 with the faulty migration.
+          // It ensures that any NULL values from the previous migration are fixed.
+          await customStatement('UPDATE api_configs SET use_default_safety_settings = TRUE WHERE use_default_safety_settings IS NULL');
+        }
+        if (from < 4) {
+          // Add the updatedAt column as nullable first, to support older SQLite versions.
+          await m.addColumn(messages, messages.updatedAt);
+          // Then, backfill existing rows with the value from the timestamp column.
+          await customStatement('UPDATE messages SET updated_at = timestamp WHERE updated_at IS NULL');
+        }
+      },
+    );
+  }
 
   Future<void> syncWithRemote() async {
     // This method is now a proxy to the SyncService instance method.

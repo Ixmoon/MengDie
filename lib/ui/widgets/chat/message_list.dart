@@ -6,11 +6,12 @@ import '../../providers/api_key_provider.dart';
 import '../../providers/chat_state_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../message_bubble.dart';
+import '../../providers/chat_state/chat_data_providers.dart';
 
 class MessageList extends ConsumerStatefulWidget {
   final int chatId;
   final ScrollController scrollController;
-  final void Function(Message, List<Message>) onMessageTap;
+  final void Function(Message, MessagePart, List<Message>) onMessageTap;
   final Function(String) onSuggestionSelected;
 
   const MessageList({
@@ -78,20 +79,39 @@ class _MessageListState extends ConsumerState<MessageList> {
             final isLastMessage = index == 0;
             final isThisMessageStreaming = chatState.isStreaming && streamingMessage != null && message.id == streamingMessage.id;
 
-            Widget buildMessageItem() {
+            // Create a column of MessageBubble widgets, one for each part of the message.
+            final partWidgets = message.parts.map((part) {
+              // Create a temporary message object for the bubble, containing only one part.
+              // This allows us to reuse the existing MessageBubble without a major refactor,
+              // while correctly displaying each part of a multi-part message separately.
+              final singlePartMessage = Message(
+                id: message.id,
+                chatId: message.chatId,
+                role: message.role,
+                parts: [part], // The crucial change: only one part per bubble
+                timestamp: message.timestamp,
+                // These are carried over for potential use inside the bubble, but are not strictly necessary for display.
+                originalXmlContent: message.originalXmlContent,
+                secondaryXmlContent: message.secondaryXmlContent,
+              );
               return MessageBubble(
-                key: ValueKey(message.id),
-                message: message,
+                // Use a composite key to ensure uniqueness for each part, preventing rebuild issues.
+                key: ValueKey("${message.id}_${message.parts.indexOf(part)}"),
+                message: singlePartMessage,
                 isStreaming: isThisMessageStreaming,
                 isTransparent: chatState.isBubbleTransparent,
                 isHalfWidth: chatState.isBubbleHalfWidth,
-                onTap: () => widget.onMessageTap(message, allMessages),
-                totalTokens: isLastMessage && !isThisMessageStreaming ? chatState.totalTokens : null,
+                onTap: () => widget.onMessageTap(message, part, allMessages),
+                // Only show the token count on the very last part of the last message in the list.
+                totalTokens: isLastMessage && part == message.parts.last && !isThisMessageStreaming
+                    ? chatState.totalTokens
+                    : null,
               );
-            }
+            }).toList();
             
             Widget buildActionButtons() {
               final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+              // Action buttons should only appear after the last message if it's from the model and not loading.
               final canPerformAction = isLastMessage &&
                                      allMessages.isNotEmpty &&
                                      allMessages.last.role == MessageRole.model &&
@@ -193,16 +213,23 @@ class _MessageListState extends ConsumerState<MessageList> {
               );
             }
 
-            if (index == 0) {
+            // The main column for a single message entry in the ListView.
+            // It contains all the part-bubbles and, if it's the last message, the action buttons.
+            final messageColumn = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: partWidgets,
+            );
+
+            if (isLastMessage) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  buildMessageItem(),
+                  messageColumn,
                   buildActionButtons(),
                 ],
               );
             }
-            return buildMessageItem();
+            return messageColumn;
           },
         );
       },

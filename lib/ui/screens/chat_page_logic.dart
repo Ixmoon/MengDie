@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/database/sync/sync_service.dart';
 import '../../data/models/models.dart';
 import '../providers/chat_state_providers.dart';
+import '../providers/chat_state/chat_data_providers.dart';
 import '../providers/repository_providers.dart';
 
 class ChatPageLogic {
@@ -27,7 +29,7 @@ class ChatPageLogic {
   bool _isPushing = false;
   bool get isPushing => _isPushing;
 
-  void handleMessageTap(Message message, List<Message> allMessages) {
+  void handleMessageTap(Message message, MessagePart part, List<Message> allMessages) {
     if (ref.read(chatStateNotifierProvider(chatId)).isLoading) return;
 
     final isUser = message.role == MessageRole.user;
@@ -42,7 +44,7 @@ class ChatPageLogic {
       context: context,
       builder: (modalContext) {
         List<Widget> options = [];
-        final isTextOnly = message.parts.length == 1 && message.parts.first.type == MessagePartType.text;
+        final isTextOnly = part.type == MessagePartType.text;
         
         options.add(
           ListTile(
@@ -119,7 +121,7 @@ class ChatPageLogic {
                   ) ?? false;
 
               if (confirm) {
-                deleteMessage(message);
+                deleteMessagePart(message, part);
               }
             },
           )
@@ -395,20 +397,29 @@ class ChatPageLogic {
   }
 
   Future<void> forkChatFromMessage(Message message, List<Message> allMessages) async {
-    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-    final newChatId = await notifier.forkChat(message);
-
-    if (newChatId != null) {
-      ref.read(activeChatIdProvider.notifier).state = newChatId;
-    }
+    // This is now a fire-and-forget call.
+    // The notifier is responsible for the entire operation, including updating the active chat state.
+    // This decouples the UI logic completely from the business logic.
+    debugPrint("[ChatPageLogic] Triggering fork from message ${message.id} in chat $chatId.");
+    await ref.read(chatStateNotifierProvider(chatId).notifier).forkChat(message);
+    debugPrint("[ChatPageLogic] Fork operation triggered.");
   }
 
   Future<void> regenerateResponse(Message userMessage) async {
+    // No context/ref access after await, so no mounted check needed here.
     await ref.read(chatStateNotifierProvider(chatId).notifier).regenerateResponse(userMessage);
   }
 
-  Future<void> deleteMessage(Message messageToDelete) async {
-    await ref.read(chatStateNotifierProvider(chatId).notifier).deleteMessage(messageToDelete.id);
+  Future<void> deleteMessagePart(Message message, MessagePart part) async {
+    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+    // If the message has more than one part, just remove the specific part.
+    if (message.parts.length > 1) {
+      final newParts = List<MessagePart>.from(message.parts)..remove(part);
+      await notifier.editMessage(message.id, newParts: newParts);
+    } else {
+      // If it's the last part, delete the whole message.
+      await notifier.deleteMessage(message.id);
+    }
   }
 
   Future<void> handleForcePush() async {
@@ -426,6 +437,8 @@ class ChatPageLogic {
     );
 
     final success = await SyncService.instance.forcePushChanges();
+
+    if (!context.mounted) return;
     
     scaffoldMessenger.showSnackBar(
       SnackBar(
@@ -444,12 +457,14 @@ class ChatPageLogic {
       if (image == null) return;
 
       final Uint8List imageBytes = await image.readAsBytes();
+      if (!context.mounted) return;
       final String newBase64String = base64Encode(imageBytes);
 
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat != null) {
         final chatToUpdate = chat.copyWith({'coverImageBase64': newBase64String});
         await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
+        if (!context.mounted) return;
         ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已更新', backgroundColor: Colors.green);
       }
     } catch (e) {
@@ -479,6 +494,8 @@ class ChatPageLogic {
         bytes: imageBytes,
       );
 
+      if (!context.mounted) return;
+
       if (savePath != null) {
         notifier.showTopMessage('封面已保存到: $savePath', backgroundColor: Colors.green);
       } else {
@@ -495,6 +512,7 @@ class ChatPageLogic {
     if (chatToUpdate != null) {
       final updatedChat = chatToUpdate.copyWith({'coverImageBase64': null});
       await ref.read(chatRepositoryProvider).saveChat(updatedChat);
+      if (!context.mounted) return;
       ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);
     }
   }

@@ -32,7 +32,6 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
   Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
     Result rows;
     if (localIds != null) {
-      // Optimization for conflict resolution: only fetch remote metas for corresponding local IDs.
       if (localIds.isEmpty) {
         return [];
       }
@@ -41,7 +40,6 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
         parameters: {'ids': localIds},
       );
     } else {
-      // Fetch all remote metas when no specific IDs are provided (for initial merge-sync).
       rows = await remoteConnection!.execute(
         Sql.named('SELECT id, created_at, updated_at FROM api_configs'),
       );
@@ -87,6 +85,10 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
           stopSequences: map['stop_sequences'] == null ? null : const StringListConverter().fromSql(map['stop_sequences']),
           enableReasoningEffort: map['enable_reasoning_effort'],
           reasoningEffort: map['reasoning_effort'] == null ? null : const OpenAIReasoningEffortConverter().fromSql(map['reasoning_effort']),
+          thinkingBudget: map['thinking_budget'],
+          toolConfig: map['tool_config'],
+          toolChoice: map['tool_choice'],
+          useDefaultSafetySettings: map['use_default_safety_settings'] ?? true,
           createdAt: map['created_at'],
           updatedAt: map['updated_at'],
         );
@@ -131,12 +133,9 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    // For ApiConfigs, the key is the ID (which is a UUID string).
     final idsToDelete = keys;
     await remoteConnection!.execute(Sql.named('DELETE FROM api_configs WHERE id = ANY(@ids)'), parameters: {'ids': idsToDelete});
   }
-
-  // ============== CONFLICT RESOLUTION HELPERS (moved from SyncService) ==============
 
   String _generateUuid() {
     final random = Random();
@@ -172,8 +171,6 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     return newId;
   }
 
-  // ============== BATCH PUSH HELPER (moved from SyncService) ==============
-
   Future<void> _batchPushApiConfigs(Connection remoteConnection, List<ApiConfig> apiConfigs) async {
     await remoteConnection.execute(
       Sql.named('''
@@ -181,23 +178,27 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
           id, user_id, name, api_type, model, api_key, base_url,
           use_custom_temperature, temperature, use_custom_top_p, top_p,
           use_custom_top_k, top_k, max_output_tokens, stop_sequences,
-          enable_reasoning_effort, reasoning_effort, created_at, updated_at
+          enable_reasoning_effort, reasoning_effort, thinking_budget, tool_config, tool_choice, use_default_safety_settings,
+          created_at, updated_at
         )
         SELECT
           c.id, c.user_id, c.name, c.api_type, c.model, c.api_key, c.base_url,
           c.use_custom_temperature, c.temperature::real, c.use_custom_top_p, c.top_p::real,
           c.use_custom_top_k, c.top_k, c.max_output_tokens, c.stop_sequences,
-          c.enable_reasoning_effort, c.reasoning_effort, c.created_at, c.updated_at
+          c.enable_reasoning_effort, c.reasoning_effort, c.thinking_budget, c.tool_config, c.tool_choice, c.use_default_safety_settings,
+          c.created_at, c.updated_at
         FROM UNNEST(
           @ids::text[], @user_ids::integer[], @names::text[], @api_types::text[], @models::text[], @api_keys::text[], @base_urls::text[],
           @use_custom_temperatures::boolean[], @temperatures::text[], @use_custom_top_ps::boolean[], @top_ps::text[],
           @use_custom_top_ks::boolean[], @top_ks::integer[], @max_output_tokens_list::integer[], @stop_sequences_list::text[],
-          @enable_reasoning_efforts::boolean[], @reasoning_efforts::text[], @created_ats::timestamp[], @updated_ats::timestamp[]
+          @enable_reasoning_efforts::boolean[], @reasoning_efforts::text[], @thinking_budgets::integer[], @tool_configs::text[], @tool_choices::text[], @use_default_safety_settings_list::boolean[],
+          @created_ats::timestamp[], @updated_ats::timestamp[]
         ) AS c(
           id, user_id, name, api_type, model, api_key, base_url,
           use_custom_temperature, temperature, use_custom_top_p, top_p,
           use_custom_top_k, top_k, max_output_tokens, stop_sequences,
-          enable_reasoning_effort, reasoning_effort, created_at, updated_at
+          enable_reasoning_effort, reasoning_effort, thinking_budget, tool_config, tool_choice, use_default_safety_settings,
+          created_at, updated_at
         )
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name, api_type = EXCLUDED.api_type,
@@ -207,7 +208,12 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
           use_custom_top_k = EXCLUDED.use_custom_top_k, top_k = EXCLUDED.top_k,
           max_output_tokens = EXCLUDED.max_output_tokens, stop_sequences = EXCLUDED.stop_sequences,
           enable_reasoning_effort = EXCLUDED.enable_reasoning_effort,
-          reasoning_effort = EXCLUDED.reasoning_effort, updated_at = EXCLUDED.updated_at;
+          reasoning_effort = EXCLUDED.reasoning_effort, 
+          thinking_budget = EXCLUDED.thinking_budget,
+          tool_config = EXCLUDED.tool_config,
+          tool_choice = EXCLUDED.tool_choice,
+          use_default_safety_settings = EXCLUDED.use_default_safety_settings,
+          updated_at = EXCLUDED.updated_at;
       '''),
       parameters: {
         'ids': TypedValue(Type.textArray, apiConfigs.map((c) => c.id).toList()),
@@ -227,6 +233,10 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
         'stop_sequences_list': TypedValue(Type.textArray, apiConfigs.map((c) => const StringListConverter().toSql(c.stopSequences ?? [])).toList()),
         'enable_reasoning_efforts': TypedValue(Type.booleanArray, apiConfigs.map((c) => c.enableReasoningEffort).toList()),
         'reasoning_efforts': TypedValue(Type.textArray, apiConfigs.map((c) => c.reasoningEffort?.name).toList()),
+        'thinking_budgets': TypedValue(Type.integerArray, apiConfigs.map((c) => c.thinkingBudget).toList()),
+        'tool_configs': TypedValue(Type.textArray, apiConfigs.map((c) => c.toolConfig).toList()),
+        'tool_choices': TypedValue(Type.textArray, apiConfigs.map((c) => c.toolChoice).toList()),
+        'use_default_safety_settings_list': TypedValue(Type.booleanArray, apiConfigs.map((c) => c.useDefaultSafetySettings).toList()),
         'created_ats': TypedValue(Type.timestampArray, apiConfigs.map((c) => c.createdAt).toList()),
         'updated_ats': TypedValue(Type.timestampArray, apiConfigs.map((c) => c.updatedAt).toList()),
       }

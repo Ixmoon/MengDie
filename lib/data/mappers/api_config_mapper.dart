@@ -29,6 +29,10 @@ class ApiConfigMapper {
       updatedAt: data.updatedAt,
       enableReasoningEffort: data.enableReasoningEffort ?? false,
       reasoningEffort: data.reasoningEffort,
+      thinkingBudget: data.thinkingBudget,
+      toolConfig: data.toolConfig,
+      toolChoice: data.toolChoice,
+      useDefaultSafetySettings: data.useDefaultSafetySettings,
     );
   }
 
@@ -54,6 +58,10 @@ class ApiConfigMapper {
       updatedAt: Value(config.updatedAt),
       enableReasoningEffort: Value(config.enableReasoningEffort),
       reasoningEffort: Value(config.reasoningEffort),
+      thinkingBudget: Value(config.thinkingBudget),
+      toolConfig: Value(config.toolConfig),
+      toolChoice: Value(config.toolChoice),
+      useDefaultSafetySettings: Value(config.useDefaultSafetySettings),
     );
   }
 }

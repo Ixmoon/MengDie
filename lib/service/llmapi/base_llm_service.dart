@@ -59,13 +59,13 @@ abstract class BaseLlmService {
 
   /// 根据文本提示生成图片。
   ///
-  /// [prompt]: 用于生成图片的文本描述。
+  /// [llmContext]: 包含图片提示和任何其他上下文（如历史记录）的列表。
   /// [apiConfig]: 包含模型名称、API密钥等信息的配置。
   /// [n]: 要生成的图片数量。
   ///
   /// 返回一个包含 base64 编码图片列表的 `LlmImageResponse`。
   Future<LlmImageResponse> generateImage({
-    required String prompt,
+    required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
   });

@@ -35,8 +35,9 @@ class LlmContent {
            // }
            return null; // 当前暂时忽略
         case MessagePartType.generatedImage:
-          // 生成的图片不会直接发送给 LLM，所以我们返回 null 并在稍后过滤掉。
-          return null;
+          // 将生成的图片作为多模态上下文的一部分发送给 LLM。
+          // 这与处理用户上传的图片（MessagePartType.image）行为一致。
+          return LlmDataPart(part.mimeType!, part.base64Data!);
       }
     }).whereType<LlmPart>().toList(); // 使用 whereType 过滤掉 null
 

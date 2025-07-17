@@ -4,8 +4,8 @@
 -- Users Table
 -- Stores user information, credentials, and their associated chat IDs.
 CREATE TABLE IF NOT EXISTS users (
-    uuid TEXT PRIMARY KEY,
-    id SERIAL UNIQUE NOT NULL, -- Keep for potential legacy relations, but not as PK
+    id SERIAL PRIMARY KEY,
+    uuid TEXT UNIQUE NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     username TEXT UNIQUE NOT NULL,
@@ -23,8 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- API Configs Table
 -- Unified table for API configurations (e.g., Gemini, OpenAI).
 CREATE TABLE IF NOT EXISTS api_configs (
-    uuid TEXT PRIMARY KEY,
-    id TEXT NOT NULL, -- Keep for legacy mapping, ensure it's populated with UUID
+    id TEXT PRIMARY KEY,
     user_id INTEGER,
     name TEXT NOT NULL,
     api_type TEXT NOT NULL,
@@ -41,6 +40,10 @@ CREATE TABLE IF NOT EXISTS api_configs (
     stop_sequences TEXT,
     enable_reasoning_effort BOOLEAN,
     reasoning_effort TEXT,
+    thinking_budget INTEGER,
+    tool_config TEXT,
+    tool_choice TEXT,
+    use_default_safety_settings BOOLEAN,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
@@ -48,8 +51,7 @@ CREATE TABLE IF NOT EXISTS api_configs (
 -- Chats Table
 -- Stores chat sessions, which can be conversations or folders.
 CREATE TABLE IF NOT EXISTS chats (
-    uuid TEXT PRIMARY KEY,
-    id INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY,
     title TEXT,
     system_prompt TEXT,
     created_at TIMESTAMP NOT NULL,
@@ -81,11 +83,11 @@ CREATE TABLE IF NOT EXISTS chats (
 -- Stores individual messages within a chat.
 CREATE TABLE IF NOT EXISTS messages (
     id SERIAL PRIMARY KEY,
-    chat_id INTEGER NOT NULL,
+    chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
     role TEXT NOT NULL,
     raw_text TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
     original_xml_content TEXT,
     secondary_xml_content TEXT
-    -- created_at and updated_at are removed to align with the local model.
 );

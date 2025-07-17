@@ -22,7 +22,7 @@ class MessageMapper {
 
     return domain.Message(
       id: data.id,
-      chatId: data.chatId,
+      chatId: data.chatId!,
       parts: parts,
       role: data.role,
       timestamp: data.timestamp,

@@ -31,6 +31,12 @@ class ApiConfigs extends Table {
   // --- OpenAI 专属设置 ---
   BoolColumn get enableReasoningEffort => boolean().nullable()();
   TextColumn get reasoningEffort => text().map(const OpenAIReasoningEffortConverter()).nullable()();
+  TextColumn get toolChoice => text().nullable()();
+
+  // --- Gemini 专属设置 ---
+  IntColumn get thinkingBudget => integer().nullable()();
+  TextColumn get toolConfig => text().nullable()();
+  BoolColumn get useDefaultSafetySettings => boolean().withDefault(const Constant(true))();
 
   // --- 时间戳 ---
   DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
