@@ -6,9 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../data/models/models.dart';
-import '../providers/chat_state/chat_data_providers.dart';
-import '../providers/chat_state_providers.dart';
+import '../../domain/models/models.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/chat_state_providers.dart';
 import '../widgets/cached_image.dart';
 import '../widgets/chat/chat_app_bar.dart';
 import '../widgets/chat/chat_input_bar.dart';

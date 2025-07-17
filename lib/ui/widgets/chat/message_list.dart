@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../data/models/models.dart';
-import '../../providers/api_key_provider.dart';
-import '../../providers/chat_state_providers.dart';
-import '../../providers/settings_providers.dart';
+import '../../../domain/models/models.dart';
+import '../../../app/providers/api_key_provider.dart';
+import '../../../app/providers/chat_state_providers.dart';
+import '../../../app/providers/settings_providers.dart';
 import '../message_bubble.dart';
-import '../../providers/chat_state/chat_data_providers.dart';
+import '../../../app/providers/chat_state/chat_data_providers.dart';
 
 class MessageList extends ConsumerStatefulWidget {
   final int chatId;

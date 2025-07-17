@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
-import '../../models/chat.dart';
-import '../../models/message.dart';
+import '../../../domain/models/chat.dart';
+import '../../../domain/models/message.dart';
 import '../app_database.dart';
-import '../common_enums.dart' as drift_enums;
+import '../../../core/common_enums.dart' as drift_enums;
 import '../tables/chats.dart';
 import '../tables/messages.dart';
 

@@ -2,7 +2,7 @@ import 'package:drift/drift.dart';
 
 import 'package:uuid/uuid.dart';
 import 'connections/native.dart' if (dart.library.html) 'connections/web.dart';
-import 'sync/sync_service.dart';
+import '../sync/sync_service.dart';
 
 // Import tables
 import 'tables/chats.dart';
@@ -18,9 +18,9 @@ import 'daos/user_dao.dart'; // Import user DAO
 
 // Import type converters and models for them
 import 'type_converters.dart';
-import '../models/context_config.dart';
-import '../models/xml_rule.dart';
-import '../models/enums.dart';
+import '../../domain/models/context_config.dart';
+import '../../domain/models/xml_rule.dart';
+import '../../domain/enums.dart';
 // path_provider and path are only needed in native.dart now.
 
 

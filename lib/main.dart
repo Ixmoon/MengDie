@@ -15,11 +15,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // 导入应用配置和核心 Provider
 import 'ui/theme.dart'; // 导入主题配置
 import 'ui/router.dart'; // 导入路由配置
-import 'ui/providers/auth_providers.dart';
-import 'ui/providers/settings_providers.dart';
-import 'data/database/sync/sync_service.dart';
+import 'app/providers/auth_providers.dart';
+import 'app/providers/settings_providers.dart';
+import 'data/sync/sync_service.dart';
 import 'data/database/connections/remote.dart';
-import 'ui/providers/core_providers.dart';
+import 'app/providers/core_providers.dart';
 
 // --- 应用主函数 ---
 // 将 main 函数修改为 async 以便在启动前执行异步操作

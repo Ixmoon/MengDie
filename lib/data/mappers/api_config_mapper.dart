@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
 // Import the domain model with a prefix 'domain' to avoid name clashes
-import '../models/api_config.dart' as domain;
+import '../../domain/models/api_config.dart' as domain;
 // Import the drift-generated data class and companion from the database layer
 import '../database/app_database.dart' as drift;
 

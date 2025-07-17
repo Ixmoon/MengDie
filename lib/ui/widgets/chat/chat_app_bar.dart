@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../data/models/models.dart';
-import '../../../service/process/chat_export_import.dart';
-import '../../providers/chat_state_providers.dart';
-import '../../providers/repository_providers.dart';
+import '../../../domain/models/models.dart';
+import '../../../app/tools/chat_export_import.dart';
+import '../../../app/providers/chat_state_providers.dart';
+import '../../../app/providers/repository_providers.dart';
 
-import '../../providers/chat_state/chat_data_providers.dart';
+import '../../../app/providers/chat_state/chat_data_providers.dart';
 // _ChatAppBar 提取为公有 Widget
 class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final Chat chat;

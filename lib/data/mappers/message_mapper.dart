@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 
-import '../models/message.dart' as domain;
+import '../../domain/models/message.dart' as domain;
 import '../database/app_database.dart' as drift;
 
 class MessageMapper {

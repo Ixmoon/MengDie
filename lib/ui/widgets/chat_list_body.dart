@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
-import '../../data/models/models.dart';
+import '../../domain/models/models.dart';
 import 'chat_grid_item.dart';
 import 'chat_list_item.dart';
 import 'move_up_target.dart';

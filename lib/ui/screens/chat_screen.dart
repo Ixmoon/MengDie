@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/models/models.dart';
-import '../../data/database/sync/sync_service.dart';
-import '../../data/models/chat.dart';
-import '../providers/chat_state_providers.dart';
+import '../../domain/models/models.dart';
+import '../../data/sync/sync_service.dart';
+import '../../domain/models/chat.dart';
+import '../../app/providers/chat_state_providers.dart';
 import 'chat_page_content.dart';
-import '../providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
