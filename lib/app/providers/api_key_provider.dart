@@ -5,10 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../domain/models/api_config.dart'; // Use the new domain model
 import '../../domain/enums.dart'; // Use the pure enums
 import '../repositories/api_config_repository.dart';
-import '../repositories/chat_repository.dart' hide chatRepositoryProvider;
 import '../repositories/user_repository.dart';
 import 'auth_providers.dart';
-import 'repository_providers.dart' show apiConfigRepositoryProvider, chatRepositoryProvider, userRepositoryProvider;
+import 'repository_providers.dart' show apiConfigRepositoryProvider, userRepositoryProvider;
 
 // --- State ---
 @immutable
@@ -47,13 +46,12 @@ class ApiKeyState {
 // --- Notifier ---
 class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
   final ApiConfigRepository _apiConfigRepository;
-  final ChatRepository _chatRepository;
   final UserRepository _userRepository;
   final Ref _ref;
 
   int? get _userId => _ref.read(authProvider).currentUser?.id;
 
-  ApiKeyNotifier(this._apiConfigRepository, this._chatRepository, this._userRepository, this._ref) : super(const ApiKeyState());
+  ApiKeyNotifier(this._apiConfigRepository, this._userRepository, this._ref) : super(const ApiKeyState());
 
   Future<void> init() async {
     _ref.listen<AuthState>(authProvider, (previous, next) {
@@ -204,9 +202,8 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 // --- Provider ---
 final apiKeyNotifierProvider = StateNotifierProvider<ApiKeyNotifier, ApiKeyState>((ref) {
   final apiConfigRepo = ref.watch(apiConfigRepositoryProvider);
-  final chatRepo = ref.watch(chatRepositoryProvider);
   final userRepo = ref.watch(userRepositoryProvider);
-  final notifier = ApiKeyNotifier(apiConfigRepo, chatRepo, userRepo, ref);
+  final notifier = ApiKeyNotifier(apiConfigRepo, userRepo, ref);
   notifier.init();
   return notifier;
 });

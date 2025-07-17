@@ -14,6 +14,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
     // Abstract dependencies to be implemented by the main class
     Ref get ref;
     int get chatId;
+    @override
     bool get mounted;
 
     // Abstract methods that this mixin depends on

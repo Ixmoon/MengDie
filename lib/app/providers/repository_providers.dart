@@ -15,7 +15,7 @@ final apiConfigRepositoryProvider = Provider<ApiConfigRepository>((ref) {
 // Provider for ChatRepository
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return ChatRepository(ref, db, db.chatDao, db.apiConfigDao, db.userDao);
+  return ChatRepository(ref, db, db.chatDao, db.userDao);
 });
 
 // Provider for UserRepository

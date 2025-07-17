@@ -8,7 +8,6 @@ import '../../data/mappers/user_mapper.dart';
 
 import '../../data/database/app_database.dart';
 
-import '../../data/database/daos/api_config_dao.dart';
 import '../../data/database/daos/chat_dao.dart';
 import '../../data/database/daos/user_dao.dart';
 import '../../data/mappers/chat_mapper.dart';
@@ -23,10 +22,9 @@ class ChatRepository {
   final Ref _ref;
   final AppDatabase _db;
   final ChatDao _chatDao;
-  final ApiConfigDao _apiConfigDao;
   final UserDao _userDao;
 
-  ChatRepository(this._ref, this._db, this._chatDao, this._apiConfigDao, this._userDao);
+  ChatRepository(this._ref, this._db, this._chatDao, this._userDao);
 
   /// 检查当前用户登录状态，如果已登录，则将新创建的项目ID与其关联。
   Future<void> _bindItemToCurrentUser(int itemId) async {

@@ -21,22 +21,20 @@ final chatExportImportServiceProvider = Provider<ChatExportImportService>((ref) 
   // 依赖 ChatRepository 和 MessageRepository
   final chatRepo = ref.watch(chatRepositoryProvider);
   final messageRepo = ref.watch(messageRepositoryProvider);
-  return ChatExportImportService(ref, chatRepo, messageRepo);
+  return ChatExportImportService(chatRepo, messageRepo);
 });
 
 // --- Chat Export/Import Service Implementation ---
 class ChatExportImportService {
-  final Ref _ref;
   final ChatRepository _chatRepository;
   final MessageRepository _messageRepository;
   // --- 新版 PNG 格式常量 ---
   static const String _pngCharaKeyword = 'chara';
 
   // --- 旧版 JPG EXIF 格式常量 (保留用于导入兼容) ---
-  static const int _jsonExifTagId = 0x010e; // ImageDescription Tag ID
   static const String _jsonExifJsonKey = 'Image ImageDescription';
 
-  ChatExportImportService(this._ref, this._chatRepository, this._messageRepository);
+  ChatExportImportService(this._chatRepository, this._messageRepository);
 
   Future<void> _ensurePermissions() async {
     if (kIsWeb) return; // Web 不需要这些权限
@@ -166,7 +164,7 @@ class ChatExportImportService {
       await FilePicker.platform.saveFile(
         dialogTitle: '保存 ZIP 文件',
         fileName: suggestedFileName,
-        bytes: Uint8List.fromList(zipBytes!),
+        bytes: Uint8List.fromList(zipBytes),
       );
       debugPrint("ChatExportImportService: Web ZIP export initiated.");
       return null;
@@ -174,7 +172,7 @@ class ChatExportImportService {
       String? finalSavePath = await FilePicker.platform.saveFile(
         dialogTitle: '保存 ZIP 文件',
         fileName: suggestedFileName,
-        bytes: Uint8List.fromList(zipBytes!),
+        bytes: Uint8List.fromList(zipBytes),
       );
       if (finalSavePath != null) {
         debugPrint("ChatExportImportService: ZIP 文件已成功导出到: $finalSavePath");
@@ -445,7 +443,7 @@ class ChatExportImportService {
       throw Exception("无法解码存储在 PNG 中的聊天数据 (Base64/UTF8 解码失败)。");
     }
 
-    if (jsonString == null || jsonString.isEmpty) {
+    if (jsonString.isEmpty) {
       throw Exception("未能从 PNG 中恢复有效的聊天数据。");
     }
     
@@ -502,7 +500,7 @@ class ChatExportImportService {
       throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
     }
 
-    if (jsonString == null || jsonString.isEmpty) {
+    if (jsonString.isEmpty) {
       throw Exception("未能从图片 EXIF 中恢复有效的聊天数据。");
     }
 
