@@ -20,7 +20,9 @@ import 'ui_state_manager.dart';
 mixin BackgroundTasks on UiStateManager {
     // Abstract dependencies required by this mixin, as per instructions.
     // These are expected to be implemented by the class using this mixin.
+    @override
     Ref get ref;
+    @override
     int get chatId;
     Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady, bool forceRefresh = false});
     Future<String> executeSpecialAction({
@@ -30,6 +32,7 @@ mixin BackgroundTasks on UiStateManager {
         required Message targetMessage,
     });
     ApiConfig getEffectiveApiConfig({String? specificConfigId});
+    @override
     void stopUpdateTimer();
 
     Future<void> runAsyncProcessingTasks(Message modelMessage) async {

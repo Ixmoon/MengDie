@@ -40,13 +40,6 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
     @override
     bool isFinalizing = false;
 
-    // --- Properties to satisfy UiStateManager contract ---
-    @override
-    Timer? updateTimer;
-    
-    @override
-    Timer? topMessageTimer;
-
     ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState());
 
     // --- Method Implementations to satisfy Mixin contracts ---

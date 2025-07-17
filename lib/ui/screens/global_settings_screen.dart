@@ -83,7 +83,7 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (bool didPop) {
+      onPopInvokedWithResult: (bool didPop, dynamic result) {
         if (didPop) return;
         _saveSettingsIfDirty();
         context.pop();
@@ -371,7 +371,6 @@ class _SyncSettingsWidgetState extends ConsumerState<_SyncSettingsWidget> {
    final ValueChanged<bool> onEnableChanged;
    final ValueChanged<String> onPromptChanged;
    final ValueChanged<String?> onApiConfigChanged;
-   final List<Widget>? additionalWidgets;
  
    const _FeatureSettingsWidget({
      required this.title,
@@ -383,7 +382,6 @@ class _SyncSettingsWidgetState extends ConsumerState<_SyncSettingsWidget> {
      required this.onEnableChanged,
      required this.onPromptChanged,
      required this.onApiConfigChanged,
-     this.additionalWidgets,
    });
  
    @override
@@ -516,7 +514,6 @@ class _SyncSettingsWidgetState extends ConsumerState<_SyncSettingsWidget> {
                ],
                onChanged: widget.onApiConfigChanged,
              ),
-           if (widget.additionalWidgets != null) ...widget.additionalWidgets!,
          ],
        ],
      );

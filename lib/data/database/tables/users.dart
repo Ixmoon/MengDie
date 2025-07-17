@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
-import 'package:uuid/uuid.dart';
 
 import '../type_converters.dart';
 

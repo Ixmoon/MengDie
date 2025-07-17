@@ -89,7 +89,6 @@ class SyncService {
     required List<SyncMeta> remoteMetas,
   }) {
     final localMap = {for (var meta in localMetas) meta.key: meta};
-    final remoteMap = {for (var meta in remoteMetas) meta.key: meta};
 
     final toPull = <dynamic>[];
     final toCreateLocally = <dynamic>[];

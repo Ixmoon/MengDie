@@ -159,7 +159,6 @@ class ContextXmlService {
       }
     }
     return XmlProcessor.serializeCarriedOver(cumulativeStateMap);
-  return XmlProcessor.serializeCarriedOver(cumulativeStateMap);
 }
 
 /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
@@ -237,9 +236,7 @@ Future<_HistoryLimitResult> _limitHistoryForPrompt({
         debugPrint("  - Token counting process failed during history limitation: $e. Aborting safely.");
         return _HistoryLimitResult([], fullHistory);
       }
-    default:
-      // Failsafe, should not be reached
-      return _HistoryLimitResult(fullHistory, []);
+    // No default needed as all enum cases are handled.
   }
 }
 

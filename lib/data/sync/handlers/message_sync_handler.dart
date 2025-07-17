@@ -188,7 +188,7 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
       '''),
       parameters: {
         'ids': TypedValue(Type.integerArray, messages.map((m) => m.id).toList()),
-        'chat_ids': TypedValue(Type.integerArray, messages.map((m) => m.chatId!).toList()),
+        'chat_ids': TypedValue(Type.integerArray, messages.map((m) => m.chatId).toList()),
         'roles': TypedValue(Type.textArray, messages.map((m) => m.role.name).toList()),
         'raw_texts': TypedValue(Type.textArray, messages.map((m) => m.rawText).toList()),
         'timestamps': TypedValue(Type.timestampArray, messages.map((m) => m.timestamp).toList()),

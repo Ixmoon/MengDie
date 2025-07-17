@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/messages.dart';
@@ -59,11 +60,11 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
   Future<int> saveOrUpdateMessage(MessagesCompanion message) {
     if (message.id.present && message.id.value > 0) {
       // If an ID is present and valid, it's an update.
-      print("Updating message with id: ${message.id.value}");
+      debugPrint("Updating message with id: ${message.id.value}");
       return _updateWithTimestamp(message.id.value, message);
     } else {
       // Otherwise, it's a new message.
-      print("Inserting new message");
+      debugPrint("Inserting new message");
       return into(messages).insert(message.copyWith(id: const Value.absent()));
     }
   }

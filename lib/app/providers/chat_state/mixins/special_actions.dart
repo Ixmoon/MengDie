@@ -30,6 +30,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
     });
     void startUpdateTimer();
     void stopUpdateTimer();
+    @override
     bool get mounted;
 
 
