@@ -7,7 +7,6 @@ import '../../../app/tools/chat_export_import.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../../../app/providers/repository_providers.dart';
 
-import '../../../app/providers/chat_state/chat_data_providers.dart';
 // _ChatAppBar 提取为公有 Widget
 class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final Chat chat;

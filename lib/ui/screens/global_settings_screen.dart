@@ -10,7 +10,6 @@ import '../../app/providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 import '../../domain/enums.dart';
 import '../../core/app_constants.dart';
-import '../../data/sync/sync_service.dart';
  
 class GlobalSettingsScreen extends ConsumerStatefulWidget {
   const GlobalSettingsScreen({super.key});

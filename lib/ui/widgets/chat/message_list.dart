@@ -6,7 +6,7 @@ import '../../../app/providers/api_key_provider.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../../../app/providers/settings_providers.dart';
 import '../message_bubble.dart';
-import '../../../app/providers/chat_state/chat_data_providers.dart';
+
 
 class MessageList extends ConsumerStatefulWidget {
   final int chatId;

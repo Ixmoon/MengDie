@@ -5,7 +5,6 @@ import '../../database/app_database.dart';
 import '../sync_meta.dart';
 import 'base_sync_handler.dart';
 import '../../database/type_converters.dart';
-import '../../../domain/enums.dart';
 
 class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   ChatSyncHandler(super.db, super.remoteConnection);

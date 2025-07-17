@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tiktoken/tiktoken.dart' as tiktoken;
 import 'package:collection/collection.dart';
 
 import '../../domain/models/models.dart';

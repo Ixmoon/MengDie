@@ -12,7 +12,7 @@ import '../../repository_providers.dart';
 import '../../../repositories/message_repository.dart';
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
-import 'ui_state_manager.dart';
+
 import '../../../tools/context_xml_service.dart';
 
 mixin GenerationLogic on StateNotifier<ChatScreenState> {

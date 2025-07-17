@@ -4,7 +4,6 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/chat.dart';
-import '../../domain/models/message.dart';
 import '../../data/mappers/user_mapper.dart';
 
 import '../../data/database/app_database.dart';

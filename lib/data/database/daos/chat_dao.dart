@@ -3,9 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../domain/models/chat.dart';
-import '../../../domain/models/message.dart';
 import '../app_database.dart';
-import '../../../core/common_enums.dart' as drift_enums;
 import '../tables/chats.dart';
 import '../tables/messages.dart';
 

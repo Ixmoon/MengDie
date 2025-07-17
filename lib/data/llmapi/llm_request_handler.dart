@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'llm_models.dart';
 import '../../domain/models/api_config.dart';
-import '../../domain/models/message.dart'; // Import for MessagePart
 
 // --- 1. Request Payload Abstraction ---
 

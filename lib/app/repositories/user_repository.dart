@@ -9,7 +9,6 @@ import '../../data/database/daos/user_dao.dart';
 import '../../data/mappers/user_mapper.dart';
 import '../../domain/models/user.dart';
 import '../providers/auth_providers.dart';
-import '../../data/sync/sync_service.dart';
 
 /// 用户仓库
 ///

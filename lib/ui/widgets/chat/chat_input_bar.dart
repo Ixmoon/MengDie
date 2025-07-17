@@ -9,7 +9,7 @@ import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../cached_image.dart';
-import '../../../app/providers/chat_state/chat_data_providers.dart';
+
 
 class ChatInputBar extends ConsumerStatefulWidget {
   final int chatId;

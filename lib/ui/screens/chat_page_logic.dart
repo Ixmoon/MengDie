@@ -5,12 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../data/sync/sync_service.dart';
 import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
-import '../../app/providers/chat_state/chat_data_providers.dart';
 import '../../app/providers/repository_providers.dart';
 
 class ChatPageLogic {

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:postgres/postgres.dart' as pg;
 
 // 该脚本用于连接到远程 PostgreSQL 数据库，并获取所有表中的数据以供检查。
