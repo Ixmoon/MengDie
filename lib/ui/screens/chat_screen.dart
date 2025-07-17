@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../domain/models/models.dart';
 import '../../data/sync/sync_service.dart';
-import '../../domain/models/chat.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'chat_page_content.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';

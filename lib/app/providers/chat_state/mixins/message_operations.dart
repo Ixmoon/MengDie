@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../data/sync/sync_service.dart';
-import '../../../../domain/models/chat.dart';
 import '../../../../domain/enums.dart';
 import '../../../../domain/models/message.dart';
 import '../../../tools/context_xml_service.dart';
@@ -10,7 +9,6 @@ import '../../repository_providers.dart';
 import '../../../repositories/message_repository.dart'; // Corrected import
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
-import '../../auth_providers.dart';
 
 mixin MessageOperations on StateNotifier<ChatScreenState> {
     // Abstract dependencies to be implemented by the main class

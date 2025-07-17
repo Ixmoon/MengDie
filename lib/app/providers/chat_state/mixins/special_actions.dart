@@ -2,10 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // For Color
 
 import '../../../../domain/models/api_config.dart';
-import '../../../../domain/models/chat.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart'; // For MessageRole and HelpMeReplyTriggerMode
-import '../../../../data/llmapi/llm_models.dart';
 import '../../../../data/llmapi/llm_service.dart';
 import '../../../tools/context_xml_service.dart';
 import '../../../../ui/screens/chat_settings_screen.dart' show defaultHelpMeReplyPrompt;

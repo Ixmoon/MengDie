@@ -30,7 +30,7 @@ import '../../data/llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
 import '../providers/repository_providers.dart';
 import '../providers/chat_state_providers.dart';
-import '../providers/chat_state/chat_data_providers.dart';
+
 class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;

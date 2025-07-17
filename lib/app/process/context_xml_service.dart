@@ -24,13 +24,12 @@ import '../../domain/models/message.dart';
 import '../../domain/models/xml_rule.dart';
 import '../../domain/enums.dart';
 import '../repositories/message_repository.dart'; // For MessageRepository
-import 'xml_processor.dart';
+import '../tools/xml_processor.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../data/llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
 import '../providers/repository_providers.dart';
 import '../providers/chat_state_providers.dart';
-import '../providers/chat_state/chat_data_providers.dart';
 class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;
