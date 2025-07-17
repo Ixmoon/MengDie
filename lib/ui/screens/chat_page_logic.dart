@@ -7,11 +7,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../data/database/sync/sync_service.dart';
-import '../../data/models/models.dart';
-import '../providers/chat_state_providers.dart';
-import '../providers/chat_state/chat_data_providers.dart';
-import '../providers/repository_providers.dart';
+import '../../data/sync/sync_service.dart';
+import '../../domain/models/models.dart';
+import '../../app/providers/chat_state_providers.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/repository_providers.dart';
 
 class ChatPageLogic {
   final WidgetRef ref;

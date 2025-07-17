@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/auth_providers.dart';
-import '../providers/settings_providers.dart';
-import '../../data/models/user.dart';
-import '../../data/models/api_config.dart';
-import '../providers/api_key_provider.dart';
+import '../../app/providers/auth_providers.dart';
+import '../../app/providers/settings_providers.dart';
+import '../../domain/models/user.dart';
+import '../../domain/models/api_config.dart';
+import '../../app/providers/api_key_provider.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
-import '../../data/models/enums.dart';
-import '../../data/models/app_constants.dart';
-import '../../data/database/sync/sync_service.dart';
+import '../../domain/enums.dart';
+import '../../core/app_constants.dart';
+import '../../data/sync/sync_service.dart';
  
 class GlobalSettingsScreen extends ConsumerStatefulWidget {
   const GlobalSettingsScreen({super.key});

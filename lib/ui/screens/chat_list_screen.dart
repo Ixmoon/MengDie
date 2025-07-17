@@ -6,13 +6,13 @@ import 'package:intl/intl.dart'; // 用于日期格式化
 import 'package:reorderable_grid_view/reorderable_grid_view.dart'; // 导入拖放网格视图包
 
 // 导入模型、Provider 和 Widget
-import '../../data/models/models.dart';
-import '../providers/chat_state_providers.dart';
-import '../providers/repository_providers.dart';
-import '../../service/process/chat_export_import.dart'; // 导入导出/导入服务
-import '../providers/core_providers.dart'; // 导入 SharedPreferences Provider
+import '../../domain/models/models.dart';
+import '../../app/providers/chat_state_providers.dart';
+import '../../app/providers/repository_providers.dart';
+import '../../app/tools/chat_export_import.dart'; // 导入导出/导入服务
+import '../../app/providers/core_providers.dart'; // 导入 SharedPreferences Provider
 import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPreferences
-import '../providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
 import '../widgets/chat_list_app_bar.dart';
 import '../widgets/chat_list_body.dart';
 

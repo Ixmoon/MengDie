@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/auth_providers.dart';
-import '../../data/database/sync/sync_service.dart';
+import '../../app/providers/auth_providers.dart';
+import '../../data/sync/sync_service.dart';
 
 /// 登录屏幕
 ///

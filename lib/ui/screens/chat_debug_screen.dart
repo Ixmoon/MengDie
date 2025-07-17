@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:collection/collection.dart'; // No longer needed for lastWhereOrNull here
 
 
-import '../../data/models/models.dart';
-import '../providers/chat_state_providers.dart';
-import '../../service/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
-import '../../service/process/context_xml_service.dart';
+import '../../domain/models/models.dart';
+import '../../app/providers/chat_state_providers.dart';
+import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
+import '../../app/tools/context_xml_service.dart';
 import '../widgets/app_card.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
-import '../providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
 
 
 

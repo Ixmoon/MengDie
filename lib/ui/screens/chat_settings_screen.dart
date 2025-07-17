@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // 导入模型、Provider 和仓库
-import '../../data/models/models.dart';
-import '../providers/api_key_provider.dart';
-import '../providers/chat_settings_provider.dart';
-import '../providers/chat_state_providers.dart';
+import '../../domain/models/models.dart';
+import '../../app/providers/api_key_provider.dart';
+import '../../app/providers/chat_settings_provider.dart';
+import '../../app/providers/chat_state_providers.dart';
 import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
-import '../providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/chat_state/chat_data_providers.dart';
 
 // --- 默认提示词常量 ---
 const String defaultContinuePrompt = '请根据你上一次的回复继续补充或续写。';

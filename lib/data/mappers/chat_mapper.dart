@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart';
 
-import '../models/chat.dart' as domain;
-import '../models/enums.dart' as domain_enums;
-import '../models/context_config.dart';
-import '../models/xml_rule.dart';
+import '../../domain/models/chat.dart' as domain;
+import '../../domain/enums.dart' as domain_enums;
+import '../../domain/models/context_config.dart';
+import '../../domain/models/xml_rule.dart';
 
 import '../database/app_database.dart' as drift;
 

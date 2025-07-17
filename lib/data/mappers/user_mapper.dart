@@ -1,5 +1,5 @@
 import '../database/app_database.dart';
-import '../models/user.dart';
+import '../../domain/models/user.dart';
 
 /// 用户数据映射器
 ///

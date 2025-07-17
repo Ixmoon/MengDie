@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
-import '../../data/models/context_config.dart';
-import '../../data/models/xml_rule.dart';
-import '../../data/models/enums.dart';
+import '../../domain/models/context_config.dart';
+import '../../domain/models/xml_rule.dart';
+import '../../domain/enums.dart';
 
 // Note: GenerationConfigConverter is removed as its fields are now part of the ApiConfigs table.
 // Note: OpenAIAPIConfigConverter is removed for the same reason.

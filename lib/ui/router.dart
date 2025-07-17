@@ -5,7 +5,7 @@ import 'package:flutter/material.dart'; // for Scaffold
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
-import '../data/models/enums.dart'; // 导入枚举
+import '../domain/enums.dart'; // 导入枚举
 // 导入需要导航到的屏幕
 import 'screens/main_screen.dart';
 import 'screens/startup_screen.dart';
