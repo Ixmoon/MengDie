@@ -353,30 +353,72 @@ class ChatPageLogic {
 
   Future<void> saveAttachment(Message message) async {
     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-    if (message.parts.isEmpty) return;
+    
+    final attachments = message.parts.where((p) => p.base64Data != null && p.type != MessagePartType.text).toList();
 
-    final part = message.parts.first;
+    if (attachments.isEmpty) {
+      notifier.showTopMessage('没有可保存的附件', backgroundColor: Colors.orange);
+      return;
+    }
 
-    if (part.base64Data == null) {
+    MessagePart partToSave;
+    if (attachments.length > 1) {
+      final MessagePart? selectedPart = await showDialog<MessagePart>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('选择要保存的附件'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: attachments.length,
+              itemBuilder: (context, index) {
+                final part = attachments[index];
+                return ListTile(
+                  title: Text(part.fileName ?? '未命名文件 ${index + 1}'),
+                  subtitle: Text(part.mimeType ?? '未知类型'),
+                  onTap: () => Navigator.of(dialogContext).pop(part),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+      if (selectedPart == null) {
+        notifier.showTopMessage('已取消保存', backgroundColor: Colors.orange);
+        return;
+      }
+      partToSave = selectedPart;
+    } else {
+      partToSave = attachments.first;
+    }
+
+    if (partToSave.base64Data == null) {
       notifier.showTopMessage('无法保存：文件数据为空', backgroundColor: Colors.red);
       return;
     }
 
     String fileName;
-    if (part.type == MessagePartType.generatedImage) {
-      final promptText = part.text ?? 'generated_image';
+    if (partToSave.type == MessagePartType.generatedImage) {
+      final promptText = partToSave.text ?? 'generated_image';
       final sanitizedPrompt = promptText.replaceAll(RegExp(r'[\s\\/:*?"<>|]+'), '_');
       final snippet = sanitizedPrompt.substring(0, sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length);
       fileName = '${snippet}_${DateTime.now().millisecondsSinceEpoch}.png';
-    } else if (part.fileName == null) {
-      notifier.showTopMessage('无法保存：文件名丢失', backgroundColor: Colors.red);
-      return;
+    } else if (partToSave.fileName != null) {
+      fileName = partToSave.fileName!;
     } else {
-      fileName = part.fileName!;
+      final extension = extensionFromMime(partToSave.mimeType ?? 'application/octet-stream');
+      fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
     }
 
     try {
-      final bytes = base64Decode(part.base64Data!);
+      final bytes = base64Decode(partToSave.base64Data!);
       final String? savePath = await FilePicker.platform.saveFile(
         dialogTitle: '请选择保存位置',
         fileName: fileName,
