@@ -117,7 +117,7 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
                             return chat; // No change
                           }
                         }
-                        return chat.copyWith({'xmlRules': rules});
+                        return chat.copyWith(xmlRules: rules);
                       });
                       Navigator.pop(context);
                     } else {
@@ -298,9 +298,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
           controller: _titleController,
           decoration: const InputDecoration(labelText: '聊天标题', border: OutlineInputBorder()),
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith({
-              'title': value.isEmpty ? null : value
-            }));
+            notifier.updateSettings((c) => c.copyWith(
+              title: value.isEmpty ? null : value
+            ));
           },
         ),
         const SizedBox(height: 15),
@@ -325,9 +325,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                 if (newText != null) {
                   // 直接更新 controller 和 provider 状态
                   _systemPromptController.text = newText;
-                  notifier.updateSettings((c) => c.copyWith({
-                    'systemPrompt': newText.isEmpty ? null : newText
-                  }));
+                  notifier.updateSettings((c) => c.copyWith(
+                    systemPrompt: newText.isEmpty ? null : newText
+                  ));
                 }
               },
             ),
@@ -335,9 +335,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
           maxLines: 4,
           minLines: 2,
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith({
-              'systemPrompt': value.isEmpty ? null : value
-            }));
+            notifier.updateSettings((c) => c.copyWith(
+              systemPrompt: value.isEmpty ? null : value
+            ));
           },
         ),
         const SizedBox(height: 15),
@@ -362,9 +362,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                 );
                 if (newText != null) {
                   _continuePromptController.text = newText;
-                  notifier.updateSettings((c) => c.copyWith({
-                    'continuePrompt': newText.isEmpty ? null : newText
-                  }));
+                  notifier.updateSettings((c) => c.copyWith(
+                    continuePrompt: newText.isEmpty ? null : newText
+                  ));
                 }
               },
             ),
@@ -372,9 +372,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
           maxLines: 4,
           minLines: 2,
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith({
-              'continuePrompt': value.isEmpty ? null : value
-            }));
+            notifier.updateSettings((c) => c.copyWith(
+              continuePrompt: value.isEmpty ? null : value
+            ));
           },
         ),
       ],
@@ -421,7 +421,7 @@ class _ApiProviderSettings extends ConsumerWidget {
               child: Text(config.name),
             )).toList(),
             onChanged: (value) {
-              notifier.updateSettings((c) => c.copyWith({'apiConfigId': value}));
+              notifier.updateSettings((c) => c.copyWith(apiConfigId: value));
             },
           ),
       ],
@@ -453,7 +453,7 @@ class _ContextManagementSettings extends ConsumerWidget {
           )).toList(),
           onChanged: (value) {
             if (value != null) {
-              notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(mode: value)}));
+              notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(mode: value)));
             }
           },
         ),
@@ -464,7 +464,7 @@ class _ContextManagementSettings extends ConsumerWidget {
             initialValue: contextConfig.maxTurns.toString(),
             decoration: const InputDecoration(labelText: '最大对话轮数', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10)})),
+            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10))),
           ),
         if (contextConfig.mode == ContextManagementMode.tokens)
           TextFormField(
@@ -472,7 +472,7 @@ class _ContextManagementSettings extends ConsumerWidget {
             initialValue: contextConfig.maxContextTokens?.toString() ?? '',
             decoration: const InputDecoration(labelText: '最大 Tokens (可选)', hintText: '留空则不限制', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'contextConfig': contextConfig.copyWith(maxContextTokens: int.tryParse(value))})),
+            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxContextTokens: int.tryParse(value)))),
           ),
       ],
     );
@@ -532,7 +532,7 @@ class _XmlRulesSettings extends ConsumerWidget {
                       onPressed: () {
                         notifier.updateSettings((c) {
                           final rules = List<XmlRule>.from(c.xmlRules)..removeAt(index);
-                          return c.copyWith({'xmlRules': rules});
+                          return c.copyWith(xmlRules: rules);
                         });
                       },
                     ),
@@ -596,7 +596,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
           title: const Text('启用上下文总结 (前处理)'),
           subtitle: const Text('在回复后，对被遗忘的旧消息进行总结'),
           value: chat.enablePreprocessing,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enablePreprocessing': value})),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enablePreprocessing: value)),
         ),
         if (chat.enablePreprocessing)
           Padding(
@@ -622,9 +622,9 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                     );
                     if (newText != null) {
                       _preprocessingPromptController.text = newText;
-                      notifier.updateSettings((c) => c.copyWith({
-                        'preprocessingPrompt': newText.isEmpty ? null : newText
-                      }));
+                      notifier.updateSettings((c) => c.copyWith(
+                        preprocessingPrompt: newText.isEmpty ? null : newText
+                      ));
                     }
                   },
                 ),
@@ -632,9 +632,9 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               maxLines: 3,
               minLines: 1,
               onChanged: (value) {
-                notifier.updateSettings((c) => c.copyWith({
-                  'preprocessingPrompt': value.isEmpty ? null : value
-                }));
+                notifier.updateSettings((c) => c.copyWith(
+                  preprocessingPrompt: value.isEmpty ? null : value
+                ));
               },
             ),
           ),
@@ -658,14 +658,14 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   child: Text(config.name),
                 )),
               ],
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'preprocessingApiConfigId': value})),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: value)),
             ),
          ),
         SwitchListTile(
           title: const Text('启用附加XML生成'),
           subtitle: const Text('在回复后，使用附加提示词生成额外XML内容'),
           value: chat.enableSecondaryXml,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enableSecondaryXml': value})),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
         ),
         if (chat.enableSecondaryXml)
           Padding(
@@ -691,9 +691,9 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                     );
                     if (newText != null) {
                       _secondaryXmlPromptController.text = newText;
-                      notifier.updateSettings((c) => c.copyWith({
-                        'secondaryXmlPrompt': newText.isEmpty ? null : newText
-                      }));
+                      notifier.updateSettings((c) => c.copyWith(
+                        secondaryXmlPrompt: newText.isEmpty ? null : newText
+                      ));
                     }
                   },
                 ),
@@ -701,9 +701,9 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               maxLines: 3,
               minLines: 1,
               onChanged: (value) {
-                notifier.updateSettings((c) => c.copyWith({
-                  'secondaryXmlPrompt': value.isEmpty ? null : value
-                }));
+                notifier.updateSettings((c) => c.copyWith(
+                  secondaryXmlPrompt: value.isEmpty ? null : value
+                ));
               },
             ),
           ),
@@ -727,7 +727,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   child: Text(config.name),
                 )),
               ],
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'secondaryXmlApiConfigId': value})),
+              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: value)),
             ),
          ),
       ],
@@ -778,7 +778,7 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
           title: const Text('启用“帮我回复”'),
           subtitle: const Text('根据对话上下文，生成多个回复选项'),
           value: chat.enableHelpMeReply,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'enableHelpMeReply': value})),
+          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableHelpMeReply: value)),
         ),
         if (chat.enableHelpMeReply)
           Padding(
@@ -807,9 +807,9 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                         );
                         if (newText != null) {
                           _promptController.text = newText;
-                          notifier.updateSettings((c) => c.copyWith({
-                            'helpMeReplyPrompt': newText.isEmpty ? null : newText,
-                          }));
+                          notifier.updateSettings((c) => c.copyWith(
+                            helpMeReplyPrompt: newText.isEmpty ? null : newText,
+                          ));
                         }
                       },
                     ),
@@ -817,9 +817,9 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                   maxLines: 3,
                   minLines: 1,
                   onChanged: (value) {
-                    notifier.updateSettings((c) => c.copyWith({
-                      'helpMeReplyPrompt': value.isEmpty ? null : value,
-                    }));
+                    notifier.updateSettings((c) => c.copyWith(
+                      helpMeReplyPrompt: value.isEmpty ? null : value,
+                    ));
                   },
                 ),
                 const SizedBox(height: 15),
@@ -843,7 +843,7 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                         child: Text(config.name),
                       )),
                     ],
-                    onChanged: (value) => notifier.updateSettings((c) => c.copyWith({'helpMeReplyApiConfigId': value})),
+                    onChanged: (value) => notifier.updateSettings((c) => c.copyWith(helpMeReplyApiConfigId: value)),
                   ),
                 const SizedBox(height: 15),
                 Text('触发模式', style: Theme.of(context).textTheme.bodyLarge),
@@ -855,7 +855,7 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                   ],
                   selected: {chat.helpMeReplyTriggerMode},
                   onSelectionChanged: (newSelection) {
-                    notifier.updateSettings((c) => c.copyWith({'helpMeReplyTriggerMode': newSelection.first}));
+                    notifier.updateSettings((c) => c.copyWith(helpMeReplyTriggerMode: newSelection.first));
                   },
                   showSelectedIcon: false,
                   style: ButtonStyle(

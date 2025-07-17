@@ -18,8 +18,8 @@ import 'daos/user_dao.dart'; // Import user DAO
 
 // Import type converters and models for them
 import 'type_converters.dart';
-import 'models/drift_context_config.dart';
-import 'models/drift_xml_rule.dart';
+import '../models/context_config.dart';
+import '../models/xml_rule.dart';
 import '../models/enums.dart';
 // path_provider and path are only needed in native.dart now.
 

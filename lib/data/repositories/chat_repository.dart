@@ -4,7 +4,7 @@ import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/chat.dart';
-import '../models/export_import_dtos.dart';
+import '../models/message.dart';
 import '../mappers/user_mapper.dart';
 
 import '../database/app_database.dart';
@@ -175,10 +175,10 @@ class ChatRepository {
     });
   }
 
-  // --- 导入聊天 ---
-  Future<int> importChat(ChatExportDto chatDto, {int? parentFolderId}) async {
-    debugPrint("ChatRepository: 开始导入聊天: ${chatDto.title ?? '无标题'} 到文件夹 ID: $parentFolderId (Drift)...");
-    final newChatId = await _chatDao.importChatFromDto(chatDto, _db, parentFolderId: parentFolderId);
+  // --- 导入聊天 (已重构) ---
+  Future<int> importChat(Chat chat, {int? parentFolderId}) async {
+    debugPrint("ChatRepository: 开始导入聊天: ${chat.title ?? '无标题'} 到文件夹 ID: $parentFolderId (Drift)...");
+    final newChatId = await _chatDao.importChat(chat, _db, parentFolderId: parentFolderId);
     await _bindItemToCurrentUser(newChatId);
     return newChatId;
   }
@@ -222,15 +222,15 @@ class ChatRepository {
     final now = DateTime.now();
 
     // 使用 copyWith 创建一个新实例，并重置关键字段
-    final newChat = templateChat.copyWith({
-      'id': 0, // 关键：重置ID以创建新记录
-      'title': templateChat.title ?? "无标题", // 使用模板的原始标题
-      'createdAt': now, // 关键：设置为当前时间
-      'updatedAt': now, // 关键：设置为当前时间
-      'parentFolderId': parentFolderId, // 关键：设置新的父文件夹ID
-      'orderIndex': null, // 确保新聊天置顶
-      'backgroundImagePath': null, // 关键：从模板创建的聊天不是模板
-    });
+    final newChat = templateChat.copyWith(
+      id: 0, // 关键：重置ID以创建新记录
+      title: templateChat.title ?? "无标题", // 使用模板的原始标题
+      createdAt: now, // 关键：设置为当前时间
+      updatedAt: now, // 关键：设置为当前时间
+      parentFolderId: parentFolderId, // 关键：设置新的父文件夹ID
+      orderIndex: null, // 确保新聊天置顶
+      backgroundImagePath: null, // 关键：从模板创建的聊天不是模板
+    );
 
     // saveChat 将自动处理用户绑定
     return await saveChat(newChat);
@@ -253,16 +253,16 @@ class ChatRepository {
     final now = DateTime.now();
 
     // 使用 copyWith 创建一个新实例，并重置关键字段
-    final newChat = originalChat.copyWith({
-      'id': 0, // 关键：重置ID以创建新记录
-      'title': newTitle,
-      'createdAt': now,
-      'updatedAt': now,
-      'parentFolderId': null, // 总是克隆到根目录
-      'orderIndex': null, // 确保克隆体置顶
-      'contextSummary': null, // 清空上下文摘要
-      'backgroundImagePath': asTemplate ? '/template/chat' : null, // 新的模板逻辑
-    });
+    final newChat = originalChat.copyWith(
+      id: 0, // 关键：重置ID以创建新记录
+      title: newTitle,
+      createdAt: now,
+      updatedAt: now,
+      parentFolderId: null, // 总是克隆到根目录
+      orderIndex: null, // 确保克隆体置顶
+      contextSummary: null, // 清空上下文摘要
+      backgroundImagePath: asTemplate ? '/template/chat' : null, // 新的模板逻辑
+    );
     
     // 直接保存这个新的Chat对象，它将不包含任何消息
     return await saveChat(newChat);

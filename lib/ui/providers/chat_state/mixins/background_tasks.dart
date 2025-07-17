@@ -135,11 +135,11 @@ mixin BackgroundTasks on UiStateManager {
       final newParts = [MessagePart.text(displayText)];
 
       // Return a new message object with all final values, ready to be saved.
-      return initialMessage.copyWith({
-        'parts': newParts,
-        'originalXmlContent': initialXml,
-        'secondaryXmlContent': newSecondaryXmlContent,
-      });
+      return initialMessage.copyWith(
+        parts: newParts,
+        originalXmlContent: initialXml,
+        secondaryXmlContent: newSecondaryXmlContent,
+      );
     }
 
     /// Executes the new, robust summarization process for dropped messages.
@@ -170,7 +170,7 @@ mixin BackgroundTasks on UiStateManager {
       if (droppedMessagesAfter.isEmpty) {
         debugPrint("ChatStateNotifier($chatId): No messages are dropped. Clearing summary if it exists.");
         if (chat.contextSummary != null) {
-          await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
+          await chatRepo.saveChat(chat.copyWith(contextSummary: null));
         }
         return;
       }
@@ -265,7 +265,7 @@ mixin BackgroundTasks on UiStateManager {
 
       if (finalSummary.isNotEmpty) {
         // We are performing a full replacement of the old summary with the new one.
-        await chatRepo.saveChat(chat.copyWith({'contextSummary': finalSummary}));
+        await chatRepo.saveChat(chat.copyWith(contextSummary: finalSummary));
         debugPrint("ChatStateNotifier($chatId): Intelligent merge summarization successful. New summary saved.");
       } else {
         debugPrint("ChatStateNotifier($chatId): Summarization resulted in an empty summary. Nothing to save.");
@@ -367,7 +367,7 @@ mixin BackgroundTasks on UiStateManager {
           final chatRepo = ref.read(chatRepositoryProvider);
           final currentChat = await chatRepo.getChat(chatId);
           if (currentChat != null && mounted && !state.isCancelled) {
-            await chatRepo.saveChat(currentChat.copyWith({'title': newTitle}));
+            await chatRepo.saveChat(currentChat.copyWith(title: newTitle));
             debugPrint("ChatStateNotifier($chatId): Auto title generation successful. New title: $newTitle");
           }
         } else {

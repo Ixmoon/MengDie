@@ -2,46 +2,11 @@ import 'package:drift/drift.dart';
 
 import '../models/chat.dart' as domain;
 import '../models/enums.dart' as domain_enums;
-import '../models/context_config.dart' as domain_context;
-import '../models/xml_rule.dart' as domain_xml;
+import '../models/context_config.dart';
+import '../models/xml_rule.dart';
 
 import '../database/app_database.dart' as drift;
-import '../database/models/drift_context_config.dart' as drift_context;
-import '../database/models/drift_xml_rule.dart' as drift_xml;
 
-class ContextConfigMapper {
-  static domain_context.ContextConfig fromDrift(drift_context.DriftContextConfig driftConfig) {
-    return domain_context.ContextConfig(
-      mode: driftConfig.mode,
-      maxTurns: driftConfig.maxTurns,
-      maxContextTokens: driftConfig.maxContextTokens,
-    );
-  }
-
-  static drift_context.DriftContextConfig toDrift(domain_context.ContextConfig domainConfig) {
-    return drift_context.DriftContextConfig(
-      mode: domainConfig.mode,
-      maxTurns: domainConfig.maxTurns,
-      maxContextTokens: domainConfig.maxContextTokens,
-    );
-  }
-}
-
-class XmlRuleMapper {
-  static domain_xml.XmlRule fromDrift(drift_xml.DriftXmlRule driftRule) {
-    return domain_xml.XmlRule(
-      tagName: driftRule.tagName,
-      action: driftRule.action,
-    );
-  }
-
-  static drift_xml.DriftXmlRule toDrift(domain_xml.XmlRule domainRule) {
-    return drift_xml.DriftXmlRule(
-      tagName: domainRule.tagName,
-      action: domainRule.action,
-    );
-  }
-}
 
 class ChatMapper {
   static domain.Chat fromData(drift.ChatData data) {
@@ -57,8 +22,8 @@ class ChatMapper {
       isFolder: data.isFolder ?? false,
       parentFolderId: data.parentFolderId,
       apiConfigId: data.apiConfigId,
-      contextConfig: ContextConfigMapper.fromDrift(data.contextConfig),
-      xmlRules: data.xmlRules.map(XmlRuleMapper.fromDrift).toList(),
+      contextConfig: data.contextConfig, // Direct assignment
+      xmlRules: data.xmlRules, // Direct assignment
       enablePreprocessing: data.enablePreprocessing ?? false,
       preprocessingPrompt: data.preprocessingPrompt,
       contextSummary: data.contextSummary,
@@ -89,8 +54,8 @@ class ChatMapper {
       isFolder: Value(chat.isFolder),
       parentFolderId: Value(chat.parentFolderId),
       apiConfigId: Value(chat.apiConfigId),
-      contextConfig: Value(ContextConfigMapper.toDrift(chat.contextConfig)),
-      xmlRules: Value(chat.xmlRules.map(XmlRuleMapper.toDrift).toList()),
+      contextConfig: Value(chat.contextConfig), // Direct assignment
+      xmlRules: Value(chat.xmlRules), // Direct assignment
       enablePreprocessing: Value(chat.enablePreprocessing),
       preprocessingPrompt: Value(chat.preprocessingPrompt),
       contextSummary: Value(chat.contextSummary),

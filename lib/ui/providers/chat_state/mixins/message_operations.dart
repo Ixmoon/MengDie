@@ -43,7 +43,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
             final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
 
             if (isMessageInSummarizedScope) {
-              await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
+              await chatRepo.saveChat(chat.copyWith(contextSummary: null));
               debugPrint("ChatStateNotifier($chatId): 因被删除的消息在摘要范围内，已清除上下文摘要。");
             } else {
               debugPrint("ChatStateNotifier($chatId): 被删除的消息不在摘要范围内，保留上下文摘要。");
@@ -75,11 +75,11 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
           return;
         }
         if (newParts != null) {
-          messageToSave = message.copyWith({'parts': newParts});
+          messageToSave = message.copyWith(parts: newParts);
         } else if (newText != null) {
           final updatedParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
           updatedParts.insert(0, MessagePart.text(newText));
-          messageToSave = message.copyWith({'parts': updatedParts});
+          messageToSave = message.copyWith(parts: updatedParts);
         } else {
           return; // Nothing to update
         }
@@ -102,7 +102,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
           final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
 
           if (isMessageInSummarizedScope) {
-            await chatRepo.saveChat(chat.copyWith({'contextSummary': null}));
+            await chatRepo.saveChat(chat.copyWith(contextSummary: null));
             debugPrint("ChatStateNotifier($chatId): 因被编辑的消息在摘要范围内，已清除上下文摘要。");
           } else {
             debugPrint("ChatStateNotifier($chatId): 被编辑的消息不在摘要范围内，保留上下文摘要。");

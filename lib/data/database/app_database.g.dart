@@ -76,17 +76,16 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
       'parent_folder_id', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
   @override
-  late final GeneratedColumnWithTypeConverter<DriftContextConfig, String>
+  late final GeneratedColumnWithTypeConverter<ContextConfig, String>
       contextConfig = GeneratedColumn<String>(
               'context_config', aliasedName, false,
               type: DriftSqlType.string, requiredDuringInsert: true)
-          .withConverter<DriftContextConfig>(
-              $ChatsTable.$convertercontextConfig);
+          .withConverter<ContextConfig>($ChatsTable.$convertercontextConfig);
   @override
-  late final GeneratedColumnWithTypeConverter<List<DriftXmlRule>, String>
-      xmlRules = GeneratedColumn<String>('xml_rules', aliasedName, false,
+  late final GeneratedColumnWithTypeConverter<List<XmlRule>, String> xmlRules =
+      GeneratedColumn<String>('xml_rules', aliasedName, false,
               type: DriftSqlType.string, requiredDuringInsert: true)
-          .withConverter<List<DriftXmlRule>>($ChatsTable.$converterxmlRules);
+          .withConverter<List<XmlRule>>($ChatsTable.$converterxmlRules);
   static const VerificationMeta _apiConfigIdMeta =
       const VerificationMeta('apiConfigId');
   @override
@@ -412,9 +411,9 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     return $ChatsTable(attachedDatabase, alias);
   }
 
-  static TypeConverter<DriftContextConfig, String> $convertercontextConfig =
+  static TypeConverter<ContextConfig, String> $convertercontextConfig =
       const ContextConfigConverter();
-  static TypeConverter<List<DriftXmlRule>, String> $converterxmlRules =
+  static TypeConverter<List<XmlRule>, String> $converterxmlRules =
       const XmlRuleListConverter();
   static TypeConverter<HelpMeReplyTriggerMode?, String?>
       $converterhelpMeReplyTriggerMode =
@@ -432,8 +431,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final int? orderIndex;
   final bool? isFolder;
   final int? parentFolderId;
-  final DriftContextConfig contextConfig;
-  final List<DriftXmlRule> xmlRules;
+  final ContextConfig contextConfig;
+  final List<XmlRule> xmlRules;
   final String? apiConfigId;
   final bool? enablePreprocessing;
   final String? preprocessingPrompt;
@@ -639,9 +638,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       orderIndex: serializer.fromJson<int?>(json['orderIndex']),
       isFolder: serializer.fromJson<bool?>(json['isFolder']),
       parentFolderId: serializer.fromJson<int?>(json['parentFolderId']),
-      contextConfig:
-          serializer.fromJson<DriftContextConfig>(json['contextConfig']),
-      xmlRules: serializer.fromJson<List<DriftXmlRule>>(json['xmlRules']),
+      contextConfig: serializer.fromJson<ContextConfig>(json['contextConfig']),
+      xmlRules: serializer.fromJson<List<XmlRule>>(json['xmlRules']),
       apiConfigId: serializer.fromJson<String?>(json['apiConfigId']),
       enablePreprocessing:
           serializer.fromJson<bool?>(json['enablePreprocessing']),
@@ -680,8 +678,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'orderIndex': serializer.toJson<int?>(orderIndex),
       'isFolder': serializer.toJson<bool?>(isFolder),
       'parentFolderId': serializer.toJson<int?>(parentFolderId),
-      'contextConfig': serializer.toJson<DriftContextConfig>(contextConfig),
-      'xmlRules': serializer.toJson<List<DriftXmlRule>>(xmlRules),
+      'contextConfig': serializer.toJson<ContextConfig>(contextConfig),
+      'xmlRules': serializer.toJson<List<XmlRule>>(xmlRules),
       'apiConfigId': serializer.toJson<String?>(apiConfigId),
       'enablePreprocessing': serializer.toJson<bool?>(enablePreprocessing),
       'preprocessingPrompt': serializer.toJson<String?>(preprocessingPrompt),
@@ -713,8 +711,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           Value<int?> orderIndex = const Value.absent(),
           Value<bool?> isFolder = const Value.absent(),
           Value<int?> parentFolderId = const Value.absent(),
-          DriftContextConfig? contextConfig,
-          List<DriftXmlRule>? xmlRules,
+          ContextConfig? contextConfig,
+          List<XmlRule>? xmlRules,
           Value<String?> apiConfigId = const Value.absent(),
           Value<bool?> enablePreprocessing = const Value.absent(),
           Value<String?> preprocessingPrompt = const Value.absent(),
@@ -952,8 +950,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<int?> orderIndex;
   final Value<bool?> isFolder;
   final Value<int?> parentFolderId;
-  final Value<DriftContextConfig> contextConfig;
-  final Value<List<DriftXmlRule>> xmlRules;
+  final Value<ContextConfig> contextConfig;
+  final Value<List<XmlRule>> xmlRules;
   final Value<String?> apiConfigId;
   final Value<bool?> enablePreprocessing;
   final Value<String?> preprocessingPrompt;
@@ -1005,8 +1003,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.orderIndex = const Value.absent(),
     this.isFolder = const Value.absent(),
     this.parentFolderId = const Value.absent(),
-    required DriftContextConfig contextConfig,
-    required List<DriftXmlRule> xmlRules,
+    required ContextConfig contextConfig,
+    required List<XmlRule> xmlRules,
     this.apiConfigId = const Value.absent(),
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
@@ -1099,8 +1097,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<int?>? orderIndex,
       Value<bool?>? isFolder,
       Value<int?>? parentFolderId,
-      Value<DriftContextConfig>? contextConfig,
-      Value<List<DriftXmlRule>>? xmlRules,
+      Value<ContextConfig>? contextConfig,
+      Value<List<XmlRule>>? xmlRules,
       Value<String?>? apiConfigId,
       Value<bool?>? enablePreprocessing,
       Value<String?>? preprocessingPrompt,
@@ -3641,8 +3639,8 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<int?> orderIndex,
   Value<bool?> isFolder,
   Value<int?> parentFolderId,
-  required DriftContextConfig contextConfig,
-  required List<DriftXmlRule> xmlRules,
+  required ContextConfig contextConfig,
+  required List<XmlRule> xmlRules,
   Value<String?> apiConfigId,
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
@@ -3668,8 +3666,8 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<int?> orderIndex,
   Value<bool?> isFolder,
   Value<int?> parentFolderId,
-  Value<DriftContextConfig> contextConfig,
-  Value<List<DriftXmlRule>> xmlRules,
+  Value<ContextConfig> contextConfig,
+  Value<List<XmlRule>> xmlRules,
   Value<String?> apiConfigId,
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
@@ -3745,12 +3743,12 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
       column: $table.parentFolderId,
       builder: (column) => ColumnFilters(column));
 
-  ColumnWithTypeConverterFilters<DriftContextConfig, DriftContextConfig, String>
+  ColumnWithTypeConverterFilters<ContextConfig, ContextConfig, String>
       get contextConfig => $composableBuilder(
           column: $table.contextConfig,
           builder: (column) => ColumnWithTypeConverterFilters(column));
 
-  ColumnWithTypeConverterFilters<List<DriftXmlRule>, List<DriftXmlRule>, String>
+  ColumnWithTypeConverterFilters<List<XmlRule>, List<XmlRule>, String>
       get xmlRules => $composableBuilder(
           column: $table.xmlRules,
           builder: (column) => ColumnWithTypeConverterFilters(column));
@@ -3971,11 +3969,11 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumn<int> get parentFolderId => $composableBuilder(
       column: $table.parentFolderId, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<DriftContextConfig, String>
-      get contextConfig => $composableBuilder(
+  GeneratedColumnWithTypeConverter<ContextConfig, String> get contextConfig =>
+      $composableBuilder(
           column: $table.contextConfig, builder: (column) => column);
 
-  GeneratedColumnWithTypeConverter<List<DriftXmlRule>, String> get xmlRules =>
+  GeneratedColumnWithTypeConverter<List<XmlRule>, String> get xmlRules =>
       $composableBuilder(column: $table.xmlRules, builder: (column) => column);
 
   GeneratedColumn<String> get apiConfigId => $composableBuilder(
@@ -4073,8 +4071,8 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<int?> orderIndex = const Value.absent(),
             Value<bool?> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
-            Value<DriftContextConfig> contextConfig = const Value.absent(),
-            Value<List<DriftXmlRule>> xmlRules = const Value.absent(),
+            Value<ContextConfig> contextConfig = const Value.absent(),
+            Value<List<XmlRule>> xmlRules = const Value.absent(),
             Value<String?> apiConfigId = const Value.absent(),
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
@@ -4128,8 +4126,8 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<int?> orderIndex = const Value.absent(),
             Value<bool?> isFolder = const Value.absent(),
             Value<int?> parentFolderId = const Value.absent(),
-            required DriftContextConfig contextConfig,
-            required List<DriftXmlRule> xmlRules,
+            required ContextConfig contextConfig,
+            required List<XmlRule> xmlRules,
             Value<String?> apiConfigId = const Value.absent(),
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
