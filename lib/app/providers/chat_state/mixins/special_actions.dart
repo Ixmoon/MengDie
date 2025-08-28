@@ -4,14 +4,14 @@ import 'package:flutter/material.dart'; // For Color
 import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart'; // For MessageRole and HelpMeReplyTriggerMode
-import '../../../../data/llmapi/llm_service.dart';
-import '../../../tools/context_xml_service.dart';
+import '../../../services/llm_coordinator_service.dart';
 import '../../../../ui/screens/chat_settings_screen.dart' show defaultHelpMeReplyPrompt;
 import '../../settings_providers.dart';
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
-import '../../../repositories/message_repository.dart';
+import '../../repository_providers.dart';
 import '../special_action_type.dart';
+
 mixin SpecialActions on StateNotifier<ChatScreenState> {
     // Abstract dependencies that must be implemented by the class using this mixin.
     Ref get ref;
@@ -69,54 +69,28 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         startUpdateTimer();
 
         try {
-            final llmService = ref.read(llmServiceProvider);
-            final contextXmlService = ref.read(contextXmlServiceProvider);
+            final coordinator = ref.read(llmCoordinatorProvider);
             final apiConfig = getEffectiveApiConfig();
 
-            // 2. Build context-aware request
-            final apiRequestContext = await contextXmlService.buildApiRequestContext(
+            final parts = await coordinator.generateImage(
               chatId: chatId,
-              currentUserMessage: userMessage,
-              keepAsSystemPrompt: true, // Keep system prompt for context
+              userMessage: userMessage,
+              apiConfig: apiConfig,
             );
 
-            final response = await llmService.generateImage(
-              llmContext: apiRequestContext.contextParts,
-              apiConfig: apiConfig
-            );
+            if (!mounted || state.isCancelled) return;
 
-            if (!mounted || state.isCancelled) {
-                return;
-            }
-
-            // 3. Process response
-            if (response.isSuccess && (response.base64Images.isNotEmpty || (response.text?.isNotEmpty ?? false))) {
-                List<MessagePart> parts = [];
-                if (response.text != null && response.text!.isNotEmpty) {
-                    parts.add(MessagePart.text(response.text!));
-                }
-                if (response.base64Images.isNotEmpty) {
-                    parts.addAll(response.base64Images.map(
-                        (base64) => MessagePart.generatedImage(
-                            base64Data: base64,
-                            prompt: userMessage.rawText,
-                        ),
-                    ));
-                }
-
-                if (parts.isNotEmpty) {
-                    final modelMessage = Message(
-                        chatId: chatId,
-                        role: MessageRole.model,
-                        parts: parts,
-                    );
-                    await messageRepo.saveMessage(modelMessage);
-                }
-                
+            if (parts.isNotEmpty) {
+                final modelMessage = Message(
+                    chatId: chatId,
+                    role: MessageRole.model,
+                    parts: parts,
+                );
+                await messageRepo.saveMessage(modelMessage);
                 showTopMessage('生成成功', backgroundColor: Colors.green);
-
             } else {
-                showTopMessage(response.error ?? "图片生成失败", backgroundColor: Colors.red);
+                // This case should ideally not be reached if coordinator throws an exception on failure.
+                showTopMessage("图片生成失败 (返回内容为空)", backgroundColor: Colors.red);
             }
         } catch (e) {
             if (mounted) {
@@ -260,53 +234,31 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         required SpecialActionType actionType,
         required Message targetMessage,
     }) async {
-        const maxRetries = 3;
-        final chat = ref.read(currentChatProvider(chatId)).value;
-        if (chat == null) {
-            throw Exception('无法执行操作：聊天数据未加载');
-        }
-
-        final contextXmlService = ref.read(contextXmlServiceProvider);
-        final llmService = ref.read(llmServiceProvider);
-
-        final apiRequestContext = await contextXmlService.buildApiRequestContext(
-            chatId: chatId,
-            currentUserMessage: targetMessage,
-            chatSystemPromptOverride: prompt,
-            lastMessageOverride: prompt,
-            keepAsSystemPrompt: false,
+      if (state.isCancelled) {
+        throw Exception("Operation cancelled by user.");
+      }
+      
+      final coordinator = ref.read(llmCoordinatorProvider);
+      
+      try {
+        final result = await coordinator.executeSpecialAction(
+          chatId: chatId,
+          prompt: prompt,
+          apiConfig: apiConfig,
+          targetMessage: targetMessage,
         );
-
-        for (int attempt = 1; attempt <= maxRetries; attempt++) {
-            if (state.isCancelled) {
-                throw Exception("Operation cancelled by user.");
-            }
-
-            try {
-                final response = await llmService.sendMessageOnce(
-                    llmContext: apiRequestContext.contextParts,
-                    apiConfig: apiConfig,
-                );
-
-                if (!mounted || state.isCancelled) {
-                    throw Exception("Operation cancelled by user.");
-                }
-
-                if (response.isSuccess && response.parts.isNotEmpty) {
-                    final generatedText = response.parts.map((p) => p.text ?? "").join("\n");
-                    debugPrint("ChatStateNotifier($chatId): Special action '$actionType' successful on attempt $attempt.");
-                    return generatedText;
-                } else {
-                    throw Exception("API Error: ${response.error ?? 'Empty response'}");
-                }
-            } catch (e) {
-                debugPrint("ChatStateNotifier($chatId): Special action '$actionType' attempt $attempt/$maxRetries failed: $e");
-                if (attempt == maxRetries || state.isCancelled) {
-                    rethrow;
-                }
-                await Future.delayed(Duration(seconds: attempt * 2));
-            }
+        if (!mounted || state.isCancelled) {
+          throw Exception("Operation cancelled by user.");
         }
-        throw Exception("Special action '$actionType' failed after $maxRetries attempts.");
+        debugPrint("ChatStateNotifier($chatId): Special action '$actionType' successful.");
+        return result;
+      } catch (e) {
+        if (!mounted || state.isCancelled) {
+          debugPrint("ChatStateNotifier($chatId): Special action '$actionType' failed due to cancellation.");
+        } else {
+          debugPrint("ChatStateNotifier($chatId): Special action '$actionType' failed: $e");
+        }
+        rethrow;
+      }
     }
 }

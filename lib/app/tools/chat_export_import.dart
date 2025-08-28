@@ -13,7 +13,6 @@ import 'package:exif/exif.dart'; // 读写 EXIF
 // 导入模型、DTO 和仓库
 import '../../domain/models/models.dart';
 import '../repositories/chat_repository.dart';
-import '../repositories/message_repository.dart';
 import '../providers/repository_providers.dart';
 
 // --- Service Provider ---

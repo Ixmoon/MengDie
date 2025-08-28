@@ -4,16 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/message.dart';
-import '../../../../domain/enums.dart'; // Added import for MessageRole
+import '../../../../domain/enums.dart';
 import '../../../../data/llmapi/llm_models.dart';
-import '../../../../data/llmapi/llm_service.dart';
+import '../../../services/llm_coordinator_service.dart';
 import '../../../../domain/models/chat.dart';
 import '../../repository_providers.dart';
-import '../../../repositories/message_repository.dart';
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
-
-import '../../../tools/context_xml_service.dart';
 
 mixin GenerationLogic on StateNotifier<ChatScreenState> {
     // Abstract properties to be implemented by the main class
@@ -43,7 +40,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   
       final allMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
       
-      // 1. 检查是否可以重新生成
       final messageIndex = allMessages.indexWhere((m) => m.id == userMessage.id);
       final isLastUserMsg = userMessage.role == MessageRole.user &&
           messageIndex >= 0 &&
@@ -60,9 +56,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         return;
       }
   
-      await cancelGeneration(); // 确保之前的任何生成都已停止
+      await cancelGeneration();
   
-      // 2. 删除之前的模型回复
       try {
         final messageRepo = ref.read(messageRepositoryProvider);
         List<int> messagesToDelete = [];
@@ -77,7 +72,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           for (final msgId in messagesToDelete) {
             await messageRepo.deleteMessage(msgId);
           }
-          // 短暂延迟以确保数据库更新反映到流中
           await Future.delayed(const Duration(milliseconds: 100));
         }
       } catch (e) {
@@ -87,14 +81,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   
       if (!mounted) return;
   
-      // 3. 根据当前模式调用正确的生成方法
-      clearHelpMeReplySuggestions(); // Clear suggestions before regenerating
+      clearHelpMeReplySuggestions();
       
       if (state.isImageGenerationMode) {
-        // 调用图片生成逻辑
         await (this as dynamic).generateImage(userMessage);
       } else {
-        // 调用文本生成逻辑
         await sendMessage(userMessage: userMessage, isRegeneration: true);
       }
     }
@@ -123,7 +114,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     int? messageToUpdateId,
     String? apiConfigIdOverride,
   }) async {
-    // Branch for image generation
     if (state.isImageGenerationMode && !isRegeneration && !isContinuation) {
       if (userParts != null && userParts.isNotEmpty) {
         final userMessage = Message(
@@ -131,7 +121,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           role: MessageRole.user,
           parts: userParts,
         );
-        // Save user message before calling generateImage
         final messageRepo = ref.read(messageRepositoryProvider);
         await messageRepo.saveMessage(userMessage);
         await (this as dynamic).generateImage(userMessage);
@@ -144,18 +133,17 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return;
     }
     
-    // Reset the cancellation state for this new request.
     if (state.isCancelled) {
       state = state.copyWith(isCancelled: false);
     }
     
+    final apiConfig = getEffectiveApiConfig(specificConfigId: apiConfigIdOverride);
     final chat = ref.read(currentChatProvider(chatId)).value;
     if (chat == null) {
       showTopMessage('无法发送消息：聊天数据未加载。', backgroundColor: Colors.red);
       return;
     }
 
-    // Determine the message to send for context, and the list of messages to save
     Message messageForContext;
     List<Message> messagesToSave = [];
 
@@ -168,8 +156,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       messageForContext = allMessages.last;
       debugPrint("续写操作，使用现有历史作为上下文。");
     } else if (userParts != null && userParts.isNotEmpty) {
-      // A single user turn can contain multiple parts (e.g., text and an image).
-      // These should be combined into a single Message object to represent one turn.
       final userMessage = Message(
         chatId: chatId,
         role: MessageRole.user,
@@ -181,25 +167,23 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return; // Nothing to send
     }
 
-    // --- Start loading state ---
     state = state.copyWith(
-        isLoading: true, // Master lock ON
-        isPrimaryResponseLoading: true, // Primary response lock ON
-        isCancelled: false, // Ensure cancellation is reset when starting
+        isLoading: true,
+        isPrimaryResponseLoading: true,
+        isCancelled: false,
         clearError: true,
         clearTopMessage: true,
         clearStreaming: true,
         clearHelpMeReplySuggestions: true,
-        clearStreamingMessage: true, // Clear any previous leftovers
+        clearStreamingMessage: true,
         generationStartTime: DateTime.now(),
     );
     startUpdateTimer();
     
-    // --- Save new user messages (if not regenerating or continuing) ---
     if (!isRegeneration && !isContinuation) {
       try {
         final messageRepo = ref.read(messageRepositoryProvider);
-        await messageRepo.saveMessages(messagesToSave); // Batch save
+        await messageRepo.saveMessages(messagesToSave);
         final chatRepo = ref.read(chatRepositoryProvider);
         await chatRepo.saveChat(chat.copyWith(updatedAt: DateTime.now()));
         debugPrint("用户发送的 ${messagesToSave.length} 条原子消息已保存。");
@@ -214,65 +198,39 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       }
     }
 
-    // --- Build API context ---
-    List<LlmContent> llmApiContext;
-    String? carriedOverXmlForThisTurn;
+    String? lastMessageOverride;
+    if (promptOverride != null) {
+      lastMessageOverride = promptOverride;
+      debugPrint("sendMessage: 使用了 promptOverride。");
+    } else if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
+      lastMessageOverride = chat.continuePrompt;
+      debugPrint("续写操作：将续写提示词作为最后的用户消息。");
+    }
+
     try {
-      final contextXmlService = ref.read(contextXmlServiceProvider);
-      
-      String? lastMessageOverride;
-
-      if (promptOverride != null) {
-        lastMessageOverride = promptOverride;
-        debugPrint("sendMessage: 使用了 promptOverride。");
-      } else if (isContinuation && (chat.continuePrompt?.isNotEmpty ?? false)) {
-        lastMessageOverride = chat.continuePrompt;
-        // For continuation, we keep the original system prompt.
-        // The line clearing it has been removed.
-        debugPrint("续写操作：将续写提示词作为最后的用户消息。");
+      if (state.isStreamMode) {
+          await _handleStreamResponse(apiConfig, messageForContext, lastMessageOverride, messageToUpdateId: messageToUpdateId);
+      } else {
+          await _handleSingleResponse(apiConfig, messageForContext, lastMessageOverride, messageToUpdateId: messageToUpdateId);
       }
-
-      final apiRequestContext = await contextXmlService.buildApiRequestContext(
-        chatId: chatId,
-        currentUserMessage: messageForContext, // Pass the representative message for context
-        lastMessageOverride: lastMessageOverride,
-        // For standard chat, regeneration, and continuation, always keep the original system prompt.
-        keepAsSystemPrompt: true,
-      );
-      
-      llmApiContext = apiRequestContext.contextParts;
-      carriedOverXmlForThisTurn = apiRequestContext.carriedOverXml;
-
     } catch (e) {
-        debugPrint("ChatStateNotifier:sendMessage($chatId): 构建 API 上下文时出错: $e");
+        debugPrint("ChatStateNotifier:sendMessage($chatId): 调用LLM时出错: $e");
         if (mounted) {
-          showTopMessage('构建请求上下文失败: $e', backgroundColor: Colors.red);
+          showTopMessage('生成回复失败: $e', backgroundColor: Colors.red);
           state = state.copyWith(isLoading: false);
           stopUpdateTimer();
         }
         return;
-     }
-
-     final llmService = ref.read(llmServiceProvider);
-
-     // 重构：LlmService 不再处理配置逻辑，由 Notifier 决定
-    final apiConfig = getEffectiveApiConfig(specificConfigId: apiConfigIdOverride);
-    
-    if (state.isStreamMode) {
-        await _handleStreamResponse(llmService, apiConfig, llmApiContext, messageToUpdateId: messageToUpdateId);
-    } else {
-        await _handleSingleResponse(llmService, apiConfig, llmApiContext, carriedOverXmlForThisTurn, messageToUpdateId: messageToUpdateId);
     }
    }
 
-  Future<void> _handleStreamResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, {int? messageToUpdateId}) async {
+  Future<void> _handleStreamResponse(ApiConfig apiConfig, Message currentUserMessage, String? lastMessageOverride, {int? messageToUpdateId}) async {
     final messageRepo = ref.read(messageRepositoryProvider);
-   int targetMessageId; // Will be a temporary negative ID or a real one for resume
+    int targetMessageId;
     Message baseMessage;
     String initialRawText = '';
 
     if (messageToUpdateId != null) {
-      // This is a resume/continue action for an existing message.
       targetMessageId = messageToUpdateId;
       final msg = await messageRepo.getMessageById(targetMessageId);
       if (msg == null) {
@@ -282,34 +240,35 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         return;
       }
       baseMessage = msg;
-      // 恢复时，将原始文本和XML内容结合起来，以确保新内容正确追加。
       final StringBuffer combinedBuffer = StringBuffer(baseMessage.rawText);
       if (baseMessage.originalXmlContent != null && baseMessage.originalXmlContent!.isNotEmpty) {
         combinedBuffer.write(baseMessage.originalXmlContent);
       }
       initialRawText = combinedBuffer.toString();
     } else {
-      // This is a new message. Do not save to DB. Create a temporary in-memory message.
-      // Use a unique negative ID for the key to avoid conflicts with real DB IDs.
       targetMessageId = -DateTime.now().millisecondsSinceEpoch;
       baseMessage = Message(
-        id: targetMessageId, // Assign temporary negative ID
+        id: targetMessageId,
         chatId: chatId,
         role: MessageRole.model,
-        parts: [MessagePart.text("...")], // Start with a placeholder text
+        parts: [MessagePart.text("...")],
       );
       debugPrint("ChatStateNotifier($chatId): Created temporary streaming message with ID: $targetMessageId.");
     }
  
-    // The streaming message is now stored in the state, not the DB.
-    // Create the initial placeholder message in the state.
     state = state.copyWith(
       streamingMessage: baseMessage,
       isStreamingMessageVisible: true,
       isStreaming: true,
     );
  
-     final stream = llmService.sendMessageStream(llmContext: llmContext, apiConfig: apiConfig);
+     final coordinator = ref.read(llmCoordinatorProvider);
+     final stream = coordinator.generateStreamResponse(
+        chatId: chatId,
+        apiConfig: apiConfig,
+        currentUserMessage: currentUserMessage,
+        lastMessageOverride: lastMessageOverride,
+     );
      llmStreamSubscription?.cancel();
      llmStreamSubscription = stream.listen(
        (chunk) async {
@@ -317,22 +276,18 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
  
          if (chunk.error != null) {
            showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
-           // On error, we still finalize to save what we have and clean up.
            llmStreamSubscription?.cancel();
            await _finalizeStreamedMessage(targetMessageId, hasError: true);
            return;
          }
  
          if (chunk.isFinished) {
-           // This chunk signals the end, but onDone is the sole handler for finalization.
            return;
          }
  
-        // --- Live Update Logic (State only) ---
         final accumulatedNewText = chunk.accumulatedText;
         final combinedRawText = initialRawText + accumulatedNewText;
         
-        // Update the message object in the state, not the database.
         final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith(
           id: targetMessageId,
           parts: [MessagePart.text(combinedRawText)]
@@ -351,7 +306,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           }
        },
        onDone: () async {
-         // onDone is the single source of truth for saving a completed or canceled stream.
          if (!isFinalizing) {
            await _finalizeStreamedMessage(targetMessageId);
          }
@@ -360,14 +314,20 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
      );
   }
  
-  Future<void> _handleSingleResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, String? initialCarriedOverXml, {int? messageToUpdateId}) async {
+  Future<void> _handleSingleResponse(ApiConfig apiConfig, Message currentUserMessage, String? lastMessageOverride, {int? messageToUpdateId}) async {
     try {
-      final response = await llmService.sendMessageOnce(llmContext: llmContext, apiConfig: apiConfig);
+      final coordinator = ref.read(llmCoordinatorProvider);
+      final response = await coordinator.generateSingleResponse(
+          chatId: chatId,
+          apiConfig: apiConfig,
+          currentUserMessage: currentUserMessage,
+          lastMessageOverride: lastMessageOverride,
+      );
       if (!mounted) return;
  
-      if (state.isCancelled) return; // Check for cancellation after response
+      if (state.isCancelled) return;
       if (response.isSuccess && response.parts.isNotEmpty) {
-       state = state.copyWith(clearStreamingMessage: true); // Ensure no streaming leftovers
+       state = state.copyWith(clearStreamingMessage: true);
         final messageRepo = ref.read(messageRepositoryProvider);
         final String newContent = response.parts.map((p) => p.text ?? "").join("\n");
         
@@ -381,14 +341,12 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
             stopUpdateTimer();
             return;
           }
-          // 恢复时，将原始文本和XML内容结合起来，以确保新内容正确追加。
           final StringBuffer combinedBuffer = StringBuffer(baseMessage.rawText);
           if (baseMessage.originalXmlContent != null && baseMessage.originalXmlContent!.isNotEmpty) {
             combinedBuffer.write(baseMessage.originalXmlContent);
           }
           final initialRawText = combinedBuffer.toString();
           final combinedRawText = initialRawText + newContent;
-          // 我们将完整的合并文本暂时放入parts中，后续处理会分离它们
           messageToProcess = baseMessage.copyWith(parts: [MessagePart.text(combinedRawText)]);
         } else {
           messageToProcess = Message(
@@ -398,33 +356,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           );
         }
  
-        // 2. Process the message in-memory *before* saving.
         final chat = ref.read(currentChatProvider(chatId)).value;
         if (chat == null) {
           showTopMessage('无法处理消息：聊天数据丢失', backgroundColor: Colors.red);
           return;
         }
         final processedMessage = await getFinalProcessedMessage(chat, messageToProcess);
-        if (state.isCancelled) return; // Check after processing
+        if (state.isCancelled) return;
 
-        // 3. Save the fully processed message to the database ONCE.
         final savedMessageId = await messageRepo.saveMessage(processedMessage);
         final savedMessage = await messageRepo.getMessageById(savedMessageId);
         
-        // 4. The primary response is "done". Turn off its specific lock.
-        //    Keep the master `isLoading` lock on for background tasks.
         state = state.copyWith(
           isPrimaryResponseLoading: false,
           clearError: true,
           clearTopMessage: true,
         );
 
-        // 5. Asynchronously run post-save tasks on the saved message.
         if (savedMessage != null) {
-          if (state.isCancelled) return; // Final check before starting background tasks
+          if (state.isCancelled) return;
           await runAsyncProcessingTasks(savedMessage);
         } else {
-          // If there's no message, ensure loading state is cleared.
           state = state.copyWith(
             isLoading: false
           );
@@ -432,7 +384,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         }
  
        debugPrint("ChatStateNotifier($chatId): Single response and async tasks finished (ID: $savedMessageId).");
-       // calculateAndStoreTokenCount(); // Recalculate tokens based on initial saved message. - REMOVED: The listener in MessageList will handle this.
       } else {
        showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
        state = state.copyWith(isLoading: false);
@@ -442,13 +393,10 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         showTopMessage('发送消息时发生意外错误: $e', backgroundColor: Colors.red);
         state = state.copyWith(isLoading: false);
       }
-    } finally {
-      // No need for a finally block to stop the timer, as it's stopped on success.
     }
   }
 
   Future<void> cancelGeneration() async {
-    // If nothing is running, or it's already cancelled, do nothing.
     if ((!state.isLoading && !state.isStreaming && !state.isProcessingInBackground && !state.isGeneratingSuggestions) || state.isCancelled) {
       debugPrint("Cancel generation skipped: isLoading=${state.isLoading}, isStreaming=${state.isStreaming}, isProcessingInBackground=${state.isProcessingInBackground}, isGeneratingSuggestions=${state.isGeneratingSuggestions}, isCancelled=${state.isCancelled}");
       return;
@@ -457,31 +405,25 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     debugPrint("Attempting to cancel generation for chat $chatId...");
 
     try {
-      // 1. Set the cancellation flag in the state. This is the new source of truth.
       if (mounted) {
         state = state.copyWith(isCancelled: true);
       }
 
-      // 2. Cancel any active LLM request (covers main stream and background tasks)
-      await ref.read(llmServiceProvider).cancelActiveRequest();
+      await ref.read(llmCoordinatorProvider).cancelGeneration();
 
-      // 3. Cancel the stream subscription if it exists.
-      // This will trigger its onDone/onError, which will see the isCancelled flag and stop.
       if (llmStreamSubscription != null) {
         await llmStreamSubscription?.cancel();
         llmStreamSubscription = null;
       }
 
-      // 4. Finalize state immediately for instant UI feedback.
-      // The async tasks will check the `isCancelled` state flag and stop themselves.
       if (mounted) {
         state = state.copyWith(
           isLoading: false,
           isStreaming: false,
           isProcessingInBackground: false,
-          isGeneratingSuggestions: false, // Also clear this flag
+          isGeneratingSuggestions: false,
           clearStreaming: true,
-          clearStreamingMessage: true, // Also clear the cached message
+          clearStreamingMessage: true,
         );
         stopUpdateTimer();
         showTopMessage("已停止", backgroundColor: Colors.blueGrey);
@@ -499,9 +441,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   Future<void> _finalizeStreamedMessage(int messageId, {bool hasError = false}) async {
     if (!mounted || isFinalizing) return;
     
-    // CRITICAL: If cancellation was requested, stop all finalization and post-processing.
     if (state.isCancelled) {
-      isFinalizing = false; // Release lock
+      isFinalizing = false;
       debugPrint("Finalization skipped for message ID $messageId because task was cancelled.");
       return;
     }
@@ -532,15 +473,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return;
     }
 
-    // 1. Create a new message object for saving, stripping the temporary ID.
-    // This happens only on successful completion.
     Message? finalMessageToSave;
     if (!hasError) {
       if (messageToFinalize.id > 0) {
-        // This is an update to an existing message.
         finalMessageToSave = messageToFinalize;
       } else {
-        // This is a new message. Create a new object without the temporary negative ID.
         finalMessageToSave = Message(
           chatId: messageToFinalize.chatId,
           role: messageToFinalize.role,
@@ -550,37 +487,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       }
     }
 
-    // 2. The primary response (stream) is "done". Turn off its specific lock.
-    //    Keep the master `isLoading` lock on for background tasks.
     if (mounted) {
       state = state.copyWith(
         isPrimaryResponseLoading: false,
         isStreaming: false,
         clearStreaming: true,
-        // CRITICAL: Do NOT clear isLoading or the streaming message here.
       );
     }
 
-    // 3. Now, with the main state cleared, run async pre-save and post-save processing.
     try {
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat != null && finalMessageToSave != null) {
-        // 3a. Process the message in-memory BEFORE saving.
         final processedMessage = await getFinalProcessedMessage(chat, finalMessageToSave);
         if (state.isCancelled) {
           isFinalizing = false;
           return;
         }
 
-        // 3b. Save the fully processed message to the database ONCE.
         final savedId = await messageRepo.saveMessage(processedMessage);
         final savedMessage = await messageRepo.getMessageById(savedId);
         
-        // 3c. Run post-save async tasks.
         if (savedMessage != null) {
-          // CRITICAL: Update the state's streamingMessage with the one from the DB.
-          // This "promotes" the temporary message to a persistent one with a real ID,
-          // ensuring a seamless transition in the UI.
           if (mounted) {
             state = state.copyWith(streamingMessage: savedMessage);
           }

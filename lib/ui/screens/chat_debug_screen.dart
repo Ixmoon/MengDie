@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
-import '../../app/tools/context_xml_service.dart';
+import '../../app/services/llm_coordinator_service.dart';
+import '../../app/providers/api_key_provider.dart';
 import '../widgets/app_card.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
 import '../../app/providers/chat_state/chat_data_providers.dart';
@@ -70,7 +71,8 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
     }
 
     try {
-      final contextXmlService = ref.read(contextXmlServiceProvider);
+      final coordinator = ref.read(llmCoordinatorProvider);
+      final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
       // Call the unified buildApiRequestContext
       // Create a placeholder message for debugging purposes
       final placeholderMessage = Message(
@@ -78,9 +80,10 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         role: MessageRole.user,
         parts: [MessagePart.text("[调试占位符]")],
       );
-      final apiRequestContext = await contextXmlService.buildApiRequestContext(
+      final apiRequestContext = await coordinator.buildApiRequestContext(
         chatId: chat.id,
         currentUserMessage: placeholderMessage,
+        apiConfig: notifier.getEffectiveApiConfig(),
       );
 
       if (mounted) {

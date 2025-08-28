@@ -7,7 +7,6 @@ import '../../../domain/models/message.dart';
 import '../../../domain/enums.dart';
 import '../repository_providers.dart';
 import '../auth_providers.dart';
-import '../../repositories/message_repository.dart';
 
 // --- 当前激活的聊天 ID Provider ---
 // 这个 Provider 允许我们拥有一个单一的 ChatScreen 实例，

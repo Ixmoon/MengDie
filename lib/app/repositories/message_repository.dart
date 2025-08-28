@@ -9,13 +9,6 @@ import '../../data/mappers/message_mapper.dart';
 
 // 本文件包含用于管理 Message 数据集合的仓库类和提供者。
 
-// --- Message Repository Provider ---
-final messageRepositoryProvider = Provider<MessageRepository>((ref) {
-  final appDb = ref.watch(appDatabaseProvider);
-  // Now depends on both messageDao and chatDao
-  return MessageRepository(appDb.messageDao, appDb.chatDao);
-});
-
 // --- Message Repository Implementation ---
 class MessageRepository {
   final MessageDao _messageDao;

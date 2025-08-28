@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import '../../data/llmapi/llm_models.dart';
-import '../../data/llmapi/openai_service.dart'; // Updated import
+import '../services/llm_coordinator_service.dart';
 import '../../domain/models/api_config.dart';
 
 @immutable
@@ -26,9 +26,9 @@ class OpenAIModelsState {
 }
 
 class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
-  final OpenAIService _apiService;
+  final LlmCoordinatorService _coordinator;
 
-  OpenAIModelsNotifier(this._apiService) : super(const OpenAIModelsState());
+  OpenAIModelsNotifier(this._coordinator) : super(const OpenAIModelsState());
 
   void selectConfig(ApiConfig? config) {
     if (config == null) {
@@ -50,10 +50,7 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
     }
     state = state.copyWith(models: const AsyncValue.loading());
     try {
-      final models = await _apiService.fetchModels(
-        baseUrl: config.baseUrl!,
-        apiKey: config.apiKey!,
-      );
+      final models = await _coordinator.fetchAvailableModels(config);
       state = state.copyWith(models: AsyncValue.data(models));
     } catch (e, stack) {
       state = state.copyWith(models: AsyncValue.error(e, stack));
@@ -62,7 +59,6 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
 }
 
 final openAIModelsProvider = StateNotifierProvider.autoDispose<OpenAIModelsNotifier, OpenAIModelsState>((ref) {
-  // Now depends on the globally provided OpenAIService
-  final apiService = ref.watch(openaiServiceProvider);
-  return OpenAIModelsNotifier(apiService);
+  final coordinator = ref.watch(llmCoordinatorProvider);
+  return OpenAIModelsNotifier(coordinator);
 });

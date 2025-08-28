@@ -7,9 +7,7 @@ import '../../../domain/models/api_config.dart';
 import '../../../domain/models/message.dart';
 import '../../../data/llmapi/llm_models.dart';
 import '../../../domain/models/chat.dart';
-import '../../repositories/message_repository.dart';
-import '../../../data/llmapi/llm_service.dart';
-import '../../tools/context_xml_service.dart';
+import '../../services/llm_coordinator_service.dart';
 import '../api_key_provider.dart';
 import '../repository_providers.dart'; // Added to resolve provider errors
 import 'chat_screen_state.dart';
@@ -91,16 +89,15 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
       }
 
       try {
-        final llmService = ref.read(llmServiceProvider);
-        final contextXmlService = ref.read(contextXmlServiceProvider);
-        
-        final apiRequestContext = await contextXmlService.buildApiRequestContext(
+        final coordinator = ref.read(llmCoordinatorProvider);
+        final apiConfig = getEffectiveApiConfig();
+        final apiRequestContext = await coordinator.buildApiRequestContext(
           chatId: chatId,
           currentUserMessage: messages.last,
+          apiConfig: apiConfig,
         );
         
-        final apiConfig = getEffectiveApiConfig();
-        final count = await llmService.countTokens(
+        final count = await coordinator.countTokens(
           llmContext: apiRequestContext.contextParts,
           apiConfig: apiConfig,
         );

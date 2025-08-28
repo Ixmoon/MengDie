@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  langchain: ^0.7.9
+  langchain_google: ^0.6.5+2
+  langchain_openai: ^0.7.6
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
   flutter_secure_storage: ^10.0.0-beta.4 # Check pub.dev for latest version
   shared_preferences: ^2.5.3  # Check pub.dev for latest version
@@ -35,7 +38,6 @@ dependencies:
   file_picker: ^10.1.2       # 用于选择文件 (导入)
   exif: ^3.2.0              # 用于读写图片 EXIF 元数据
   share_plus: ^11.0.0       # (可选) 用于分享导出的文件 (已升级以解决依赖冲突)
-  dio: ^5.4.0               # 添加 dio 用于 HTTP 请求
   mime: ^2.0.0              # 用于查找 Mime 类型
   tiktoken: ^1.0.3          # For OpenAI token counting
   archive: ^4.0.7           # For creating ZIP archives

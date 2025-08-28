@@ -158,7 +158,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                                         icon: const Icon(Icons.refresh),
                                         tooltip: '获取模型列表',
                                         onPressed: () {
-                                          final baseUrl = baseUrlController.text;
+                                          final baseUrl = baseUrlController.text.trim();
                                           final apiKey = apiKeyController.text;
                                           if (baseUrl.isNotEmpty && apiKey.isNotEmpty) {
                                             ref.read(openAIModelsProvider.notifier).fetchModels(ApiConfig(id: '-1', name: 'temp', apiType: LlmType.openai, model: '', baseUrl: baseUrl, apiKey: apiKey, createdAt: DateTime.now(), updatedAt: DateTime.now()));
@@ -362,7 +362,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                         apiType: selectedApiType,
                         model: modelController.text,
                         apiKey: apiKeyController.text.isNotEmpty ? apiKeyController.text : null,
-                        baseUrl: (selectedApiType == LlmType.openai || selectedApiType == LlmType.gemini) && baseUrlController.text.isNotEmpty ? baseUrlController.text : null,
+                        baseUrl: baseUrlController.text.trim().isNotEmpty ? baseUrlController.text.trim() : null,
                         useCustomTemperature: useCustomTemperature,
                         temperature: useCustomTemperature ? temperature : null,
                         useCustomTopP: useCustomTopP,
@@ -372,7 +372,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                         maxOutputTokens: int.tryParse(maxTokensController.text),
                         stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
                         enableReasoningEffort: enableReasoningEffort,
-                        reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
+                        reasoningEffort: enableReasoningEffort ? reasoningEffort : null,
                         thinkingBudget: int.tryParse(thinkingBudgetController.text),
                         toolConfig: toolConfigController.text.isNotEmpty ? toolConfigController.text : null,
                         toolChoice: toolChoiceController.text.isNotEmpty ? toolChoiceController.text : null,
@@ -415,7 +415,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                       apiType: selectedApiType,
                       model: modelController.text,
                       apiKey: apiKeyController.text.isNotEmpty ? apiKeyController.text : null,
-                      baseUrl: (selectedApiType == LlmType.openai || selectedApiType == LlmType.gemini) && baseUrlController.text.isNotEmpty ? baseUrlController.text : null,
+                      baseUrl: baseUrlController.text.trim().isNotEmpty ? baseUrlController.text.trim() : null,
                       useCustomTemperature: useCustomTemperature,
                       temperature: useCustomTemperature ? temperature : null,
                       useCustomTopP: useCustomTopP,
@@ -425,7 +425,7 @@ class ApiConfigsScreen extends ConsumerWidget {
                       maxOutputTokens: int.tryParse(maxTokensController.text),
                       stopSequences: stopSequencesController.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
                       enableReasoningEffort: enableReasoningEffort,
-                      reasoningEffort: enableReasoningEffort ? reasoningEffort : OpenAIReasoningEffort.auto,
+                      reasoningEffort: enableReasoningEffort ? reasoningEffort : null,
                       thinkingBudget: int.tryParse(thinkingBudgetController.text),
                       toolConfig: toolConfigController.text.isNotEmpty ? toolConfigController.text : null,
                       toolChoice: toolChoiceController.text.isNotEmpty ? toolChoiceController.text : null,

@@ -83,6 +83,56 @@ class ApiConfig {
     );
   }
 
+  ApiConfig copyWith({
+    String? id,
+    String? name,
+    LlmType? apiType,
+    String? model,
+    String? apiKey,
+    String? baseUrl,
+    bool? useCustomTemperature,
+    double? temperature,
+    bool? useCustomTopP,
+    double? topP,
+    bool? useCustomTopK,
+    int? topK,
+    int? maxOutputTokens,
+    List<String>? stopSequences,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? enableReasoningEffort,
+    OpenAIReasoningEffort? reasoningEffort,
+    String? toolChoice,
+    int? thinkingBudget,
+    String? toolConfig,
+    bool? useDefaultSafetySettings,
+  }) {
+    return ApiConfig(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      apiType: apiType ?? this.apiType,
+      model: model ?? this.model,
+      apiKey: apiKey ?? this.apiKey,
+      baseUrl: baseUrl ?? this.baseUrl,
+      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
+      temperature: temperature ?? this.temperature,
+      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+      topP: topP ?? this.topP,
+      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+      topK: topK ?? this.topK,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      stopSequences: stopSequences ?? this.stopSequences,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      enableReasoningEffort: enableReasoningEffort ?? this.enableReasoningEffort,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      toolChoice: toolChoice ?? this.toolChoice,
+      thinkingBudget: thinkingBudget ?? this.thinkingBudget,
+      toolConfig: toolConfig ?? this.toolConfig,
+      useDefaultSafetySettings: useDefaultSafetySettings ?? this.useDefaultSafetySettings,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

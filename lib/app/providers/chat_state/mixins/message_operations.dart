@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../data/sync/sync_service.dart';
 import '../../../../domain/enums.dart';
 import '../../../../domain/models/message.dart';
-import '../../../tools/context_xml_service.dart';
+import '../../../services/llm_coordinator_service.dart';
+import '../../../../domain/models/api_config.dart';
 import '../../repository_providers.dart';
-import '../../../repositories/message_repository.dart'; // Corrected import
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
 
@@ -18,6 +18,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
     bool get mounted;
 
     // Abstract methods that this mixin depends on
+    ApiConfig getEffectiveApiConfig({String? specificConfigId});
     void clearHelpMeReplySuggestions();
     void showTopMessage(String text, {Color? backgroundColor, Duration duration = const Duration(seconds: 3)});
 
@@ -34,10 +35,11 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
           final chatRepo = ref.read(chatRepositoryProvider);
           final chat = await chatRepo.getChat(chatId);
           if (chat != null && chat.contextSummary != null) {
-            final contextXmlService = ref.read(contextXmlServiceProvider);
-            final tempContext = await contextXmlService.buildApiRequestContext(
+            final coordinator = ref.read(llmCoordinatorProvider);
+            final tempContext = await coordinator.buildApiRequestContext(
               chatId: chatId,
-              currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
+              currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")]),
+              apiConfig: getEffectiveApiConfig(),
             );
             final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
 
@@ -93,10 +95,11 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
         final chatRepo = ref.read(chatRepositoryProvider);
         final chat = await chatRepo.getChat(chatId);
         if (chat != null && chat.contextSummary != null) {
-          final contextXmlService = ref.read(contextXmlServiceProvider);
-          final tempContext = await contextXmlService.buildApiRequestContext(
+          final coordinator = ref.read(llmCoordinatorProvider);
+          final tempContext = await coordinator.buildApiRequestContext(
             chatId: chatId,
-            currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
+            currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")]),
+            apiConfig: getEffectiveApiConfig(),
           );
           final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
 

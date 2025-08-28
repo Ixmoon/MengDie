@@ -6,11 +6,9 @@ import '../../../../domain/models/chat.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart';
 import '../../../../data/llmapi/llm_models.dart';
-import '../../../../data/llmapi/llm_service.dart';
-import '../../../tools/context_xml_service.dart';
+import '../../../services/llm_coordinator_service.dart';
 import '../../../tools/xml_processor.dart';
 import '../../settings_providers.dart';
-import '../../../repositories/message_repository.dart';
 import '../../repository_providers.dart';
 
 import '../chat_data_providers.dart';
@@ -151,7 +149,7 @@ mixin BackgroundTasks on UiStateManager {
       if (state.isCancelled) return;
       debugPrint("ChatStateNotifier($chatId): Executing intelligent merge summarization...");
 
-      final contextXmlService = ref.read(contextXmlServiceProvider);
+      final coordinator = ref.read(llmCoordinatorProvider);
       final chatRepo = ref.read(chatRepositoryProvider);
       final messageRepo = ref.read(messageRepositoryProvider);
 
@@ -163,9 +161,10 @@ mixin BackgroundTasks on UiStateManager {
       }
 
       // 2. Simulate context "AFTER" the latest turn to find all currently dropped messages.
-      final contextAfter = await contextXmlService.buildApiRequestContext(
+      final contextAfter = await coordinator.buildApiRequestContext(
         chatId: chatId,
         currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("after")]),
+        apiConfig: getEffectiveApiConfig(), // Use the default config for this simulation
       );
       final droppedMessagesAfter = contextAfter.droppedMessages;
 
@@ -180,9 +179,10 @@ mixin BackgroundTasks on UiStateManager {
 
       // 3. Simulate context "BEFORE" the latest turn.
       final historyBefore = allMessages.sublist(0, allMessages.length - 2);
-      final contextBefore = await contextXmlService.buildApiRequestContext(
+      final contextBefore = await coordinator.buildApiRequestContext(
         chatId: chatId,
         currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("before")]),
+        apiConfig: getEffectiveApiConfig(), // Use the default config for this simulation
         historyOverride: historyBefore,
       );
       final droppedMessagesBefore = contextBefore.droppedMessages;
@@ -220,9 +220,10 @@ mixin BackgroundTasks on UiStateManager {
 
       while (remainingToChunk.isNotEmpty) {
         if (state.isCancelled) return;
-        final chunkingContext = await contextXmlService.buildApiRequestContext(
+        final chunkingContext = await coordinator.buildApiRequestContext(
             chatId: chatId,
             currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("chunking")]),
+            apiConfig: getEffectiveApiConfig(specificConfigId: chat.preprocessingApiConfigId), // Use the specific config for chunking
             historyOverride: remainingToChunk,
             chatSystemPromptOverride: chat.preprocessingPrompt);
         
@@ -279,55 +280,28 @@ mixin BackgroundTasks on UiStateManager {
     /// A robust helper to summarize a single chunk of messages with a retry mechanism.
     Future<String> summarizeChunkWithRetry(Chat chat, List<Message> chunk, String? previousSummary) async {
       const maxRetries = 3;
-      final llmService = ref.read(llmServiceProvider);
+      final coordinator = ref.read(llmCoordinatorProvider);
       final summaryPrompt = chat.preprocessingPrompt!;
 
       for (int attempt = 1; attempt <= maxRetries; attempt++) {
         if (state.isCancelled) return ""; // Check for cancellation before each attempt
 
         try {
-          // Manually construct the context for this specific chunk.
-          List<LlmContent> summaryContext = [
-            LlmContent("system", [LlmTextPart(summaryPrompt)])
-          ];
-
-          // If a previous summary is provided (only for the first chunk), add it.
-          if (previousSummary != null && previousSummary.isNotEmpty) {
-            final previousSummaryText = XmlProcessor.wrapWithTag('previous_summary', previousSummary);
-            summaryContext.add(LlmContent("user", [LlmTextPart(previousSummaryText)]));
-          }
-
-          // Add each message from the chunk.
-          for (final message in chunk) {
-            summaryContext.add(LlmContent.fromMessage(message));
-          }
-
-          // Add the guiding prompt at the end.
-          summaryContext.add(LlmContent("user", [LlmTextPart(summaryPrompt)]));
-
-          // 重构：直接获取配置对象
           final apiConfig = getEffectiveApiConfig(specificConfigId: chat.preprocessingApiConfigId);
-          final response = await llmService.sendMessageOnce(
-            llmContext: summaryContext,
+          final summaryText = await coordinator.summarizeChunk(
+            chatId: chatId,
+            chunk: chunk,
+            previousSummary: previousSummary,
+            summaryPrompt: summaryPrompt,
             apiConfig: apiConfig,
           );
-
-          if (response.isSuccess && response.parts.isNotEmpty) {
-            final summaryText = response.parts.map((p) => p.text ?? "").join("\n").trim();
-            debugPrint("ChatStateNotifier($chatId): Chunk summarization successful on attempt $attempt.");
-            return summaryText; // Success
-          } else {
-            throw Exception("API Error: ${response.error ?? 'Empty response'}");
-          }
+          debugPrint("ChatStateNotifier($chatId): Chunk summarization successful on attempt $attempt.");
+          return summaryText; // Success
         } catch (e) {
           debugPrint("ChatStateNotifier($chatId): Chunk summarization attempt $attempt/$maxRetries failed: $e");
           if (attempt == maxRetries || state.isCancelled) {
-            // If it's the last attempt or cancelled, rethrow to fail the Future.
-            // The Future.wait will catch this, but we'll return an empty string
-            // so that a single failed chunk doesn't stop the entire process.
             return "";
           }
-          // Wait before retrying
           await Future.delayed(Duration(seconds: attempt * 2));
         }
       }

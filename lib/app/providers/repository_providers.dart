@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/api_config_repository.dart';
 import '../repositories/chat_repository.dart';
+import '../repositories/message_repository.dart';
 import '../repositories/user_repository.dart';
 import 'core_providers.dart'; // For appDatabaseProvider
+
+export '../repositories/message_repository.dart';
 
 // Provider for ApiConfigRepository
 final apiConfigRepositoryProvider = Provider<ApiConfigRepository>((ref) {
@@ -22,4 +25,10 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 final userRepositoryProvider = Provider<UserRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return UserRepository(ref, db.userDao);
+});
+
+// Provider for MessageRepository
+final messageRepositoryProvider = Provider<MessageRepository>((ref) {
+  final database = ref.watch(appDatabaseProvider);
+  return MessageRepository(database.messageDao, database.chatDao);
 });
