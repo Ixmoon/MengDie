@@ -441,7 +441,7 @@ class ChatPageLogic {
     // The notifier is responsible for the entire operation, including updating the active chat state.
     // This decouples the UI logic completely from the business logic.
     debugPrint("[ChatPageLogic] Triggering fork from message ${message.id} in chat $chatId.");
-    await ref.read(chatStateNotifierProvider(chatId).notifier).forkChat(message);
+    await ref.read(chatStateNotifierProvider(chatId).notifier).duplicateChat(upToMessageId: message.id);
     debugPrint("[ChatPageLogic] Fork operation triggered.");
   }
 

@@ -210,10 +210,10 @@ class GeminiChatPayload extends HttpRequestPayload {
 
   @override
   String buildUrl() {
-    const defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const defaultBaseUrl = "https://generativelanguage.googleapis.com";
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true ? apiConfig.baseUrl! : defaultBaseUrl;
     final action = stream ? "streamGenerateContent" : "generateContent";
-    return "$baseUrl/models/${apiConfig.model}:$action?key=$apiKey${stream ? '&alt=sse' : ''}";
+    return "$baseUrl/v1beta/models/${apiConfig.model}:$action?key=$apiKey${stream ? '&alt=sse' : ''}";
   }
   
   @override
@@ -306,9 +306,9 @@ class GeminiImagePayload extends HttpRequestPayload {
 
   @override
   String buildUrl() {
-    const defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const defaultBaseUrl = "https://generativelanguage.googleapis.com";
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true ? apiConfig.baseUrl! : defaultBaseUrl;
-    return "$baseUrl/models/${apiConfig.model}:generateContent?key=$apiKey";
+    return "$baseUrl/v1beta/models/${apiConfig.model}:generateContent?key=$apiKey";
   }
 
   @override
@@ -353,9 +353,9 @@ class GeminiCountTokensPayload extends HttpRequestPayload {
 
   @override
   String buildUrl() {
-    const defaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+    const defaultBaseUrl = "https://generativelanguage.googleapis.com";
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true ? apiConfig.baseUrl! : defaultBaseUrl;
-    return "$baseUrl/models/${apiConfig.model}:countTokens?key=$apiKey";
+    return "$baseUrl/v1beta/models/${apiConfig.model}:countTokens?key=$apiKey";
   }
 
   @override

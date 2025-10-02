@@ -180,34 +180,6 @@ class ChatRepository {
     return newChatId;
   }
 
-  Future<int> forkChat(int originalChatId, int fromMessageId) async {
-    debugPrint("ChatRepository: 分叉聊天 ID: $originalChatId 从消息 ID: $fromMessageId...");
-    final originalChat = await getChat(originalChatId);
-    if (originalChat == null) {
-      throw Exception('找不到ID为 $originalChatId 的原始聊天');
-    }
-
-    // 为分叉准备新的 Chat Companion
-    final now = DateTime.now();
-    final forkedChatCompanion = ChatMapper.toCompanion(originalChat, forInsert: true)
-      .copyWith(
-        title: Value('${originalChat.title} (分叉)'),
-        createdAt: Value(now),
-        updatedAt: Value(now),
-        contextSummary: const Value(null), // 分叉时清除上下文摘要
-        orderIndex: const Value(null), // 分叉的聊天应使用默认排序
-    );
-    // 调用通用的 DAO 方法，并传入消息ID以上限
-    final newChatId = await _chatDao.forkOrCloneChat(
-      forkedChatCompanion,
-      originalChatId,
-      upToMessageId: fromMessageId,
-    );
-    await _bindItemToCurrentUser(newChatId);
-    return newChatId;
-    
-  }
-
   /// 从一个现有聊天创建新聊天（作为模板），可以指定父文件夹。
   Future<int> createChatFromTemplate(int templateChatId, {int? parentFolderId}) async {
     debugPrint("ChatRepository: 从模板 ID: $templateChatId 创建新聊天到文件夹 ID: $parentFolderId...");
@@ -233,36 +205,73 @@ class ChatRepository {
     return await saveChat(newChat);
   }
 
-  /// 从现有聊天克隆设置，创建一个新的空聊天或模板。
+  /// 统一的聊天衍生方法，用于处理分叉、克隆和模板创建。
   ///
-  /// [sourceChatId] 是被克隆的原始聊天的ID。
-  /// [asTemplate] 如果为 true, 克隆体将被保存为模板，否则为普通聊天。
-  /// 返回新创建的聊天的ID。
-  Future<int> cloneChat(int sourceChatId, {required bool asTemplate}) async {
-    debugPrint("ChatRepository: 克隆聊天设置 ID: $sourceChatId, 作为模板: $asTemplate...");
+  /// [sourceChatId] 原始聊天的 ID。
+  /// [upToMessageId]
+  ///   - `null`: 复制所有消息 (用于导出等场景)。
+  ///   - `0`: 不复制任何消息 (用于克隆、另存为模板)。
+  ///   - `> 0`: 复制到指定消息ID为止 (用于分叉)。
+  /// [asTemplate] 如果为 true, 新聊天将被标记为模板。
+  Future<int> duplicateChat(
+    int sourceChatId, {
+    int? upToMessageId,
+    bool asTemplate = false,
+  }) async {
+    debugPrint("ChatRepository: duplicateChat from $sourceChatId, upToMessageId: $upToMessageId, asTemplate: $asTemplate");
+
     final originalChat = await getChat(sourceChatId);
     if (originalChat == null) {
       throw Exception('找不到ID为 $sourceChatId 的原始聊天');
     }
 
-    // 准备新聊天的标题和时间戳
-    final newTitle = originalChat.title ?? "无标题"; // 直接使用原始标题
     final now = DateTime.now();
+    String newTitle;
+    final baseTitle = originalChat.title ?? "无标题";
 
-    // 使用 copyWith 创建一个新实例，并重置关键字段
-    final newChat = originalChat.copyWith(
-      id: 0, // 关键：重置ID以创建新记录
-      title: newTitle,
-      createdAt: now,
-      updatedAt: now,
-      parentFolderId: null, // 总是克隆到根目录
-      orderIndex: null, // 确保克隆体置顶
-      contextSummary: null, // 清空上下文摘要
-      backgroundImagePath: asTemplate ? '/template/chat' : null, // 新的模板逻辑
+    // 仅在非模板操作时增加标题序号
+    if (!asTemplate) {
+      final RegExp titleRegex = RegExp(r'^(.*)-(\d+)$');
+      final Match? match = titleRegex.firstMatch(baseTitle);
+      if (match != null) {
+        final namePart = match.group(1);
+        final numberPart = int.tryParse(match.group(2) ?? '');
+        if (namePart != null && numberPart != null) {
+          newTitle = '$namePart-${numberPart + 1}';
+        } else {
+          newTitle = '$baseTitle-1';
+        }
+      } else {
+        newTitle = '$baseTitle-1';
+      }
+    } else {
+      newTitle = baseTitle;
+    }
+
+    final newChatCompanion = ChatMapper.toCompanion(originalChat, forInsert: true).copyWith(
+      title: Value(newTitle),
+      createdAt: Value(now),
+      updatedAt: Value(now),
+      contextSummary: const Value(null),
+      orderIndex: const Value(null),
+      parentFolderId: Value(originalChat.parentFolderId),
+      backgroundImagePath: asTemplate ? const Value('/template/chat') : const Value(null),
     );
-    
-    // 直接保存这个新的Chat对象，它将不包含任何消息
-    return await saveChat(newChat);
-  }
 
+    int newChatId;
+    if (upToMessageId == 0) {
+      // 不复制任何消息：直接保存新的 Chat 对象
+      newChatId = await _chatDao.saveChat(newChatCompanion);
+    } else {
+      // 复制部分或全部消息
+      newChatId = await _chatDao.forkOrCloneChat(
+        newChatCompanion,
+        sourceChatId,
+        upToMessageId: upToMessageId, // null 表示全部复制
+      );
+    }
+
+    await _bindItemToCurrentUser(newChatId);
+    return newChatId;
+  }
 }

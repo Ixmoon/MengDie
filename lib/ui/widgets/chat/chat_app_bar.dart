@@ -183,31 +183,12 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 }
                 break;
               case 'exportAsTemplate':
-                try {
-                  final repo = ref.read(chatRepositoryProvider);
-                  await repo.cloneChat(chat.id, asTemplate: true);
-                  if (!context.mounted) return;
-                  notifier.showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
-                  ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
-                  // 导航已移除，以避免触发额外的保存操作。用户可手动返回查看。
-                } catch (e) {
-                  if (context.mounted) {
-                    notifier.showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
-                  }
-                }
+                // 统一调用 ChatStateNotifier 的方法
+                await notifier.duplicateChat(upToMessageId: 0, asTemplate: true);
                 break;
               case 'exportAsChat':
-                try {
-                  final repo = ref.read(chatRepositoryProvider);
-                  await repo.cloneChat(chat.id, asTemplate: false);
-                  if (!context.mounted) return;
-                  notifier.showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
-                  // 自动切换页面已移除，以避免触发额外的保存操作。新聊天可在列表中找到。
-                } catch (e) {
-                  if (context.mounted) {
-                    notifier.showTopMessage('克隆为新聊天失败: $e', backgroundColor: Colors.red);
-                  }
-                }
+                // 统一调用 ChatStateNotifier 的方法
+                await notifier.duplicateChat(upToMessageId: 0, asTemplate: false);
                 break;
             }
           },

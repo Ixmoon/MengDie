@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../domain/models/api_config.dart';
 import '../../../domain/models/message.dart';
 import '../../../data/llmapi/llm_models.dart';
+import '../../../domain/models/models.dart';
 import '../../../domain/models/chat.dart';
 import '../../repositories/message_repository.dart';
 import '../../../data/llmapi/llm_service.dart';
@@ -19,6 +20,8 @@ import 'mixins/generation_logic.dart';
 import 'mixins/background_tasks.dart';
 import 'mixins/special_actions.dart';
 import 'chat_data_providers.dart';
+import '../chat_state_providers.dart';
+
 
 class ChatStateNotifier extends StateNotifier<ChatScreenState>
     with
@@ -125,93 +128,52 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
         super.dispose();
     }
 
-  Future<void> forkChat(Message fromMessage) async {
-    // This logic is now self-contained and safe from UI lifecycle issues.
-    // It directly updates the global state provider upon completion.
-    
-    final chatRepo = ref.read(chatRepositoryProvider);
-    final messageRepo = ref.read(messageRepositoryProvider);
-    final allMessagesAsync = ref.read(chatMessagesProvider(chatId));
-    final originalChat = ref.read(currentChatProvider(chatId)).value;
-
-    if (originalChat == null || allMessagesAsync.value == null) {
-      showTopMessage('无法分叉：原始数据丢失', backgroundColor: Colors.red);
-      return;
-    }
-
-    final allMessages = allMessagesAsync.value!;
-    final forkIndex = allMessages.indexWhere((m) => m.id == fromMessage.id);
-    if (forkIndex == -1) {
-      showTopMessage('无法分叉：未找到消息', backgroundColor: Colors.red);
-      return;
-    }
-
-    final messagesToKeep = allMessages.sublist(0, forkIndex + 1);
-
+  /// 统一的聊天衍生操作入口，由UI层调用。
+  ///
+  /// [upToMessageId]
+  ///   - `0`: 克隆设置 (不含消息)。
+  ///   - `> 0`: 从指定消息分叉。
+  /// [asTemplate] 如果为 true, 则另存为模板。
+  Future<void> duplicateChat({
+    int? upToMessageId,
+    bool asTemplate = false,
+  }) async {
     try {
-      String newTitle;
-      final baseTitle = originalChat.title ?? "无标题";
-      final RegExp titleRegex = RegExp(r'^(.*)-(\d+)$');
-      final Match? match = titleRegex.firstMatch(baseTitle);
-
-      if (match != null) {
-        final namePart = match.group(1);
-        final numberPart = int.tryParse(match.group(2) ?? '');
-        if (namePart != null && numberPart != null) {
-          newTitle = '$namePart-${numberPart + 1}';
-        } else {
-          newTitle = '$baseTitle-1';
-        }
-      } else {
-        newTitle = '$baseTitle-1';
+      final chatRepo = ref.read(chatRepositoryProvider);
+      final originalChat = ref.read(currentChatProvider(chatId)).value;
+      if (originalChat == null) {
+        throw Exception("原始聊天不存在。");
       }
 
-      final now = DateTime.now();
-      final newChat = Chat(
-        title: newTitle,
-        parentFolderId: originalChat.parentFolderId,
-        systemPrompt: originalChat.systemPrompt,
-        coverImageBase64: originalChat.coverImageBase64,
-        backgroundImagePath: originalChat.backgroundImagePath,
-        apiConfigId: originalChat.apiConfigId,
-        contextConfig: originalChat.contextConfig.copyWith(),
-        xmlRules: List.from(originalChat.xmlRules),
-        enablePreprocessing: originalChat.enablePreprocessing,
-        preprocessingPrompt: originalChat.preprocessingPrompt,
-        preprocessingApiConfigId: originalChat.preprocessingApiConfigId,
-        contextSummary: null,
-        enableSecondaryXml: originalChat.enableSecondaryXml,
-        secondaryXmlPrompt: originalChat.secondaryXmlPrompt,
-        secondaryXmlApiConfigId: originalChat.secondaryXmlApiConfigId,
-        continuePrompt: originalChat.continuePrompt,
-        createdAt: now,
-        updatedAt: now,
+      final newChatId = await chatRepo.duplicateChat(
+        chatId,
+        upToMessageId: upToMessageId,
+        asTemplate: asTemplate,
       );
+
+      // 另存为模板时，不进行页面跳转，仅显示提示。
+      if (asTemplate) {
+        showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
+        // 手动刷新模板列表
+        ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+        return;
+      }
+
+      // 对于分叉和克隆，执行页面跳转。
+      // 关键：先显示消息，再触发跳转。
+      showTopMessage(upToMessageId == 0 ? '已成功克隆为新聊天' : '已创建分叉对话', backgroundColor: Colors.green);
       
-      final newChatId = await chatRepo.saveChat(newChat);
+      // 强制刷新当前文件夹的聊天列表，确保新聊天在数据源中。
+      // 这是解决跳转问题的关键步骤。
+      await ref.refresh(chatListProvider((parentFolderId: originalChat.parentFolderId, mode: ChatListMode.normal)).future);
 
-      final List<Message> newMessages = messagesToKeep.map((originalMsg) {
-        return Message(
-          chatId: newChatId,
-          parts: originalMsg.parts,
-          role: originalMsg.role,
-          timestamp: originalMsg.timestamp,
-          originalXmlContent: originalMsg.originalXmlContent,
-          secondaryXmlContent: originalMsg.secondaryXmlContent,
-        );
-      }).toList();
-      await messageRepo.saveMessages(newMessages);
-
-      // Directly update the active chat ID, making the UI react.
-      // This is safe because it uses the notifier's own 'ref'.
+      // 安全地触发页面跳转
       ref.read(activeChatIdProvider.notifier).state = newChatId;
 
-      showTopMessage('已创建分叉对话', backgroundColor: Colors.green);
-
     } catch (e) {
-      debugPrint("Notifier 分叉对话时出错: $e");
+      debugPrint("Notifier duplicateChat 时出错: $e");
       if (mounted) {
-        showTopMessage('分叉对话失败: $e', backgroundColor: Colors.red);
+        showTopMessage('操作失败: $e', backgroundColor: Colors.red);
       }
     }
   }

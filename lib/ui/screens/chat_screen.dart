@@ -16,12 +16,10 @@ class ChatScreen extends ConsumerStatefulWidget {
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  PageController? _pageController;
-
   @override
   void dispose() {
+    // SyncService is a singleton, no need to dispose, but force push is a good idea.
     SyncService.instance.forcePushChanges();
-    _pageController?.dispose();
     super.dispose();
   }
 
@@ -85,39 +83,70 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final currentIndex = chats.indexWhere((c) => c.id == activeChatId);
 
             if (chats.length <= 1 || currentIndex == -1) {
-              // Also apply ValueKey here for consistency, ensuring the widget
-              // properly rebuilds if the activeChatId changes for any reason.
               return ChatPageContent(key: ValueKey(activeChatId), chatId: activeChatId);
             }
-
-            if (_pageController == null) {
-              _pageController = PageController(initialPage: currentIndex);
-            } else {
-              final controllerPage = _pageController!.hasClients ? _pageController!.page?.round() : -1;
-              if (controllerPage != currentIndex) {
-                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (_pageController!.hasClients) {
-                      _pageController!.jumpToPage(currentIndex);
-                    }
-                 });
-              }
-            }
-
-            return PageView.builder(
-              controller: _pageController,
-              itemCount: chats.length,
-              onPageChanged: (index) {
-                final newChatId = chats[index].id;
-                if (ref.read(activeChatIdProvider) != newChatId) {
-                  ref.read(activeChatIdProvider.notifier).state = newChatId;
-                }
-              },
-              itemBuilder: (context, index) {
-                return ChatPageContent(key: ValueKey(chats[index].id), chatId: chats[index].id);
-              },
+            
+            // 使用一个基于聊天列表ID的唯一Key来驱动一个新的StatefulWidget。
+            // 当列表变化时，Key会变化，旧的_ChatPageView状态会被销毁，新的会被创建，
+            // 从而确保PageController总是以正确的初始状态被创建。
+            return _ChatPageView(
+              key: ValueKey(chats.map((c) => c.id).join(',')),
+              chats: chats,
+              initialIndex: currentIndex,
             );
           },
         );
+      },
+    );
+  }
+}
+
+/// 一个有状态的Widget，用于封装PageView和其PageController。
+/// 它的生命周期由传入的Key控制，确保在聊天列表变化时能够正确地重建。
+class _ChatPageView extends ConsumerStatefulWidget {
+  final List<Chat> chats;
+  final int initialIndex;
+
+  const _ChatPageView({
+    super.key,
+    required this.chats,
+    required this.initialIndex,
+  });
+
+  @override
+  ConsumerState<_ChatPageView> createState() => _ChatPageViewState();
+}
+
+class _ChatPageViewState extends ConsumerState<_ChatPageView> {
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: widget.chats.length,
+      onPageChanged: (index) {
+        final newChatId = widget.chats[index].id;
+        // 使用ref.read来避免在回调中监听provider
+        if (ref.read(activeChatIdProvider) != newChatId) {
+          ref.read(activeChatIdProvider.notifier).state = newChatId;
+        }
+      },
+      itemBuilder: (context, index) {
+        final chat = widget.chats[index];
+        return ChatPageContent(key: ValueKey(chat.id), chatId: chat.id);
       },
     );
   }

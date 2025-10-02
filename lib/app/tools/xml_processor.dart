@@ -97,70 +97,59 @@ class XmlProcessor {
 
       switch (action) {
         case XmlAction.save:
-          final innerXmlToSave = node.innerXml.trim();
-          if (innerXmlToSave.isNotEmpty) {
-            currentCarriedOverMap[tagName] = innerXmlToSave; // Use original case 'tagName' as key
-            debugPrint("XML save: <$tagName> (stored with key '$tagName')");
+          final identifier = _getElementIdentifier(node);
+          final outerXmlToSave = node.toXmlString(pretty: false).trim();
+          if (outerXmlToSave.isNotEmpty) {
+            currentCarriedOverMap[identifier] = outerXmlToSave;
+            debugPrint("XML save: Stored with key '$identifier'");
           } else {
-            currentCarriedOverMap.remove(tagName); // Remove if content is empty
-            debugPrint("XML save: <$tagName> (content empty, removed/not stored)");
+            currentCarriedOverMap.remove(identifier);
+            debugPrint("XML save: Content empty, removed/not stored for key '$identifier'");
           }
-          // Don't process children as their content is included in innerXml
+          // Don't process children as their content is included in outerXml
           break;
 
         case XmlAction.update:
-          final currentInnerXml = node.innerXml.trim();
-          
-          // Find original key from previous map, case insensitively
-          final String? originalKeyFromPrevious = previousCarriedOverMap.keys.firstWhereOrNull((k) => k.toLowerCase() == tagNameLower);
-          final previousInnerXml = originalKeyFromPrevious != null ? previousCarriedOverMap[originalKeyFromPrevious] : null;
+          final identifier = _getElementIdentifier(node);
+          final previousOuterXml = previousCarriedOverMap[identifier];
 
-          debugPrint("XML update: <$tagName> (current element original case)");
+          debugPrint("XML update: <$tagName> (identifier: '$identifier')");
 
-          if (previousInnerXml != null && previousInnerXml.isNotEmpty) {
+          if (previousOuterXml != null && previousOuterXml.isNotEmpty) {
             try {
-              final savedDoc = XmlDocument.parse('<root>$previousInnerXml</root>'); // previousInnerXml is already trimmed
-              final updateDoc = XmlDocument.parse('<root>$currentInnerXml</root>'); // currentInnerXml is trimmed
-              final mergedChildren = _mergeNodeLists(savedDoc.rootElement.children, updateDoc.rootElement.children);
-              final tempMergedElement = XmlElement(XmlName('temp'), [], mergedChildren);
-              final mergedTrimmedInnerXml = tempMergedElement.innerXml.trim();
+              // Parse the previous full element and merge with the current one
+              final previousElement = XmlDocument.parse(previousOuterXml).rootElement;
+              final mergedChildren = _mergeNodeLists(previousElement.children, node.children);
+              
+              // Create the new merged element, preserving the original's name and attributes
+              final mergedElement = XmlElement(
+                previousElement.name.copy(),
+                previousElement.attributes.map((a) => a.copy()),
+                mergedChildren,
+              );
+              final mergedOuterXml = mergedElement.toXmlString(pretty: false).trim();
 
-              // Key for storage: use casing from previous map if it existed, otherwise current tag's casing.
-              final String keyForStorage = originalKeyFromPrevious!; // Must exist if previousInnerXml was not null
-
-              if (mergedTrimmedInnerXml.isNotEmpty) {
-                currentCarriedOverMap[keyForStorage] = mergedTrimmedInnerXml;
-                debugPrint("XML update successful for <$tagName>. Stored with key '$keyForStorage'.");
+              if (mergedOuterXml.isNotEmpty) {
+                currentCarriedOverMap[identifier] = mergedOuterXml;
+                debugPrint("XML update successful for '$identifier'.");
               } else {
-                currentCarriedOverMap.remove(keyForStorage); // If merged result is empty, remove from map
-                debugPrint("XML update successful for <$tagName> (merged to empty). Removed key '$keyForStorage'.");
+                currentCarriedOverMap.remove(identifier);
+                debugPrint("XML update successful for '$identifier' (merged to empty). Removed.");
               }
             } catch (e) {
-              debugPrint("XML update failed for <$tagName> during parsing/merge: $e. Reverting to previous state for this tag if available.");
-              // Preserve previous state for this tag using its original key
-              if (originalKeyFromPrevious != null && previousCarriedOverMap.containsKey(originalKeyFromPrevious)) {
-                 currentCarriedOverMap[originalKeyFromPrevious] = previousCarriedOverMap[originalKeyFromPrevious]!;
-                 debugPrint("  Reverted to previous state for key '$originalKeyFromPrevious'.");
-              } else {
-                 // If no previous state under originalKeyFromPrevious, or it wasn't in map,
-                 // ensure no entry for current 'tagName' if an optimistic add happened before error.
-                 // This case (no previous state) should ideally be handled by the 'else' below,
-                 // but this ensures robustness if error occurs after some map modification for 'tagName'.
-                 currentCarriedOverMap.remove(tagName);
-                 debugPrint("  No valid previous state to revert to for <$tagName>, ensured no entry for '$tagName'.");
-              }
+              debugPrint("XML update failed for '$identifier' during parsing/merge: $e. Reverting to previous state.");
+              // Preserve previous state for this tag
+              currentCarriedOverMap[identifier] = previousOuterXml;
             }
           } else {
-             // No previous state OR previous state was empty. Treat as save for current content.
-             // Use current element's original casing 'tagName' as the key.
-             if (currentInnerXml.isNotEmpty) {
-                currentCarriedOverMap[tagName] = currentInnerXml;
-                debugPrint("XML update (no previous state or previous was empty, acting as save for non-empty content): <$tagName> (stored with key '$tagName')");
-             } else {
-                // If current content is also empty, remove any existing entry for 'tagName' or ensure no new one is made.
-                currentCarriedOverMap.remove(tagName);
-                debugPrint("XML update (no previous state or previous was empty, current content also empty, no action/removed): <$tagName>");
-             }
+            // No previous state, treat as a simple save.
+            final outerXmlToSave = node.toXmlString(pretty: false).trim();
+            if (outerXmlToSave.isNotEmpty) {
+              currentCarriedOverMap[identifier] = outerXmlToSave;
+              debugPrint("XML update (no previous state, acting as save): Stored with key '$identifier'");
+            } else {
+              currentCarriedOverMap.remove(identifier);
+            }
           }
           // Don't process children as their content is handled by the merge/save logic
           break;
@@ -267,12 +256,17 @@ class XmlProcessor {
   }
 
   // --- Utility Functions ---
-  // Creates a unique identifier for an element, using its 'id' attribute if present.
+  // Creates a unique identifier for an element.
+  // It uses the value of the *first* attribute found, regardless of its name (e.g., id, Name, uuid).
   static String _getElementIdentifier(XmlElement element) {
-    final id = element.getAttribute('id');
-    if (id != null && id.isNotEmpty) {
-      return '${element.name.local}#$id';
+    if (element.attributes.isNotEmpty) {
+      // Use the value of the first attribute as the unique part of the identifier.
+      final firstAttrValue = element.attributes.first.value;
+      if (firstAttrValue.isNotEmpty) {
+        return '${element.name.local}#$firstAttrValue';
+      }
     }
+    // If no attributes or the first attribute has an empty value, fall back to just the tag name.
     return element.name.local;
   }
 
@@ -281,24 +275,23 @@ class XmlProcessor {
     return rules.firstWhereOrNull((r) => r.tagName?.toLowerCase() == tagNameLower);
   }
 
-  // Parses the serialized carried-over XML string back into a map (No changes needed here)
+  // Parses the serialized carried-over XML string back into a map.
+  // The map key is the unique identifier, and the value is the full outer XML.
   static Map<String, String> _parseCarriedOver(String? content) {
     Map<String, String> map = {};
     if (content == null || content.trim().isEmpty) return map;
     try {
-      // Wrap content in a root element for safe parsing
+      // Wrap content in a root element for safe parsing of multiple root-level elements
       final doc = XmlDocument.parse('<carryRoot>${content.trim()}</carryRoot>');
       for (final node in doc.rootElement.children.whereType<XmlElement>()) {
-        // Store original case tag name and its TRIMMED inner XML content
-        final originalTagName = node.name.local;
-        final innerXmlTrimmed = node.innerXml.trim();
-        if (innerXmlTrimmed.isNotEmpty) { // Only store if content is not empty
-          map[originalTagName] = innerXmlTrimmed;
+        final identifier = _getElementIdentifier(node);
+        final outerXml = node.toXmlString(pretty: false).trim();
+        if (outerXml.isNotEmpty) {
+          map[identifier] = outerXml;
         }
       }
     } catch (e) {
       debugPrint("Failed to parse previous carriedOverContent: $e. Content: '$content'. Returning empty map.");
-      // Return empty map on parsing error
     }
     return map;
   }
@@ -308,33 +301,12 @@ class XmlProcessor {
     return _serializeCarriedOver(map);
   }
 
-  // Serializes the state map back into an XML string for storage/carrying over
+  // Serializes the state map back into a single XML string for storage.
   static String? _serializeCarriedOver(Map<String, String> map) {
     if (map.isEmpty) return null;
-    StringBuffer buffer = StringBuffer();
-    const String specialCarryOverKey = "carry_over_xml_content"; // Key to treat specially
-
-    map.forEach((key, value) {
-      // Key is already original case. Value is already trimmed.
-      if (value.isNotEmpty) { // Only process if value is not empty
-        if (key == specialCarryOverKey) {
-          // If the key is the special carry_over_xml_content key,
-          // append its value directly without wrapping it in its own key tags.
-          buffer.write('$value\n');
-          debugPrint("XmlProcessor: Serializing content of '$specialCarryOverKey' directly.");
-        } else {
-          // For all other keys, wrap them as usual.
-          // Ensure key is a valid XML tag name (basic check)
-          if (key.isNotEmpty && !key.contains(RegExp(r'[ <>"/]'))) {
-            buffer.write('<$key>$value</$key>\n');
-          } else {
-            debugPrint("XmlProcessor: Skipping serialization for invalid tag name: $key");
-          }
-        }
-      }
-    });
-    final result = buffer.toString().trim();
-    // Return null if the result is empty after trimming
+    // The values in the map are already complete XML strings.
+    // We just need to join them together.
+    final result = map.values.join('\n');
     return result.isEmpty ? null : result;
   }
 

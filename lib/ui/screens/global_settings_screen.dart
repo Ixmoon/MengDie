@@ -43,10 +43,16 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
   void _saveSettingsIfDirty() {
     if (_isDirty) {
       final authState = ref.read(authProvider);
-      // 只有当用户不是游客时才保存全局设置
-      if (!authState.isGuestMode) {
+      
+      // 根据用户模式选择不同的保存策略
+      if (authState.isGuestMode) {
+        // 对于游客，只更新内存中的状态
+        ref.read(globalSettingsProvider.notifier).updateGuestSettings(_localSettings);
+      } else {
+        // 对于登录用户，将设置持久化到数据库
         ref.read(globalSettingsActionsProvider).updateSettings(_localSettings);
       }
+  
       // 同步设置总是保存，因为它不区分用户
       ref.read(syncSettingsProvider.notifier).updateSettings(_localSyncSettings);
       _isDirty = false; // 重置标记

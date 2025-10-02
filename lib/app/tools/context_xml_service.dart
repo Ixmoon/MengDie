@@ -267,6 +267,14 @@ Future<ApiRequestContext> buildApiRequestContext({
   // Use the historyOverride if provided, otherwise fetch from the database.
   final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
 
+  final lastModelMessageInFullHistory = fullHistory.lastWhereOrNull((m) => m.role == MessageRole.model);
+  String? lastModelMessageXml;
+  if (lastModelMessageInFullHistory != null) {
+    lastModelMessageXml = chat.enableSecondaryXml
+        ? lastModelMessageInFullHistory.secondaryXmlContent
+        : lastModelMessageInFullHistory.originalXmlContent;
+  }
+
   final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
 
   // --- 1. Prepare all "fixed" (non-history) context parts ---
@@ -287,9 +295,6 @@ Future<ApiRequestContext> buildApiRequestContext({
 
   if (summaryExists) {
     fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.contextSummary!)]));
-  }
-  if (xmlExists) {
-    fixedContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
   }
 
   // --- 2. Calculate budget for history ---
@@ -360,6 +365,14 @@ Future<ApiRequestContext> buildApiRequestContext({
       // For user messages, the standard conversion is sufficient.
       finalContextParts.add(LlmContent.fromMessage(message));
     }
+  }
+
+  if (lastModelMessageXml != null && lastModelMessageXml.isNotEmpty) {
+    finalContextParts.add(LlmContent("model", [LlmTextPart(lastModelMessageXml)]));
+  }
+
+  if (xmlExists) {
+    finalContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
   }
 
   if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {

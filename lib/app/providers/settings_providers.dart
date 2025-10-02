@@ -117,24 +117,43 @@ final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSett
 
 // --- 全局应用设置 (用户级) ---
 
-/// 从当前认证状态派生出全局设置。
-///
-/// 这个 Provider 监听 `authProvider`。
-/// - 如果用户已登录，它会提供该用户的设置。
-/// - 如果是游客模式，它会提供一个临时的、默认的设置实例。
-///
-/// 这种设计将设置与用户状态紧密绑定，取代了之前基于 SharedPreferences 的实现。
-final globalSettingsProvider = Provider<User>((ref) {
-  // 监听 authProvider 的状态
-  final authState = ref.watch(authProvider);
+// --- 全局应用设置 (用户级) ---
 
-  // 如果有当前登录的用户，则返回该用户的设置
-  if (authState.currentUser != null) {
-    return authState.currentUser!;
+/// 管理当前用户（登录用户或游客）的全局设置的状态。
+class GlobalSettingsNotifier extends StateNotifier<User> {
+  final Ref _ref;
+
+  GlobalSettingsNotifier(this._ref) : super(User.guest()) {
+    // 监听认证状态的变化，并据此更新设置状态
+    _ref.listen<AuthState>(authProvider, (previous, next) {
+      _updateStateFromAuth(next);
+    }, fireImmediately: true);
   }
-  
-  // 如果是游客模式或用户未登录，返回一个临时的游客用户实例
-  return User.guest();
+
+  /// 根据认证状态更新内部状态
+  void _updateStateFromAuth(AuthState authState) {
+    if (authState.currentUser != null) {
+      state = authState.currentUser!;
+    } else {
+      state = User.guest();
+    }
+  }
+
+  /// 仅更新内存中的游客设置，不写入数据库。
+  void updateGuestSettings(User newSettings) {
+    // 确保只有在当前是游客模式时才更新状态
+    if (_ref.read(authProvider).isGuestMode) {
+      state = newSettings;
+    }
+  }
+}
+
+/// 提供 GlobalSettingsNotifier 实例的全局 Provider。
+///
+/// 这个 Provider 负责管理应用范围内的用户设置，无论是登录用户还是游客。
+/// UI 可以通过 watch 这个 provider 来获取最新的设置，并通过其 notifier 来更新设置。
+final globalSettingsProvider = StateNotifierProvider<GlobalSettingsNotifier, User>((ref) {
+  return GlobalSettingsNotifier(ref);
 });
 
 /// 全局设置操作的封装
