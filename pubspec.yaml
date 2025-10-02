@@ -34,7 +34,7 @@ dependencies:
   image: ^4.1.7             # 用于图像处理 (生成、读写)
   file_picker: ^10.1.2       # 用于选择文件 (导入)
   exif: ^3.2.0              # 用于读写图片 EXIF 元数据
-  share_plus: ^11.0.0       # (可选) 用于分享导出的文件 (已升级以解决依赖冲突)
+  share_plus: ^12.0.0       # (可选) 用于分享导出的文件 (已升级以解决依赖冲突)
   dio: ^5.4.0               # 添加 dio 用于 HTTP 请求
   mime: ^2.0.0              # 用于查找 Mime 类型
   tiktoken: ^1.0.3          # For OpenAI token counting
@@ -54,7 +54,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  analyzer: ^7.5.6 # Update analyzer
+  analyzer: ^8.2.0 # Update analyzer
   build_runner: ^2.4.9 # Flutter 代码生成工具
   json_serializable: ^6.9.5 # JSON code generator
   drift_dev: ^2.26.0 # Drift code generator
