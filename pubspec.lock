@@ -226,7 +226,7 @@ packages:
     source: hosted
     version: "3.0.1"
   dio:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: dio
       sha256: "253a18bbd4851fecba42f7343a1df3a9a4c1d31a2c1b37e221086b4fa8c8dbc9"
@@ -537,7 +537,7 @@ packages:
     source: hosted
     version: "2.3.2"
   http:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: http
       sha256: "2c11f3f94c687ee9bad77c171151672986360b2b001d109814ee7140b2cf261b"
@@ -681,7 +681,7 @@ packages:
     source: hosted
     version: "0.7.9"
   langchain_core:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: langchain_core
       sha256: "4499c01dcf49bb046376661ab447d660c4e36671d52e9cabc8c7225d373643d9"

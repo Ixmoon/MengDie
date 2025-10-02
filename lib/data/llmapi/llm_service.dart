@@ -5,12 +5,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_generative_ai/google_generative_ai.dart' as google_ai;
 import 'package:langchain_core/chat_models.dart';
 import 'package:langchain_core/prompts.dart';
 import 'package:langchain_google/langchain_google.dart';
@@ -27,6 +27,7 @@ final llmServiceProvider = Provider<LlmService>((ref) {
 // --- Centralized LLM Service Implementation ---
 class LlmService {
   final Ref _ref;
+  CancelToken? _cancelToken;
 
   LlmService(this._ref);
 
@@ -37,7 +38,7 @@ class LlmService {
   }) async* {
     try {
       final chatModel = _createChatModel(apiConfig);
-      final messages = _toChatMessages(llmContext);
+      final messages = _toChatMessages(llmContext, apiConfig: apiConfig);
       final prompt = PromptValue.chat(messages);
 
       final stream = chatModel.stream(prompt);
@@ -61,7 +62,7 @@ class LlmService {
   }) async {
     try {
       final chatModel = _createChatModel(apiConfig);
-      final messages = _toChatMessages(llmContext);
+      final messages = _toChatMessages(llmContext, apiConfig: apiConfig);
       final prompt = PromptValue.chat(messages);
 
       final result = await chatModel.invoke(prompt);
@@ -100,7 +101,7 @@ class LlmService {
   }) async {
     try {
       final chatModel = _createChatModel(apiConfig);
-      final messages = _toChatMessages(llmContext);
+      final messages = _toChatMessages(llmContext, apiConfig: apiConfig);
       final prompt = PromptValue.chat(messages);
       return await chatModel.countTokens(prompt);
     } catch (e) {
@@ -153,10 +154,12 @@ class LlmService {
 
   /// Cancels the ongoing request.
   Future<void> cancelActiveRequest() async {
-    // TODO: Cancellation is not directly supported in the same way without Dio.
-    // Langchain's http client usage would need to be investigated for a new cancellation strategy.
-    // For now, we can't cancel requests.
-    debugPrint("LlmService: Request cancellation is currently not implemented.");
+    if (_cancelToken != null && !_cancelToken!.isCancelled) {
+      _cancelToken!.cancel("Request cancelled by user.");
+      debugPrint("LlmService: Active request cancellation triggered.");
+    }
+    // Discard the token after cancellation. A new one will be created for the next request.
+    _cancelToken = null;
   }
 
   // --- Private Helper Methods ---
@@ -164,13 +167,18 @@ class LlmService {
   /// 根据 ApiConfig 创建相应的 langchain ChatModel 实例。
   BaseChatModel _createChatModel(ApiConfig apiConfig) {
     debugPrint('--- LlmService --- Creating chat model for ${apiConfig.apiType} with baseUrl: "${apiConfig.baseUrl}"');
+    
+    // Create a new cancel token for this request.
+    _cancelToken = CancelToken();
+
+    // Create a custom Dio-backed HTTP client to handle requests, enabling cancellation and proxying.
+    final httpClient = _createHttpClient(apiConfig, _cancelToken!);
 
     switch (apiConfig.apiType) {
       case LlmType.openai:
-        // OpenAI's baseUrl works as expected.
         return ChatOpenAI(
           apiKey: apiConfig.apiKey,
-          baseUrl: _normalizeBaseUrl(apiConfig.baseUrl) ?? 'https://api.openai.com/v1',
+          // The baseUrl is handled by the custom client, so we don't set it here.
           defaultOptions: ChatOpenAIOptions(
             model: apiConfig.model,
             temperature: apiConfig.temperature,
@@ -178,23 +186,9 @@ class LlmService {
             maxTokens: apiConfig.maxOutputTokens,
             stop: apiConfig.stopSequences,
           ),
+          client: httpClient,
         );
       case LlmType.gemini:
-        http.Client? client;
-        // For Gemini, we need to create a custom client to handle the proxy.
-        if (apiConfig.baseUrl != null && apiConfig.baseUrl!.isNotEmpty) {
-          final dio = Dio(BaseOptions(baseUrl: _normalizeBaseUrl(apiConfig.baseUrl)!));
-          
-          // DANGER: This should only be used for debugging purposes.
-          // It allows Dio to accept bad SSL certificates, which is useful for proxies like Charles/Fiddler.
-          (dio.httpClientAdapter as IOHttpClientAdapter).onHttpClientCreate = (client) {
-            client.badCertificateCallback = (cert, host, port) => true;
-            return client;
-          };
-
-          client = _DioHttpClient(dio);
-        }
-        
         return ChatGoogleGenerativeAI(
           apiKey: apiConfig.apiKey,
           defaultOptions: ChatGoogleGenerativeAIOptions(
@@ -205,11 +199,31 @@ class LlmService {
             maxOutputTokens: apiConfig.maxOutputTokens,
             stopSequences: apiConfig.stopSequences,
           ),
-          client: client,
+          client: httpClient,
         );
       default:
         throw UnimplementedError('Unsupported API type: ${apiConfig.apiType}');
     }
+  }
+
+  /// Creates a custom http.Client backed by Dio to support cancellation and proxying.
+  http.Client _createHttpClient(ApiConfig apiConfig, CancelToken cancelToken) {
+    final String? normalizedBaseUrl = _normalizeBaseUrl(apiConfig.baseUrl);
+
+    // If a baseUrl is provided, we assume it's a proxy and set it as Dio's base.
+    // Otherwise, Dio will work with the full URLs passed to it by the langchain library.
+    final dio = Dio(BaseOptions(baseUrl: normalizedBaseUrl ?? ''));
+
+    // Special handling for Gemini proxy debugging (allowing bad SSL certificates).
+    if (apiConfig.apiType == LlmType.gemini && normalizedBaseUrl != null) {
+      (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
+        final client = HttpClient();
+        client.badCertificateCallback = (cert, host, port) => true;
+        return client;
+      };
+    }
+
+    return _DioHttpClient(dio, cancelToken: cancelToken);
   }
 
   /// OpenAI 图像生成实现
@@ -262,13 +276,13 @@ class LlmService {
     // Use a vision-capable model for image generation.
     final visionApiConfig = apiConfig.copyWith(model: 'gemini-pro-vision');
     final chatModel = _createChatModel(visionApiConfig);
-    final messages = _toChatMessages(llmContext);
+    final messages = _toChatMessages(llmContext, apiConfig: visionApiConfig);
     final prompt = PromptValue.chat(messages);
 
     final result = await chatModel.invoke(prompt);
 
     // The raw response is stored in the metadata.
-    final rawResponse = result.metadata['raw_response'] as google_ai.GenerateContentResponse?;
+    final rawResponse = result.metadata['raw_response'];
     if (rawResponse == null) {
       return const LlmImageResponse.error("Could not get raw response from metadata.");
     }
@@ -276,12 +290,21 @@ class LlmService {
     final textParts = StringBuffer();
     final imageParts = <String>[];
 
-    for (final candidate in rawResponse.candidates) {
-      for (final part in candidate.content.parts) {
-        if (part is google_ai.TextPart) {
-          textParts.writeln(part.text);
-        } else if (part is google_ai.DataPart) {
-          imageParts.add(base64.encode(part.bytes));
+    for (final candidate in (rawResponse as dynamic).candidates) {
+      for (final part in (candidate as dynamic).content.parts) {
+        // As we cannot use type checks without the import, we resort to duck typing.
+        // We try to access properties that are unique to each part type.
+        try {
+          // This will succeed for TextPart and throw for DataPart.
+          textParts.writeln((part as dynamic).text);
+        } catch (_) {
+          try {
+            // This will succeed for DataPart and throw for TextPart.
+            imageParts.add(base64.encode((part as dynamic).bytes));
+          } catch (e) {
+            // This part is neither TextPart nor DataPart that we can handle.
+            debugPrint('Unknown part type in Gemini response: $e');
+          }
         }
       }
     }
@@ -300,7 +323,10 @@ class LlmService {
   // --- Mappers (inlined from mappers.dart) ---
 
   /// Converts a list of local [LlmContent] objects to a list of LangChain [ChatMessage] objects.
-  static List<ChatMessage> _toChatMessages(List<LlmContent> llmContext) {
+  static List<ChatMessage> _toChatMessages(
+    List<LlmContent> llmContext, {
+    required ApiConfig apiConfig,
+  }) {
     return llmContext.map((content) {
       final parts = content.parts.map((part) {
         if (part is LlmTextPart) {
@@ -318,22 +344,19 @@ class LlmService {
         case 'user':
           return ChatMessage.human(ChatMessageContent.multiModal(parts));
         case 'model':
-          final textContent = content.parts
-              .whereType<LlmTextPart>()
-              .map((p) => p.text)
-              .join('\n');
+          final textContent = content.parts.whereType<LlmTextPart>().map((p) => p.text).join('\n');
           return ChatMessage.ai(textContent);
         case 'system':
-          final text = content.parts
-              .whereType<LlmTextPart>()
-              .map((p) => p.text)
-              .join('\n');
+          final text = content.parts.whereType<LlmTextPart>().map((p) => p.text).join('\n');
+          // This is a workaround for the incompatibility between langchain_google (which targets the standard Gemini API)
+          // and Vertex AI API endpoints. By treating the system prompt as a human prompt, we force the library
+          // to construct a request payload that is compatible with the Vertex AI proxy, avoiding a 400 error.
+          if (apiConfig.apiType == LlmType.gemini) {
+            return ChatMessage.human(ChatMessageContent.text(text));
+          }
           return ChatMessage.system(text);
         default:
-          final textContent = content.parts
-              .whereType<LlmTextPart>()
-              .map((p) => p.text)
-              .join('\n');
+          final textContent = content.parts.whereType<LlmTextPart>().map((p) => p.text).join('\n');
           return ChatMessage.custom(textContent, role: content.role);
       }
     }).toList();
@@ -393,8 +416,9 @@ class LlmService {
 /// while still providing a standard http.Client to langchain.
 class _DioHttpClient extends http.BaseClient {
   final Dio dio;
+  final CancelToken? cancelToken;
 
-  _DioHttpClient(this.dio);
+  _DioHttpClient(this.dio, {this.cancelToken});
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -420,13 +444,15 @@ class _DioHttpClient extends http.BaseClient {
       }
     }
     
-    // Dio's baseUrl will handle the proxying. We just need to pass the path.
-    // The request's URL will be absolute (e.g., https://generativelanguage.googleapis.com/...),
-    // but Dio's baseUrl will replace the host and scheme.
+    // If Dio's baseUrl is set, it acts as a proxy, and we should only send the path.
+    // Otherwise, send the full URI to make a direct request.
+    final String url = dio.options.baseUrl.isEmpty ? requestUri.toString() : requestUri.path;
+
     final response = await dio.request(
-      requestUri.path, // Pass the path and query to Dio
+      url,
       queryParameters: requestUri.queryParameters,
       data: requestBody,
+      cancelToken: cancelToken,
       options: Options(
         method: request.method,
         headers: request.headers,

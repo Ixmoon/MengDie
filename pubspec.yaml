@@ -11,7 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  dio: ^5.4.3
+  http: ^1.2.1
   langchain: ^0.7.9
+  langchain_core: ^0.3.9
   langchain_google: ^0.6.5+2
   langchain_openai: ^0.7.6
   flutter_riverpod: ^2.4.9    # Check pub.dev for latest version
