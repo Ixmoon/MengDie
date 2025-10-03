@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/models.dart';
 import 'llm_service/gemini_service.dart';
 import 'llm_service/openai_service.dart';
-import 'llm_service/llm_models.dart'; // 新增：导入通用数据模型
+import 'llm_models.dart'; // 新增：导入通用数据模型
 import 'llm_service/base_llm_service.dart';
 
 

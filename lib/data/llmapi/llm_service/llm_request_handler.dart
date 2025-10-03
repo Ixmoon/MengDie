@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'llm_service/llm_models.dart';
-import '../../domain/models/api_config.dart';
+import '../llm_models.dart';
+import '../../../domain/models/api_config.dart';
 
 // --- 1. Request Payload Abstraction ---
 

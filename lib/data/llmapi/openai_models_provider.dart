@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import 'llm_models.dart';
-import 'openai_service.dart'; // Updated import
-import '../../../domain/models/api_config.dart';
+import 'llm_service/openai_service.dart'; // Updated import
+import '../../domain/models/api_config.dart';
 
 @immutable
 class OpenAIModelsState {

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
-import '../../../data/llmapi/llm_service/llm_models.dart';
+import '../../../data/llmapi/llm_models.dart';
 import '../../../domain/models/models.dart';
 import '../../../data/llmapi/llm_service.dart';
 import '../../tools/context_xml_service.dart';

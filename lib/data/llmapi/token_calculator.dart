@@ -1,6 +1,6 @@
 import 'package:tiktoken/tiktoken.dart' as tiktoken;
-import '../../../domain/models/api_config.dart';
-import '../../../domain/enums.dart';
+import '../../domain/models/api_config.dart';
+import '../../domain/enums.dart';
 import 'llm_models.dart';
 
 /// A utility class for calculating token counts for various LLM providers.

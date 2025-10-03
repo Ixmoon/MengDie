@@ -6,7 +6,7 @@ import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/chat.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart';
-import '../../../../data/llmapi/llm_service/llm_models.dart';
+import '../../../../data/llmapi/llm_models.dart';
 import '../../../../data/llmapi/llm_service.dart';
 import '../../../tools/context_xml_service.dart';
 import '../../../tools/xml_processor.dart';

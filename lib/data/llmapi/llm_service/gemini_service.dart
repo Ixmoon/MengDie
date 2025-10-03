@@ -5,11 +5,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/models.dart';
-import 'llm_models.dart';
+import '../llm_models.dart';
 import '../../../app/providers/api_key_provider.dart';
 import 'base_llm_service.dart';
-import '../llm_request_handler.dart';
-import 'token_calculator.dart';
+import 'llm_request_handler.dart';
+import '../token_calculator.dart';
 
 // --- Provider ---
 final geminiServiceProvider = Provider<GeminiService>((ref) {
