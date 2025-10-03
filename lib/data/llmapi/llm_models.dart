@@ -122,6 +122,8 @@ class LlmGenerationConfig {
 
 
 /// 表示来自 LLM 的流式响应的一个块。
+enum LlmStreamChunkType { text, error, finish_reason }
+
 @immutable
 class LlmStreamChunk {
   final String textChunk;
@@ -129,6 +131,7 @@ class LlmStreamChunk {
   final bool isFinished;
   final String? error;
   final DateTime timestamp;
+  final LlmStreamChunkType type;
 
   const LlmStreamChunk({
     required this.textChunk,
@@ -136,6 +139,7 @@ class LlmStreamChunk {
     required this.timestamp,
     this.isFinished = false,
     this.error,
+    this.type = LlmStreamChunkType.text,
   });
 
   /// 创建一个错误块。
@@ -146,6 +150,18 @@ class LlmStreamChunk {
       error: message,
       isFinished: true,
       timestamp: DateTime.now(),
+      type: LlmStreamChunkType.error,
+    );
+  }
+
+  /// 创建一个表示中断原因的块。
+  factory LlmStreamChunk.finishReason(String reason, String accumulatedText) {
+    return LlmStreamChunk(
+      textChunk: reason, // 将原因放在 textChunk 中以便 UI 显示
+      accumulatedText: accumulatedText,
+      isFinished: true,
+      timestamp: DateTime.now(),
+      type: LlmStreamChunkType.finish_reason,
     );
   }
 }

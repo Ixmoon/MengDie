@@ -88,7 +88,7 @@ class LlmRequestHandler {
       );
       yield* _processSseStream(stream: response.data!.stream, textExtractor: textExtractor);
     } on DioException catch (e) {
-      yield _handleDioErrorStream(e, payload.apiConfig.apiType.name);
+      yield* _handleStreamDioError(e, payload.apiConfig.apiType.name);
     } catch (e) {
       yield _handleGeneralErrorStream(e, payload.apiConfig.apiType.name);
     }
@@ -217,7 +217,15 @@ class LlmRequestHandler {
 
             if (jsonData.isNotEmpty) {
               try {
-                final jsonMap = jsonDecode(jsonData);
+                final jsonMap = jsonDecode(jsonData) as Map<String, dynamic>;
+
+                // Check for finish reason before extracting text
+                final finishReason = _extractFinishReason(jsonMap);
+                if (finishReason != null) {
+                  yield LlmStreamChunk.finishReason(finishReason, accumulatedResponse);
+                  return; // Stop processing the stream
+                }
+
                 final textChunk = textExtractor(jsonMap);
                 if (textChunk.isNotEmpty) {
                   accumulatedResponse += textChunk;
@@ -253,6 +261,29 @@ class LlmRequestHandler {
     );
   }
 
+  /// Extracts finish reason from a JSON chunk. Returns null if not found or normal.
+  String? _extractFinishReason(Map<String, dynamic> json) {
+    // Gemini
+    final geminiCandidates = json['candidates'] as List?;
+    if (geminiCandidates != null && geminiCandidates.isNotEmpty) {
+      final reason = geminiCandidates.first['finishReason'] as String?;
+      if (reason != null && reason != 'STOP') {
+        return reason;
+      }
+    }
+
+    // OpenAI
+    final openaiChoices = json['choices'] as List?;
+    if (openaiChoices != null && openaiChoices.isNotEmpty) {
+      final reason = openaiChoices.first['finish_reason'] as String?;
+      if (reason != null && reason != 'stop') {
+        return reason;
+      }
+    }
+
+    return null;
+  }
+
   LlmResponse _handleDioErrorResponse(DioException e, String serviceName) {
     if (CancelToken.isCancel(e)) {
       return const LlmResponse.error("Request cancelled by user.");
@@ -262,13 +293,40 @@ class LlmRequestHandler {
     return LlmResponse.error(errorMessage);
   }
 
-  LlmStreamChunk _handleDioErrorStream(DioException e, String serviceName) {
+  Stream<LlmStreamChunk> _handleStreamDioError(DioException e, String serviceName) async* {
     if (CancelToken.isCancel(e)) {
-      return LlmStreamChunk.error("Request cancelled by user.", '');
+      yield LlmStreamChunk.error("Request cancelled by user.", '');
+      return;
     }
-    final errorMessage = _formatDioError(e, serviceName);
-    debugPrint(errorMessage);
-    return LlmStreamChunk.error(errorMessage, '');
+
+    // For stream errors, the body is in a ResponseBody stream and must be read asynchronously.
+    String bodyString = "(No response body)";
+    String details = "";
+    final data = e.response?.data;
+
+    if (data != null && data is ResponseBody) {
+      try {
+        bodyString = await utf8.decodeStream(data.stream);
+        // Now that we have the string, try to parse it for a detailed message.
+        final errorJson = jsonDecode(bodyString);
+        details = errorJson['error']?['message'] ??
+                  errorJson['message'] ??
+                  errorJson.toString();
+      } catch (_) {
+        // If decoding or parsing fails, use the raw string (if not too long).
+        details = bodyString.length > 200 ? "${bodyString.substring(0, 200)}..." : bodyString;
+      }
+    } else if (data != null) {
+      // Fallback for non-streamed error bodies
+      details = data.toString();
+    }
+
+    final errorMsg = "$serviceName API DioException: ${e.message}\n"
+                     "Status: ${e.response?.statusCode} - ${e.response?.statusMessage}\n"
+                     "Details: $details";
+    
+    debugPrint(errorMsg);
+    yield LlmStreamChunk.error(errorMsg, '');
   }
 
   LlmImageResponse _handleDioErrorImage(DioException e, String serviceName) {
@@ -281,18 +339,40 @@ class LlmRequestHandler {
   }
 
   String _formatDioError(DioException e, String serviceName) {
-    String errorMsg = "$serviceName API DioException: ${e.message}";
-    if (e.response != null) {
-      errorMsg += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
-      // Use .toString() for robustness. It handles maps, strings, and other types gracefully.
-      // This avoids errors if the body is not a valid JSON map (e.g., HTML error page).
-      if (e.response?.data != null) {
-        errorMsg += "\nBody: ${e.response!.data.toString()}";
-      } else {
-        errorMsg += "\nBody: (No response body)";
+      String errorMsg = "$serviceName API DioException: ${e.message}";
+      if (e.response != null) {
+          errorMsg += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
+          
+          // vvv --- 从这里开始，替换旧的 Body 处理逻辑 --- vvv
+          if (e.response?.data != null) {
+              try {
+                  final data = e.response!.data;
+                  Map<String, dynamic> errorJson;
+
+                  if (data is Map<String, dynamic>) {
+                      errorJson = data;
+                  } else if (data is String && data.isNotEmpty) {
+                      errorJson = jsonDecode(data);
+                  } else {
+                      throw const FormatException("响应体不是一个有效的 JSON 对象或字符串");
+                  }
+                  
+                  // 尝试从常见的错误结构中提取核心消息
+                  final message = errorJson['error']?['message'] ??  // OpenAI & Gemini v1
+                                  errorJson['message'] ??             // Generic & Gemini v1.5
+                                  errorJson.toString();               // 如果找不到，则回退
+                  errorMsg += "\nDetails: $message";
+
+              } catch (_) {
+                  // 如果解析 JSON 失败，则回退到打印整个 Body
+                  errorMsg += "\nBody: ${e.response!.data.toString()}";
+              }
+          } else {
+              errorMsg += "\nBody: (No response body)";
+          }
+          // ^^^ --- 到这里结束替换 --- ^^^
       }
-    }
-    return errorMsg;
+      return errorMsg;
   }
 
   LlmResponse _handleGeneralErrorResponse(Object e, String serviceName) {

@@ -55,77 +55,119 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
      if (chatId == null) return;
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
-    var selectedAction = existingRule?.action ?? XmlAction.ignore;
+   var selectedAction = existingRule?.action ?? XmlAction.content;
+   var ignoreInContext = existingRule?.ignoreInContext ?? false;
 
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(existingRule == null ? '添加 XML 规则' : '编辑 XML 规则'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: tagNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'XML 标签名称',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  DropdownButtonFormField<XmlAction>(
-                    value: selectedAction,
-                    decoration: const InputDecoration(
-                      labelText: '处理动作',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: XmlAction.values.map((action) {
-                      return DropdownMenuItem(
-                        value: action,
-                        child: Text(action.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() {
-                          selectedAction = value;
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-                TextButton(
-                  onPressed: () {
-                    final tagName = tagNameController.text.trim();
-                    if (tagName.isNotEmpty) {
-                      final newRule = XmlRule(tagName: tagName, action: selectedAction);
-                      notifier.updateSettings((chat) {
-                        final rules = List<XmlRule>.from(chat.xmlRules);
-                        if (ruleIndex != null) {
-                          rules[ruleIndex] = newRule;
-                        } else {
-                          if (!rules.any((r) => r.tagName?.toLowerCase() == tagName.toLowerCase())) {
-                            rules.add(newRule);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('该标签名称的规则已存在'), backgroundColor: Colors.orange));
-                            return chat; // No change
-                          }
-                        }
-                        return chat.copyWith(xmlRules: rules);
-                      });
-                      Navigator.pop(context);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('标签名称不能为空'), backgroundColor: Colors.red));
-                    }
-                  },
-                  child: Text(existingRule == null ? '添加' : '保存'),
+   showDialog(
+     context: context,
+     builder: (context) {
+       return StatefulBuilder(
+         builder: (context, setDialogState) {
+           return AlertDialog(
+             title: Text(existingRule == null ? '添加 XML 规则' : '编辑 XML 规则'),
+             content: Column(
+               mainAxisSize: MainAxisSize.min,
+               children: [
+                 TextField(
+                   controller: tagNameController,
+                   decoration: const InputDecoration(
+                     labelText: 'XML 标签名称',
+                     border: OutlineInputBorder(),
+                   ),
+                 ),
+                 const SizedBox(height: 15),
+                 DropdownButtonFormField<XmlAction>(
+                   value: selectedAction,
+                   decoration: const InputDecoration(
+                     labelText: 'UI 行为',
+                     border: OutlineInputBorder(),
+                   ),
+                   items: XmlAction.values.map((action) {
+                     String description;
+                     switch (action) {
+                       case XmlAction.content:
+                         description = '直接显示内容';
+                         break;
+                       case XmlAction.save:
+                         description = '保存状态';
+                         break;
+                       case XmlAction.update:
+                         description = '更新状态';
+                         break;
+                     }
+                     return DropdownMenuItem(
+                       value: action,
+                       child: Text(description),
+                     );
+                   }).toList(),
+                   onChanged: (value) {
+                     if (value != null) {
+                       setDialogState(() {
+                         selectedAction = value;
+                         // LOGIC: If action is save or update, it cannot be ignored in context.
+                         if (selectedAction == XmlAction.save || selectedAction == XmlAction.update) {
+                           ignoreInContext = false;
+                         }
+                       });
+                     }
+                   },
+                 ),
+                 const SizedBox(height: 10),
+                 CheckboxListTile(
+                   title: const Text('在上下文中忽略'),
+                   subtitle: const Text('此标签不会被包含在发送给模型的历史记录中'),
+                   value: ignoreInContext,
+                   // LOGIC: Disable checkbox if action is save or update.
+                   onChanged: (selectedAction == XmlAction.save || selectedAction == XmlAction.update)
+                     ? null
+                     : (bool? value) {
+                         setDialogState(() {
+                           ignoreInContext = value ?? false;
+                         });
+                       },
+                   controlAffinity: ListTileControlAffinity.leading,
+                   contentPadding: EdgeInsets.zero,
+                 ),
+               ],
+             ),
+             actions: [
+               TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+               TextButton(
+                 onPressed: () {
+                   final tagName = tagNameController.text.trim();
+                   if (tagName.isNotEmpty) {
+                     // Final check to ensure logic consistency before saving
+                     final bool finalIgnoreInContext = (selectedAction == XmlAction.save || selectedAction == XmlAction.update)
+                         ? false
+                         : ignoreInContext;
+
+                     final newRule = XmlRule(
+                       tagName: tagName,
+                       action: selectedAction,
+                       ignoreInContext: finalIgnoreInContext,
+                     );
+                     notifier.updateSettings((chat) {
+                       final rules = List<XmlRule>.from(chat.xmlRules);
+                       if (ruleIndex != null) {
+                         rules[ruleIndex] = newRule;
+                       } else {
+                         if (!rules.any((r) => r.tagName?.toLowerCase() == tagName.toLowerCase())) {
+                           rules.add(newRule);
+                         } else {
+                           ScaffoldMessenger.of(context).showSnackBar(
+                               const SnackBar(content: Text('该标签名称的规则已存在'), backgroundColor: Colors.orange));
+                           return chat; // No change
+                         }
+                       }
+                       return chat.copyWith(xmlRules: rules);
+                     });
+                     Navigator.pop(context);
+                   } else {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                         const SnackBar(content: Text('标签名称不能为空'), backgroundColor: Colors.red));
+                   }
+                 },
+                 child: Text(existingRule == null ? '添加' : '保存'),
                 ),
               ],
             );
@@ -517,7 +559,7 @@ class _XmlRulesSettings extends ConsumerWidget {
               final rule = xmlRules[index];
               return ListTile(
                 title: Text('<${rule.tagName ?? "无效规则"}>'),
-                subtitle: Text('动作: ${rule.action.name}'),
+                subtitle: Text('UI: ${rule.action.name} / 上下文: ${rule.ignoreInContext ? "忽略" : "包含"}'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

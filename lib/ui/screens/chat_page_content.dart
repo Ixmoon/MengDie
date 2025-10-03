@@ -201,6 +201,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                                 chatId: chatId,
                                 scrollController: _scrollController,
                                 xmlRules: chat.xmlRules,
+                                carriedOverXml: chatState.carriedOverXml,
                                 onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
                                 onSuggestionSelected: (suggestion) {
                                   _messageController.text = suggestion;
@@ -211,6 +212,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                               chatId: chatId,
                               scrollController: _scrollController,
                               xmlRules: chat.xmlRules,
+                              carriedOverXml: chatState.carriedOverXml,
                               onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
                               onSuggestionSelected: (suggestion) {
                                 _messageController.text = suggestion;

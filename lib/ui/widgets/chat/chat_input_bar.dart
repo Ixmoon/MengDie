@@ -241,7 +241,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
             margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             decoration: BoxDecoration(
-                color: Theme.of(context).cardColor.withAlpha((255 * 0.95).round()),
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(30.0),
                 boxShadow: const [
                   BoxShadow(

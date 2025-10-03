@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:collection/collection.dart';
 
 import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
@@ -12,6 +13,7 @@ class MessageList extends ConsumerStatefulWidget {
   final int chatId;
   final ScrollController scrollController;
   final List<XmlRule> xmlRules;
+  final String? carriedOverXml;
   final void Function(Message, MessagePart, List<Message>) onMessageTap;
   final Function(String) onSuggestionSelected;
 
@@ -20,6 +22,7 @@ class MessageList extends ConsumerStatefulWidget {
     required this.chatId,
     required this.scrollController,
     required this.xmlRules,
+    this.carriedOverXml,
     required this.onMessageTap,
     required this.onSuggestionSelected,
   });
@@ -71,6 +74,9 @@ class _MessageListState extends ConsumerState<MessageList> {
           allMessages = dbMessages;
         }
 
+        // 查找最新的用户消息ID
+        final latestUserMessageId = allMessages.lastWhereOrNull((m) => m.role == MessageRole.user)?.id;
+
         return ListView.builder(
           reverse: true,
           controller: widget.scrollController,
@@ -80,24 +86,21 @@ class _MessageListState extends ConsumerState<MessageList> {
             final message = allMessages[allMessages.length - 1 - index];
             final isLastMessage = index == 0;
             final isThisMessageStreaming = chatState.isStreaming && streamingMessage != null && message.id == streamingMessage.id;
+            final isLatestUserMessage = message.id == latestUserMessageId;
 
             // Create a column of MessageBubble widgets, one for each part of the message.
             final partWidgets = message.parts.map((part) {
               // Create a temporary message object for the bubble, containing only one part.
-              // This allows us to reuse the existing MessageBubble without a major refactor,
-              // while correctly displaying each part of a multi-part message separately.
               final singlePartMessage = Message(
                 id: message.id,
                 chatId: message.chatId,
                 role: message.role,
-                parts: [part], // The crucial change: only one part per bubble
+                parts: [part],
                 timestamp: message.timestamp,
-                // These are carried over for potential use inside the bubble, but are not strictly necessary for display.
                 originalXmlContent: message.originalXmlContent,
                 secondaryXmlContent: message.secondaryXmlContent,
               );
               return MessageBubble(
-                // Use a composite key to ensure uniqueness for each part, preventing rebuild issues.
                 key: ValueKey("${message.id}_${message.parts.indexOf(part)}"),
                 message: singlePartMessage,
                 xmlRules: widget.xmlRules,
@@ -105,10 +108,11 @@ class _MessageListState extends ConsumerState<MessageList> {
                 isTransparent: chatState.isBubbleTransparent,
                 isHalfWidth: chatState.isBubbleHalfWidth,
                 onTap: () => widget.onMessageTap(message, part, allMessages),
-                // Only show the token count on the very last part of the last message in the list.
                 totalTokens: isLastMessage && part == message.parts.last && !isThisMessageStreaming
                     ? chatState.totalTokens
                     : null,
+                // 将合成的XML和标��传递给最新的用户消息
+                carriedOverXml: isLatestUserMessage ? widget.carriedOverXml : null,
               );
             }).toList();
             

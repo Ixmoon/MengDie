@@ -344,10 +344,10 @@ Future<ApiRequestContext> buildApiRequestContext({
       final List<LlmPart> modelParts = [];
       for (final part in message.parts) {
         if (part.type == MessagePartType.text && part.text != null) {
-          // Apply XML stripping only to the text part of model messages.
+          // Apply selective XML stripping based on 'ignore' rules.
           final filteredText = (message.id == messageIdToPreserveXml)
               ? part.text!
-              : XmlProcessor.stripXmlContent(part.text!);
+              : XmlProcessor.stripIgnoredXmlContent(part.text!, chat.xmlRules);
           if (filteredText.isNotEmpty) {
             modelParts.add(LlmTextPart(filteredText));
           }

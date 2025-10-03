@@ -30,7 +30,14 @@ class XmlRuleListConverter extends TypeConverter<List<XmlRule>, String> {
   List<XmlRule> fromSql(String fromDb) {
     if (fromDb.isEmpty) return [];
     final List<dynamic> jsonData = json.decode(fromDb) as List<dynamic>;
-    return jsonData.map((item) => XmlRule.fromJson(item as Map<String, dynamic>)).toList();
+    // MIGRATION: Filter out old 'ignore' rules directly.
+    final filteredJsonData = jsonData.where((item) {
+      if (item is Map<String, dynamic> && item['action'] == 'ignore') {
+        return false; // Discard this rule
+      }
+      return true; // Keep this rule
+    }).toList();
+    return filteredJsonData.map((item) => XmlRule.fromJson(item as Map<String, dynamic>)).toList();
   }
 
   @override

@@ -161,9 +161,8 @@ class XmlProcessor {
           // Don't process children as their content is handled by the merge/save logic
           break;
 
-        case XmlAction.ignore:
-        case XmlAction.collapsible:
-          debugPrint("XML ignore/collapsible: <$tagName>");
+        case XmlAction.content:
+          debugPrint("XML content: <$tagName>");
           // Do nothing, effectively hiding/ignoring this tag and its content
           break;
       }
@@ -370,6 +369,56 @@ for (final baseNode in baseNodes) {
       return strippedFallback.trim();
     }
   }
+
+  /// Strips only the XML tags that have an 'ignore' rule, returning all other text and XML.
+  static String stripIgnoredXmlContent(String rawText, List<XmlRule> rules) {
+    final trimmedText = rawText.trim();
+    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
+      return trimmedText;
+    }
+
+    // Create a quick lookup set for ignored tag names (lowercase).
+    final ignoredTags = rules
+        .where((r) => r.ignoreInContext && r.tagName != null)
+        .map((r) => r.tagName!.toLowerCase())
+        .toSet();
+
+    if (ignoredTags.isEmpty) {
+      return trimmedText; // No ignore rules, so nothing to strip.
+    }
+
+    try {
+      final document = XmlDocument.parse('<root>$trimmedText</root>');
+      final buffer = StringBuffer();
+
+      void processNode(XmlNode node) {
+        if (node is XmlElement) {
+          if (!ignoredTags.contains(node.name.local.toLowerCase())) {
+            // If the tag is NOT ignored, append its outer XML and stop processing its children
+            // because they are already included in the outer XML string.
+            buffer.write(node.toXmlString(pretty: false));
+          }
+          // If the tag IS ignored, do nothing (effectively removing it and its children).
+        } else if (node is XmlText) {
+          // Always append text nodes.
+          buffer.write(node.value);
+        } else {
+          // For other node types like CDATA, comments, etc., append their string representation.
+          buffer.write(node.toXmlString(pretty: false));
+        }
+      }
+      
+      for (final node in document.rootElement.children) {
+        processNode(node);
+      }
+
+      return buffer.toString().trim();
+    } catch (e) {
+      debugPrint("Error stripping ignored XML content: $e. Returning original text.");
+      return trimmedText; // On failure, return the original text to avoid data loss.
+    }
+  }
+
   /// Extracts only the XML elements from a string, discarding text nodes at the root level.
   static String extractXmlContent(String rawText) {
     final trimmedText = rawText.trim();
@@ -431,11 +480,10 @@ for (final baseNode in baseNodes) {
               // 规则: save/update -> 移动到原生XML中, 不在modelsText中保留任何内容
               xmlBuffer.writeln(node.toXmlString(pretty: false));
               break;
-            case XmlAction.ignore:
-            case XmlAction.collapsible:
+            case XmlAction.content:
             case null: // No rule found
             default:
-              // 规则: ignore/collapsible/无规则 -> 保留在modelsText中
+              // 规则: content/无规则 -> 保留在modelsText中
               displayBuffer.write(node.toXmlString(pretty: false));
               break;
           }

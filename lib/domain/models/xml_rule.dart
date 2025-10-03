@@ -9,8 +9,26 @@ part 'xml_rule.g.dart';
 class XmlRule {
   final String? tagName;
   final XmlAction action;
+  final bool ignoreInContext;
 
-  const XmlRule({this.tagName, this.action = XmlAction.ignore});
+  const XmlRule({
+    this.tagName,
+    this.action = XmlAction.content,
+    this.ignoreInContext = false,
+  });
+
+  // Custom copyWith method
+  XmlRule copyWith({
+    String? tagName,
+    XmlAction? action,
+    bool? ignoreInContext,
+  }) {
+    return XmlRule(
+      tagName: tagName ?? this.tagName,
+      action: action ?? this.action,
+      ignoreInContext: ignoreInContext ?? this.ignoreInContext,
+    );
+  }
 
   factory XmlRule.fromJson(Map<String, dynamic> json) {
     if (json['action'] is String) {

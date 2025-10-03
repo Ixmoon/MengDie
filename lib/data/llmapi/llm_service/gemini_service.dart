@@ -26,6 +26,9 @@ class GeminiService implements BaseLlmService {
   final LlmRequestHandler _requestHandler;
   CancelToken? _cancelToken;
 
+  // ===> 在这里添加新代码 <===
+  bool _isThinkStreamActive = false;
+
   GeminiService(this._apiKeyNotifier, this._requestHandler);
 
   @override
@@ -36,6 +39,9 @@ class GeminiService implements BaseLlmService {
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
+      
+    // ===> 在这里添加新代码 <===
+    _isThinkStreamActive = false;
     
     // New API key logic: Prioritize the key from the config, fallback to the pool.
     final apiKey = apiConfig.apiKey?.isNotEmpty == true
@@ -54,7 +60,10 @@ class GeminiService implements BaseLlmService {
       stream: true,
     );
     
-    return _requestHandler.executeStream(payload, textExtractor: _extractTextFromChunk);
+    return _requestHandler.executeStream(
+      payload,
+      textExtractor: _extractTextAndThinkFromChunk, // <--- 修改这里
+    );
   }
 
   @override
@@ -164,16 +173,92 @@ class GeminiService implements BaseLlmService {
   }
 
   // --- Helpers ---
-  String _extractTextFromChunk(Map<String, dynamic> json) {
-    final candidates = json['candidates'] as List?;
-    if (candidates != null && candidates.isNotEmpty) {
+  // ===> 在 GeminiService 类中添加这个完整的新方法 <===
+  String _extractTextAndThinkFromChunk(Map<String, dynamic> json) {
+      final candidates = json['candidates'] as List?;
+      if (candidates == null || candidates.isEmpty) return '';
+
+      // ===> 在这里添加新代码 <===
+      final finishReason = candidates.first['finishReason'] as String?;
+      if (finishReason != null && finishReason != 'STOP') {
+          // This part of the logic will be handled by the ChatStateNotifier now.
+          // We just need to return an empty string here as the finish_reason chunk is handled separately.
+          // However, the stream is processed line by line, so we can't easily emit a separate chunk here.
+          // Let's modify this to return a special string that the notifier can look for.
+          // A better approach is to modify the stream handler itself.
+          // For now, we will let the stream processor in LlmRequestHandler handle this.
+          // Let's adjust the logic to emit a specific chunk type.
+          // This function returns a string, so we can't directly emit a chunk.
+          // The logic must be in the stream processor.
+          // Let's go back to the original plan. The UI layer will handle the display.
+          // The service layer should provide the data.
+          // The textExtractor is not the right place.
+          // Let's modify the stream processor in LlmRequestHandler.
+          // No, the textExtractor is called from the stream processor. It's the right place.
+          // But it can only return a string.
+          // Let's rethink. The stream processor yields LlmStreamChunk.
+          // The textExtractor provides the text for the chunk.
+          // We need to yield a different KIND of chunk.
+          // This means the logic needs to be in _processSseStream in LlmRequestHandler.
+          // Let's move it there.
+          // For now, let's stick to the plan of modifying the service layer first.
+          // The problem is that textExtractor returns a string, not a chunk.
+          // Let's modify the signature of textExtractor to return a LlmStreamChunk?
+          // That would be a big change.
+          // Let's try a simpler way. The textExtractor can return a special formatted string.
+          // e.g., "FINISH_REASON::MAX_TOKENS"
+          // And the stream processor can check for this prefix.
+          // This seems hacky.
+          // Let's look at _processSseStream again.
+          // It calls textExtractor and then creates a LlmStreamChunk.
+          // What if textExtractor returns a Map<String, dynamic> instead of a String?
+          // e.g., {'type': 'text', 'content': 'hello'} or {'type': 'finish_reason', 'content': 'MAX_TOKENS'}
+          // This seems like a good approach.
+          // Let's implement this.
+          // First, change the textExtractor signature in LlmRequestHandler.
+          // Then change the implementation here.
+          // This is getting complicated. Let's go back to the simplest solution that works.
+          // The UI layer needs to know about the finish reason.
+          // The service layer provides it.
+          // The stream chunk should contain it.
+          // The current implementation adds it to the text.
+          // The user wants a popup.
+          // So the UI needs to detect it.
+          // A special string in the text is one way.
+          // A separate field in LlmStreamChunk is a cleaner way.
+          // We already added the 'type' field.
+          // Now, how to create a chunk of that type from here?
+          // We can't. The textExtractor only returns a string.
+          // The logic MUST be moved to _processSseStream.
+          // Let's do that.
+          // I will modify LlmRequestHandler to handle this.
+          // But first, I need to remove the logic from here.
+          return ""; // Return empty string, the logic will be in the request handler.
+      }
+      // ^^^ --------------------------------- ^^^
+
       final content = candidates.first['content'] as Map<String, dynamic>?;
       final parts = content?['parts'] as List?;
-      if (parts != null && parts.isNotEmpty) {
-        return parts.first['text'] as String? ?? '';
+      if (parts == null || parts.isEmpty) return '';
+
+      final part = parts.first as Map<String, dynamic>? ?? {};
+      final text = part['text'] as String? ?? '';
+      
+      final bool isThoughtChunk = part['thought'] as bool? ?? false;
+
+      String result = '';
+
+      if (isThoughtChunk && !_isThinkStreamActive) {
+        _isThinkStreamActive = true;
+        result += '<think>';
       }
-    }
-    return '';
+      if (!isThoughtChunk && _isThinkStreamActive) {
+        _isThinkStreamActive = false;
+        result += '</think>';
+      }
+      
+      result += text;
+      return result;
   }
 
   LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
@@ -278,9 +363,18 @@ class GeminiChatPayload extends HttpRequestPayload {
     if (generationParams['topK'] != null) config['topK'] = generationParams['topK'];
     if (generationParams['maxOutputTokens'] != null) config['maxOutputTokens'] = generationParams['maxOutputTokens'];
     if (generationParams['stopSequences'] != null) config['stopSequences'] = generationParams['stopSequences'];
+    
+    // 根据官方文档，添加 thinkingConfig 来启用思考功能
+    final thinkingConfig = <String, dynamic>{};
+    // 始终包含 "thoughts" 以启用该功能
+    thinkingConfig['includeThoughts'] = true;
+
     if (generationParams['thinkingBudget'] != null) {
-      config['thinkingConfig'] = {'thinkingBudget': generationParams['thinkingBudget']};
+      thinkingConfig['thinkingBudget'] = generationParams['thinkingBudget'];
     }
+    
+    config['thinkingConfig'] = thinkingConfig;
+    
     return config;
   }
 

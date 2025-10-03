@@ -191,6 +191,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         clearStreaming: true,
         clearHelpMeReplySuggestions: true,
         clearStreamingMessage: true, // Clear any previous leftovers
+        clearCarriedOverXml: true, // Clear previous XML at the start of a new message
         generationStartTime: DateTime.now(),
     );
     startUpdateTimer();
@@ -242,6 +243,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       
       llmApiContext = apiRequestContext.contextParts;
       carriedOverXmlForThisTurn = apiRequestContext.carriedOverXml;
+      
+      // 将计算出的XML暂存到状态中，以便UI可以显示它
+      if (mounted) {
+        state = state.copyWith(carriedOverXml: carriedOverXmlForThisTurn);
+      }
 
     } catch (e) {
         debugPrint("ChatStateNotifier:sendMessage($chatId): 构建 API 上下文时出错: $e");
@@ -314,37 +320,39 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
      llmStreamSubscription = stream.listen(
        (chunk) async {
          if (!mounted) return;
- 
-         if (chunk.error != null) {
-           showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
-           // On error, we still finalize to save what we have and clean up.
-           // Do not cancel the subscription here, let the error bubble up to onError.
-           // The onError handler will call finalize.
-           // llmStreamSubscription?.cancel();
-           if (!isFinalizing) {
-             await _finalizeStreamedMessage(targetMessageId, hasError: true);
-           }
-           return;
-         }
- 
-         if (chunk.isFinished) {
-           // This chunk signals the end, but onDone is the sole handler for finalization.
-           return;
-         }
- 
-        // --- Live Update Logic (State only) ---
-        final accumulatedNewText = chunk.accumulatedText;
-        final combinedRawText = initialRawText + accumulatedNewText;
-        
-        // Update the message object in the state, not the database.
-        final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith(
-          id: targetMessageId,
-          parts: [MessagePart.text(combinedRawText)]
-        );
 
-        if (mounted) {
-          state = state.copyWith(streamingMessage: messageToUpdate);
-        }
+         switch (chunk.type) {
+           case LlmStreamChunkType.text:
+             // --- Live Update Logic (State only) ---
+             final accumulatedNewText = chunk.accumulatedText;
+             final combinedRawText = initialRawText + accumulatedNewText;
+             
+             // Update the message object in the state, not the database.
+             final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith(
+               id: targetMessageId,
+               parts: [MessagePart.text(combinedRawText)]
+             );
+
+             if (mounted) {
+               state = state.copyWith(streamingMessage: messageToUpdate);
+             }
+             break;
+           
+           case LlmStreamChunkType.error:
+             showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
+             if (!isFinalizing) {
+               await _finalizeStreamedMessage(targetMessageId, hasError: true);
+             }
+             break;
+
+           case LlmStreamChunkType.finish_reason:
+             showTopMessage('输出因 ${chunk.textChunk} 而中断', backgroundColor: Colors.orange);
+             // We still finalize normally, as this is a known termination reason.
+             if (!isFinalizing) {
+               await _finalizeStreamedMessage(targetMessageId);
+             }
+             break;
+         }
        },
        onError: (error) {
          if (mounted) {
@@ -580,7 +588,10 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
             debugPrint("Running async post-save processing for newly saved message ID $savedId...");
             await runAsyncProcessingTasks(savedMessage);
             debugPrint("Async post-save processing for message ID $savedId finished.");
-            if (mounted && !state.isCancelled) { // Re-check state in case of race condition
+            // 只有在流正常成功结束后才显示“已完成”。
+            // 如果是因为错误、取消或已知的“中断原因”而结束，则不显示此消息，
+            // 以免覆盖掉之前已经显示的更具体的信息。
+            if (mounted && !state.isCancelled && !hasError) {
               showTopMessage("已完成", backgroundColor: Colors.green);
             }
           } else {

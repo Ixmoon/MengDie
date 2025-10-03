@@ -24,9 +24,10 @@ class ChatScreenState {
   final Message? streamingMessage; // Holds the message being streamed, for UI display only
   final bool isStreamingMessageVisible; // Controls the visibility of the streaming message in the UI
   final bool isImageGenerationMode;
-
-  const ChatScreenState({
-    this.isLoading = false,
+  final String? carriedOverXml; // Holds the synthesized XML for the latest user message
+ 
+   const ChatScreenState({
+     this.isLoading = false,
     this.isPrimaryResponseLoading = false,
     this.generationStartTime,
     this.errorMessage,
@@ -47,10 +48,11 @@ class ChatScreenState {
     this.streamingMessage,
     this.isStreamingMessageVisible = false,
     this.isImageGenerationMode = false,
+    this.carriedOverXml,
   });
-
-  ChatScreenState copyWith({
-    bool? isLoading,
+ 
+   ChatScreenState copyWith({
+     bool? isLoading,
     bool? isPrimaryResponseLoading,
     String? errorMessage,
     bool clearError = false, // If true, sets errorMessage to null
@@ -78,6 +80,8 @@ class ChatScreenState {
     bool? isStreamingMessageVisible,
     bool clearStreamingMessage = false,
     bool? isImageGenerationMode,
+    String? carriedOverXml,
+    bool clearCarriedOverXml = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -101,6 +105,7 @@ class ChatScreenState {
       streamingMessage: clearStreamingMessage ? null : streamingMessage ?? this.streamingMessage,
       isStreamingMessageVisible: isStreamingMessageVisible ?? (clearStreamingMessage ? false : this.isStreamingMessageVisible),
       isImageGenerationMode: isImageGenerationMode ?? this.isImageGenerationMode,
+      carriedOverXml: clearCarriedOverXml ? null : carriedOverXml ?? this.carriedOverXml,
     );
   }
 }

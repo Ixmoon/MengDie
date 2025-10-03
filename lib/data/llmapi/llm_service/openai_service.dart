@@ -111,12 +111,21 @@ class OpenAIService implements BaseLlmService {
 
   // --- Helpers ---
   String _extractTextFromChunk(Map<String, dynamic> json) {
-    final choices = json['choices'] as List?;
-    if (choices != null && choices.isNotEmpty) {
-      final delta = choices.first['delta'] as Map<String, dynamic>?;
-      return delta?['content'] as String? ?? '';
-    }
-    return '';
+      final choices = json['choices'] as List?;
+      if (choices != null && choices.isNotEmpty) {
+
+          // ===> 在这里添加新代码 <===
+          final finishReason = choices.first['finish_reason'] as String?;
+          // OpenAI 的正常结束标志是 'stop'
+          if (finishReason != null && finishReason != 'stop') {
+              return ""; // Return empty string, the logic will be in the request handler.
+          }
+          // ^^^ --------------------------------- ^^^
+
+          final delta = choices.first['delta'] as Map<String, dynamic>?;
+          return delta?['content'] as String? ?? '';
+      }
+      return '';
   }
 
   LlmResponse _parseOpenAIResponse(Map<String, dynamic> data) {
