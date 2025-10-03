@@ -41,9 +41,9 @@ dependencies:
   stream_transform: ^2.1.0 # Check pub.dev for latest version
   crypto: ^3.0.3 # Check pub.dev for latest version
   json_annotation: ^4.9.0 # For JSON serialization annotations
-  # For real persistence (replace in-memory history):
-  # hive: ^latest
-  # hive_flutter: ^latest
+  built_value: ^8.9.2
+  built_collection: ^5.1.1
+  web_socket_channel: ^3.0.3
 
 
 dev_dependencies:
@@ -58,6 +58,7 @@ dev_dependencies:
   # build_runner: ^latest
   # hive_generator: ^latest
   flutter_launcher_icons: ^0.14.3 # 添加图标生成器依赖
+  built_value_generator: ^8.9.2
 
 flutter_launcher_icons:
   android: true # 为 Android 生成图标

@@ -8,8 +8,10 @@ import '../../app/providers/chat_state_providers.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../app/tools/context_xml_service.dart';
 import '../widgets/app_card.dart';
+import '../widgets/fullscreen_text_editor.dart';
 // import '../widgets/editable_debug_section.dart'; // No longer needed
 import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/repository_providers.dart';
 
 
 
@@ -29,14 +31,43 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
   String _errorLoadingContext = "";
   bool _isLoading = false;
 
+  // For editable context summary
+  late final TextEditingController _contextSummaryController;
+  bool _isSummaryDirty = false;
+
   @override
   void initState() {
     super.initState();
+    _contextSummaryController = TextEditingController();
+    _contextSummaryController.addListener(_onSummaryChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadDebugContext();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _contextSummaryController.removeListener(_onSummaryChanged);
+    _contextSummaryController.dispose();
+    super.dispose();
+  }
+
+  void _onSummaryChanged() {
+    final chatId = ref.read(activeChatIdProvider);
+    if (chatId == null) return;
+    // Use read here, we don't want to rebuild every time text changes,
+    // we use a separate state variable _isSummaryDirty for that.
+    final chat = ref.read(currentChatProvider(chatId)).value;
+    if (chat != null) {
+      final isDirty = _contextSummaryController.text != (chat.contextSummary ?? '');
+      if (isDirty != _isSummaryDirty) {
+        setState(() {
+          _isSummaryDirty = isDirty;
+        });
+      }
+    }
   }
 
   Future<void> _loadDebugContext() async {
@@ -107,10 +138,15 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<int?>(activeChatIdProvider, (_, __) {
+    ref.listen<int?>(activeChatIdProvider, (previous, next) {
       // 当活动的聊天发生变化时，重新加载上下文。
       // 根据 Riverpod 的要求，监听器被放置在 build() 方法中。
       if (mounted) {
+        if (previous != next) {
+          // Reset dirty state when chat changes to avoid carrying over edit state
+          // and to allow the controller to be updated with the new chat's summary.
+          _isSummaryDirty = false;
+        }
         _loadDebugContext();
       }
     });
@@ -167,6 +203,11 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
           return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('聊天数据不可用。')));
         }
         
+        // Update controller text if the chat data has changed and there are no pending edits.
+        if (!_isSummaryDirty && _contextSummaryController.text != (chat.contextSummary ?? '')) {
+          _contextSummaryController.text = chat.contextSummary ?? '';
+        }
+        
         if (_isLoading) { // General loading state after chat data is available but context isn't yet
             return const SizedBox.shrink();
         }
@@ -201,7 +242,58 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('上下文总结 (只读)', style: Theme.of(context).textTheme.titleMedium),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('上下文总结', style: Theme.of(context).textTheme.titleMedium),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_isSummaryDirty)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  // No need to check for chat nullability again, it's handled above.
+                                  final updatedChat = chat.copyWith(contextSummary: _contextSummaryController.text);
+                                  // Use the repository to save the chat, the stream provider will update automatically
+                                  await ref.read(chatRepositoryProvider).saveChat(updatedChat);
+                                  
+                                  // Manually clear dirty flag and show feedback
+                                  setState(() {
+                                    _isSummaryDirty = false;
+                                  });
+
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('上下文总结已保存。'), duration: Duration(seconds: 2)),
+                                    );
+                                  }
+                                },
+                                child: const Text('保存'),
+                              ),
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.open_in_full),
+                            tooltip: '全屏编辑',
+                            onPressed: () async {
+                              final newSummary = await Navigator.of(context).push<String?>(
+                                MaterialPageRoute(
+                                  builder: (context) => FullScreenTextEditorScreen(
+                                    initialText: _contextSummaryController.text,
+                                    title: '编辑上下文总结',
+                                  ),
+                                ),
+                              );
+                              if (newSummary != null) {
+                                _contextSummaryController.text = newSummary;
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -210,9 +302,19 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                       color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: SelectableText(
-                      chat.contextSummary ?? '(无上下文总结)',
+                    child: TextFormField(
+                      controller: _contextSummaryController,
+                      maxLines: null, // Allows multiline
                       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        hintText: '(无上下文总结)',
+                        // The parent Container provides padding and background color.
+                        // Set filled to false and contentPadding to zero to avoid conflicts.
+                        filled: false,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                   ),
                 ],

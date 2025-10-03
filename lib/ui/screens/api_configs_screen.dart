@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/api_config.dart';
 import '../../domain/enums.dart';
 import '../../app/providers/api_key_provider.dart';
-import '../../app/providers/openai_models_provider.dart';
+import '../../data/llmapi/openai_models_provider.dart';
 
 class ApiConfigsScreen extends ConsumerWidget {
   const ApiConfigsScreen({super.key});
