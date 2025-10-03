@@ -11,6 +11,7 @@ import '../message_bubble.dart';
 class MessageList extends ConsumerStatefulWidget {
   final int chatId;
   final ScrollController scrollController;
+  final List<XmlRule> xmlRules;
   final void Function(Message, MessagePart, List<Message>) onMessageTap;
   final Function(String) onSuggestionSelected;
 
@@ -18,6 +19,7 @@ class MessageList extends ConsumerStatefulWidget {
     super.key,
     required this.chatId,
     required this.scrollController,
+    required this.xmlRules,
     required this.onMessageTap,
     required this.onSuggestionSelected,
   });
@@ -98,6 +100,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                 // Use a composite key to ensure uniqueness for each part, preventing rebuild issues.
                 key: ValueKey("${message.id}_${message.parts.indexOf(part)}"),
                 message: singlePartMessage,
+                xmlRules: widget.xmlRules,
                 isStreaming: isThisMessageStreaming,
                 isTransparent: chatState.isBubbleTransparent,
                 isHalfWidth: chatState.isBubbleHalfWidth,

@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart' show kIsWeb, debugPrint; // Added kIsWe
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img; // 使用 'img' 前缀避免冲突
 import 'package:file_picker/file_picker.dart'; // 选择文件
-import 'package:exif/exif.dart'; // 读写 EXIF
 
 // 导入模型、DTO 和仓库
 import '../../domain/models/models.dart';
@@ -30,9 +29,6 @@ class ChatExportImportService {
   final MessageRepository _messageRepository;
   // --- 新版 PNG 格式常量 ---
   static const String _pngCharaKeyword = 'chara';
-
-  // --- 旧版 JPG EXIF 格式常量 (保留用于导入兼容) ---
-  static const String _jsonExifJsonKey = 'Image ImageDescription';
 
   ChatExportImportService(this._chatRepository, this._messageRepository);
 
@@ -409,17 +405,12 @@ class ChatExportImportService {
 
     // 对于 .jpg, .jpeg, 或 .png 解析失败的情况，尝试 EXIF
     if (lowerCaseFileName.endsWith('.jpg') || lowerCaseFileName.endsWith('.jpeg') || lowerCaseFileName.endsWith('.png')) {
-      try {
-        await _importFromJpgExif(imageBytes, parentFolderId, isBatch: isBatch);
-      } catch (e) {
-        throw Exception("无法将文件 '$fileName' 作为任何已知格式（PNG Tavern 或 JPG EXIF）导入。");
-      }
-    } else {
-      throw Exception("不支持的文件类型: $fileName");
+
+      throw Exception("导入失败：文件 '$fileName' 不是有效的 PNG 格式，且 JPG EXIF 导入已被弃用。请使用 PNG 格式的导出文件进行导入。");
     }
   }
 
-  // --- 新增：从 PNG tEXt 数据块导入（酒馆角色卡格式） ---
+  // --- 新增：从 PNG tEXt 数据块导入 ---
   Future<void> _importFromPngTavern(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
     final image = img.decodePng(imageBytes);
     if (image == null) {
@@ -447,63 +438,6 @@ class ChatExportImportService {
       throw Exception("未能从 PNG 中恢复有效的聊天数据。");
     }
     
-    await _processImportedJson(jsonString, imageBytes, parentFolderId, isBatch: isBatch);
-  }
-
-  // --- 重构：从 JPG EXIF 数据导入（旧版格式） ---
-  Future<void> _importFromJpgExif(Uint8List imageBytes, int? parentFolderId, {bool isBatch = false}) async {
-    final exifData = await readExifFromBytes(imageBytes);
-    if (exifData.isEmpty) {
-      throw Exception("无法读取图片的元数据。");
-    }
-
-    String? jsonString;
-    const descriptionKey = _jsonExifJsonKey;
-
-    if (exifData.containsKey(descriptionKey)) {
-      final tag = exifData[descriptionKey];
-      if (tag != null) {
-        dynamic rawValue = tag.values;
-        String? base64String;
-        if (rawValue is IfdBytes) {
-          try {
-            List<int> bytes = rawValue.toList().cast<int>();
-            base64String = ascii.decode(bytes, allowInvalid: true);
-          } catch (e) { base64String = tag.printable; }
-        } else if (rawValue is List<int>) {
-          try {
-            base64String = ascii.decode(rawValue, allowInvalid: true);
-          } catch (e) { base64String = tag.printable; }
-        } else if (rawValue is String) {
-          base64String = rawValue;
-        } else {
-          base64String = tag.printable;
-        }
-        base64String = base64String.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '').trim();
-        if (base64String.startsWith('b"') && base64String.endsWith('"')) {
-          base64String = base64String.substring(2, base64String.length - 1);
-        } else if (base64String.startsWith("b'") && base64String.endsWith("'")) {
-          base64String = base64String.substring(2, base64String.length - 1);
-        }
-        if (base64String.isEmpty) throw Exception("未能从 EXIF 中提取有效的 Base64 数据。");
-        
-        try {
-          final decodedBytes = base64Decode(base64String);
-          jsonString = utf8.decode(decodedBytes);
-        } catch (e) {
-          throw Exception("无法解码存储在图片中的聊天数据。数据可能已损坏。");
-        }
-      } else {
-        throw Exception("未找到 ImageDescription 标签对象。");
-      }
-    } else {
-      throw Exception("图片 EXIF 数据中缺少 '$descriptionKey' 标签。");
-    }
-
-    if (jsonString.isEmpty) {
-      throw Exception("未能从图片 EXIF 中恢复有效的聊天数据。");
-    }
-
     await _processImportedJson(jsonString, imageBytes, parentFolderId, isBatch: isBatch);
   }
 

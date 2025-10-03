@@ -3,23 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 
-import '../../../domain/models/api_config.dart';
-import '../../../domain/models/message.dart';
 import '../../../data/llmapi/llm_models.dart';
 import '../../../domain/models/models.dart';
-import '../../../domain/models/chat.dart';
-import '../../repositories/message_repository.dart';
 import '../../../data/llmapi/llm_service.dart';
 import '../../tools/context_xml_service.dart';
 import '../api_key_provider.dart';
-import '../repository_providers.dart'; // Added to resolve provider errors
-import 'chat_screen_state.dart';
+import '../repository_providers.dart'; 
 import 'mixins/ui_state_manager.dart';
 import 'mixins/message_operations.dart';
 import 'mixins/generation_logic.dart';
 import 'mixins/background_tasks.dart';
 import 'mixins/special_actions.dart';
-import 'chat_data_providers.dart';
 import '../chat_state_providers.dart';
 
 

@@ -13,6 +13,13 @@ class XmlProcessResult {
   XmlProcessResult({required this.processedText, this.carriedOverContent});
 }
 
+class PostProcessResult {
+  final String displayText;
+  final String? extractedXml;
+
+  PostProcessResult({required this.displayText, this.extractedXml});
+}
+
 // --- XML Processor Class ---
 class XmlProcessor {
   // Core processing method
@@ -97,7 +104,7 @@ class XmlProcessor {
 
       switch (action) {
         case XmlAction.save:
-          final identifier = _getElementIdentifier(node);
+          final identifier = getElementIdentifier(node);
           final outerXmlToSave = node.toXmlString(pretty: false).trim();
           if (outerXmlToSave.isNotEmpty) {
             currentCarriedOverMap[identifier] = outerXmlToSave;
@@ -110,7 +117,7 @@ class XmlProcessor {
           break;
 
         case XmlAction.update:
-          final identifier = _getElementIdentifier(node);
+          final identifier = getElementIdentifier(node);
           final previousOuterXml = previousCarriedOverMap[identifier];
 
           debugPrint("XML update: <$tagName> (identifier: '$identifier')");
@@ -155,7 +162,8 @@ class XmlProcessor {
           break;
 
         case XmlAction.ignore:
-          debugPrint("XML ignore: <$tagName>");
+        case XmlAction.collapsible:
+          debugPrint("XML ignore/collapsible: <$tagName>");
           // Do nothing, effectively hiding/ignoring this tag and its content
           break;
       }
@@ -180,6 +188,17 @@ class XmlProcessor {
     return _mergeNodeLists(baseNodes, updateNodes);
   }
 
+  /// Merges two XML elements. It keeps the base element's name and attributes
+  /// and recursively merges their children.
+  static XmlElement mergeElements(XmlElement baseElement, XmlElement updateElement) {
+    final mergedChildren = _mergeNodeLists(baseElement.children, updateElement.children);
+    return XmlElement(
+      baseElement.name.copy(),
+      baseElement.attributes.map((a) => a.copy()), // Keep base attributes
+      mergedChildren,
+    );
+  }
+
   // --- Helper: Recursively merge two lists of nodes (for Update) ---
   // New logic: Map-based merge, adds new elements, ignores order for matching, keeps base attributes.
   // --- Helper: Recursively merge two lists of nodes (for Update) ---
@@ -189,18 +208,18 @@ class XmlProcessor {
     // Use a map for efficient lookup of update elements by a unique identifier.
     final Map<String, XmlElement> updateElementsMap = {
       for (var node in updateNodes.whereType<XmlElement>())
-        _getElementIdentifier(node): node
+        getElementIdentifier(node): node
     };
     final List<XmlNode> updateOtherNodes = updateNodes.where((n) => n is! XmlElement).toList();
 
     // Keep track of used update text/cdata nodes to avoid reusing them
     final Set<XmlNode> usedUpdateOtherNodes = {};
+// 1. Iterate through baseNodes and merge with/consume updateNodes
+for (final baseNode in baseNodes) {
+  if (baseNode is XmlElement) {
+    final baseIdentifier = getElementIdentifier(baseNode);
+    final matchingUpdateElement = updateElementsMap[baseIdentifier];
 
-    // 1. Iterate through baseNodes and merge with/consume updateNodes
-    for (final baseNode in baseNodes) {
-      if (baseNode is XmlElement) {
-        final baseIdentifier = _getElementIdentifier(baseNode);
-        final matchingUpdateElement = updateElementsMap[baseIdentifier];
 
         if (matchingUpdateElement != null) {
           // Found a matching update element, consume it from the map.
@@ -258,7 +277,7 @@ class XmlProcessor {
   // --- Utility Functions ---
   // Creates a unique identifier for an element.
   // It uses the value of the *first* attribute found, regardless of its name (e.g., id, Name, uuid).
-  static String _getElementIdentifier(XmlElement element) {
+  static String getElementIdentifier(XmlElement element) {
     if (element.attributes.isNotEmpty) {
       // Use the value of the first attribute as the unique part of the identifier.
       final firstAttrValue = element.attributes.first.value;
@@ -284,7 +303,7 @@ class XmlProcessor {
       // Wrap content in a root element for safe parsing of multiple root-level elements
       final doc = XmlDocument.parse('<carryRoot>${content.trim()}</carryRoot>');
       for (final node in doc.rootElement.children.whereType<XmlElement>()) {
-        final identifier = _getElementIdentifier(node);
+        final identifier = getElementIdentifier(node);
         final outerXml = node.toXmlString(pretty: false).trim();
         if (outerXml.isNotEmpty) {
           map[identifier] = outerXml;
@@ -383,6 +402,57 @@ class XmlProcessor {
       return content;
     }
     return '<$tagName>$content</$tagName>';
+  }
+
+  static PostProcessResult processPostStream(String rawText, List<XmlRule> rules) {
+    final trimmedText = rawText.trim();
+    // 如果没有XML标签，直接返回，所有内容都是displayText
+    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
+      return PostProcessResult(displayText: trimmedText, extractedXml: null);
+    }
+
+    try {
+      final document = XmlDocument.parse('<root>$trimmedText</root>');
+      final displayBuffer = StringBuffer();
+      final xmlBuffer = StringBuffer();
+      final ruleMap = { for (var rule in rules) rule.tagName?.toLowerCase(): rule.action };
+
+      for (final node in document.rootElement.children) {
+        if (node is XmlText) {
+          // 文本节点总是进入displayText
+          displayBuffer.write(node.value);
+        } else if (node is XmlElement) {
+          final tagNameLower = node.name.local.toLowerCase();
+          final action = ruleMap[tagNameLower];
+
+          switch (action) {
+            case XmlAction.save:
+            case XmlAction.update:
+              // 规则: save/update -> 移动到附加xml中, 不在displayText中保留任何内容
+              xmlBuffer.writeln(node.toXmlString(pretty: false));
+              break;
+            case XmlAction.ignore:
+            case XmlAction.collapsible:
+            case null: // No rule found
+            default:
+              // 规则: ignore/collapsible/无规则 -> 保留在displayText中
+              displayBuffer.write(node.toXmlString(pretty: false));
+              break;
+          }
+        }
+      }
+
+      final extractedXml = xmlBuffer.toString().trim();
+      return PostProcessResult(
+        displayText: displayBuffer.toString().trim(),
+        extractedXml: extractedXml.isEmpty ? null : extractedXml,
+      );
+
+    } catch (e) {
+      debugPrint("XML parsing failed during post-stream processing. Treating all content as display text. Error: $e");
+      // 解析失败时，将所有原始内容视为displayText，以防止数据丢失
+      return PostProcessResult(displayText: trimmedText, extractedXml: null);
+    }
   }
 }
 

@@ -190,49 +190,60 @@ class LlmRequestHandler {
     String accumulatedResponse = "";
     String carryOverBuffer = '';
 
-    await for (var chunk in stream) {
-      final rawChunk = carryOverBuffer + utf8.decode(chunk, allowMalformed: true);
-      var lines = rawChunk.split('\n');
+    try {
+      await for (var chunk in stream) {
+        final rawChunk = carryOverBuffer + utf8.decode(chunk, allowMalformed: true);
+        var lines = rawChunk.split('\n');
 
-      if (!rawChunk.endsWith('\n')) {
-        carryOverBuffer = lines.removeLast();
-      } else {
-        carryOverBuffer = '';
-      }
+        if (!rawChunk.endsWith('\n')) {
+          carryOverBuffer = lines.removeLast();
+        } else {
+          carryOverBuffer = '';
+        }
 
-      for (var line in lines) {
-        if (line.startsWith('data: ')) {
-          final jsonData = line.substring('data: '.length).trim();
+        for (var line in lines) {
+          if (line.startsWith('data: ')) {
+            final jsonData = line.substring('data: '.length).trim();
 
-          if (jsonData == '[DONE]') {
-            yield LlmStreamChunk(
-              textChunk: '',
-              accumulatedText: accumulatedResponse,
-              isFinished: true,
-              timestamp: DateTime.now(),
-            );
-            return;
-          }
+            if (jsonData == '[DONE]') {
+              yield LlmStreamChunk(
+                textChunk: '',
+                accumulatedText: accumulatedResponse,
+                isFinished: true,
+                timestamp: DateTime.now(),
+              );
+              return;
+            }
 
-          if (jsonData.isNotEmpty) {
-            try {
-              final jsonMap = jsonDecode(jsonData);
-              final textChunk = textExtractor(jsonMap);
-              if (textChunk.isNotEmpty) {
-                accumulatedResponse += textChunk;
-                yield LlmStreamChunk(
-                  textChunk: textChunk,
-                  accumulatedText: accumulatedResponse,
-                  timestamp: DateTime.now(),
-                  isFinished: false,
-                );
+            if (jsonData.isNotEmpty) {
+              try {
+                final jsonMap = jsonDecode(jsonData);
+                final textChunk = textExtractor(jsonMap);
+                if (textChunk.isNotEmpty) {
+                  accumulatedResponse += textChunk;
+                  yield LlmStreamChunk(
+                    textChunk: textChunk,
+                    accumulatedText: accumulatedResponse,
+                    timestamp: DateTime.now(),
+                    isFinished: false,
+                  );
+                }
+              } catch (e) {
+                debugPrint("Error parsing SSE chunk JSON: $jsonData. Error: $e");
               }
-            } catch (e) {
-              debugPrint("Error parsing SSE chunk JSON: $jsonData. Error: $e");
             }
           }
         }
       }
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        debugPrint("Stream request cancelled by user.");
+        // Yield a final error chunk and then stop the stream.
+        yield LlmStreamChunk.error("Request cancelled by user.", accumulatedResponse);
+        return;
+      }
+      // For other Dio errors, rethrow to be handled by the caller in executeStream.
+      rethrow;
     }
     yield LlmStreamChunk(
       textChunk: '',

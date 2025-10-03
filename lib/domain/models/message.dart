@@ -100,8 +100,7 @@ class Message {
     this.originalXmlContent,
     this.secondaryXmlContent,
   })  : timestamp = timestamp ?? DateTime.now(),
-        displayText = XmlProcessor.stripXmlContent(
-            parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n'));
+        displayText = parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
 
   String get rawText {
     return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
@@ -116,6 +115,8 @@ class Message {
     DateTime? updatedAt,
     String? originalXmlContent,
     String? secondaryXmlContent,
+    bool clearOriginalXml = false,
+    bool clearSecondaryXml = false,
   }) {
     return Message(
       id: id ?? this.id,
@@ -124,8 +125,8 @@ class Message {
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       updatedAt: updatedAt ?? this.updatedAt,
-      originalXmlContent: originalXmlContent ?? this.originalXmlContent,
-      secondaryXmlContent: secondaryXmlContent ?? this.secondaryXmlContent,
+      originalXmlContent: clearOriginalXml ? null : originalXmlContent ?? this.originalXmlContent,
+      secondaryXmlContent: clearSecondaryXml ? null : secondaryXmlContent ?? this.secondaryXmlContent,
     );
   }
 

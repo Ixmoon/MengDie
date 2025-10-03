@@ -22,6 +22,7 @@ enum XmlAction {
   save,
   update,
   ignore,
+  collapsible,
 }
 
 enum LocalHarmCategory {

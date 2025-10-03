@@ -1,7 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // 用于渲染 Markdown 文本
+import 'package:xml/xml.dart';
 import 'cached_image.dart';
+import '../../app/tools/xml_processor.dart';
 
 // 导入模型
 import '../../domain/models/models.dart'; // 需要 Message, MessageRole
@@ -9,11 +10,9 @@ import '../../domain/models/models.dart'; // 需要 Message, MessageRole
 // 本文件包含用于显示单条聊天消息气泡的小部件。
 
 // --- 消息气泡小部件 ---
-// 根据消息的角色（用户或模型）显示不同样式和对齐方式的气泡。
-// 支持显示普通文本和 Markdown 格式的文本。
-// 还包含一个可选的 onTap 回调，用于处理气泡点击事件。
 class MessageBubble extends StatelessWidget {
   final Message message; // 要显示的消息对象
+  final List<XmlRule> xmlRules;
   final bool isStreaming; // 指示此气泡是否用于显示正在流式传输的临时文本
   final VoidCallback? onTap; // 点击气泡时的回调函数
   final bool isTransparent; // 新增：气泡是否半透明
@@ -23,12 +22,252 @@ class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
     required this.message,
+    required this.xmlRules,
     this.isStreaming = false, // 默认为 false
     this.onTap, // 可选的回调
     this.isTransparent = false, // 默认不透明
     this.isHalfWidth = false, // 默认全宽
     this.totalTokens, // Initialize totalTokens
   });
+
+  // --- 私有辅助方法 ---
+
+  MarkdownStyleSheet _getMarkdownStyleSheet(BuildContext context, Color textColor) {
+    return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+      p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
+      code: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontFamily: 'monospace',
+            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(128),
+          ),
+    );
+  }
+
+  /// 根据XML规则解析并渲染文本内容为一系列Widget。
+  /// 此方法通过自动闭合未完成的标签来支持流式传输。
+  List<Widget> _renderTextContent(BuildContext context, String textContent, List<XmlRule> rules, Color textColor, bool isStreaming) {
+    var processedText = textContent.trim();
+    if (!processedText.contains('<') || !processedText.contains('>')) {
+      if (processedText.isEmpty) return [];
+      return [MarkdownBody(data: processedText, selectable: false, styleSheet: _getMarkdownStyleSheet(context, textColor))];
+    }
+
+    // --- 自动闭合标签以处理流式文本 ---
+    final tagStack = <String>[];
+    final tagRegex = RegExp(r"<(/?)(\w+)[^>]*>");
+    for (final match in tagRegex.allMatches(processedText)) {
+      final isClosingTag = match.group(1) == '/';
+      final tagName = match.group(2)!;
+      if (isClosingTag) {
+        if (tagStack.isNotEmpty && tagStack.last == tagName) {
+          tagStack.removeLast();
+        }
+      } else {
+        tagStack.add(tagName);
+      }
+    }
+    // 为堆栈中剩余的所有标签添加闭合标签
+    if (tagStack.isNotEmpty) {
+      processedText += tagStack.reversed.map((tag) => '</$tag>').join('');
+    }
+    // --- 自动闭合结束 ---
+
+    try {
+      final document = XmlDocument.parse('<root>$processedText</root>');
+      final List<Widget> widgets = [];
+      final ruleMap = { for (var rule in rules) rule.tagName?.toLowerCase(): rule.action };
+      final innerXmlTextColor = textColor.withOpacity(0.7);
+
+      for (final node in document.rootElement.children) {
+        if (node is XmlText) {
+          if (node.value.trim().isNotEmpty) {
+            widgets.add(MarkdownBody(data: node.value, selectable: false, styleSheet: _getMarkdownStyleSheet(context, textColor)));
+          }
+        } else if (node is XmlElement) {
+          final tagNameLower = node.name.local.toLowerCase();
+          final action = ruleMap[tagNameLower];
+
+          switch (action) {
+            case XmlAction.collapsible:
+              final content = node.text.trim();
+              if (content.isNotEmpty) {
+                widgets.add(
+                  Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent), // 隐藏默认的分割线
+                    child: ExpansionTile(
+                      initiallyExpanded: isStreaming, // 流式传输时展开，结束后折叠
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(
+                        node.name.local,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14),
+                      ),
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: MarkdownBody(
+                            data: content,
+                            selectable: false,
+                            styleSheet: _getMarkdownStyleSheet(context, innerXmlTextColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              break;
+            case XmlAction.ignore:
+              // 规则: ignore -> UI不显示任何内容
+              break;
+            case null: // No rule found
+            default:
+              // 规则: 没有规则 -> UI显示剥离标签的内部文本
+              final content = node.text.trim();
+              if (content.isNotEmpty) {
+                widgets.add(MarkdownBody(data: content, selectable: false, styleSheet: _getMarkdownStyleSheet(context, innerXmlTextColor)));
+              }
+              break;
+          }
+        }
+      }
+      return widgets;
+    } catch (e) {
+      // 如果解析失败，作为回退，尝试剥离所有标签并显示
+      final fallbackContent = XmlProcessor.stripXmlContent(textContent);
+      if (fallbackContent.isEmpty) return [];
+      return [MarkdownBody(data: fallbackContent, selectable: false, styleSheet: _getMarkdownStyleSheet(context, textColor))];
+    }
+  }
+
+  Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+    final textContent = message.displayText.isEmpty && isStreaming && !isUser ? "..." : message.displayText;
+
+    // 统一使用 _renderTextContent 来处理所有情况
+    final widgets = _renderTextContent(context, textContent, xmlRules, textColor, isStreaming);
+    if (widgets.isEmpty) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
+  Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
+    switch (part.type) {
+      case MessagePartType.image:
+      case MessagePartType.generatedImage:
+        if (part.base64Data != null) {
+          return ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxHeight: 400, // Allow larger images
+            ),
+            child: CachedImageFromBase64(
+              base64String: part.base64Data!,
+              fit: BoxFit.contain,
+              cacheHeight: (400 * MediaQuery.of(context).devicePixelRatio).round(),
+            ),
+          );
+        }
+        return const SizedBox.shrink();
+      case MessagePartType.file:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.insert_drive_file_outlined, color: textColor, size: 24),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                part.fileName ?? '未知文件',
+                style: TextStyle(color: textColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      case MessagePartType.audio:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.audiotrack_outlined, color: textColor, size: 24),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                part.fileName ?? '音频文件',
+                style: TextStyle(color: textColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      case MessagePartType.text:
+        return const SizedBox.shrink(); // Text parts are handled separately
+    }
+  }
+
+  Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+    final hasText = message.displayText.isNotEmpty;
+    final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
+    final originalXml = message.originalXmlContent;
+    final secondaryXml = message.secondaryXmlContent;
+
+    return SelectionArea(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasText)
+              _buildTextPart(context, textColor, isUser, isStreaming),
+            ...nonTextParts.map((part) {
+              return Padding(
+                padding: const EdgeInsets.only(top:0),
+                child: _buildNonTextPart(context, part, textColor),
+              );
+            }),
+            if (originalXml != null && originalXml.isNotEmpty)
+              _buildXmlExpansionTile(context, '附加XML内容', originalXml, textColor, isStreaming),
+            if (secondaryXml != null && secondaryXml.isNotEmpty)
+              _buildXmlExpansionTile(context, '次要XML内容', secondaryXml, textColor, isStreaming),
+            if (totalTokens != null && totalTokens! > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  "Tokens: $totalTokens",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: textColor.withAlpha(179),
+                      ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildXmlExpansionTile(BuildContext context, String title, String xmlContent, Color textColor, bool isStreaming) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: isStreaming, // 流式传输时展开，结束后折叠
+        tilePadding: EdgeInsets.zero,
+        title: Text(
+          title,
+          style: TextStyle(fontWeight: FontWeight.bold, color: textColor.withOpacity(0.7), fontSize: 12),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: MarkdownBody(
+              data: '```xml\n$xmlContent\n```',
+              selectable: false,
+              styleSheet: _getMarkdownStyleSheet(context, textColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +288,6 @@ class MessageBubble extends StatelessWidget {
 
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // Card 本身是气泡。我们将其包装在 Container 中以应用约束和边距。
-    // InkWell 放置在 Card 内部，使整个可见区域都可点击。
     return Align(
       alignment: alignment,
       child: Container(
@@ -68,7 +305,7 @@ class MessageBubble extends StatelessWidget {
           ),
           color: color,
           elevation: 0,
-          margin: EdgeInsets.zero, // 边距现在位于外部容器上
+          margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
           child: Padding(
             padding: const EdgeInsets.all(10.0),
@@ -78,115 +315,4 @@ class MessageBubble extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-    final hasText = message.displayText.isNotEmpty;
-    final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
-
-    // 使用 SelectionArea 包装所有内容以实现统一选择。
-    // 在其内部使用 GestureDetector 来处理点击事件，避免与 SelectionArea 冲突。
-    return SelectionArea(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque, // 确保整个内容区域都可点击
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (hasText)
-              _buildTextPart(context, textColor, isUser, isStreaming),
-            ...nonTextParts.map((part) {
-              return Padding(
-                padding: const EdgeInsets.only(top:0),
-                child: _buildNonTextPart(context, part, textColor),
-              );
-            }),
-            // Display token count if available
-            if (totalTokens != null && totalTokens! > 0)
-              Padding(
-                padding: const EdgeInsets.only(top:0),
-                child: Text(
-                  "Tokens: $totalTokens",
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: textColor.withAlpha(179),
-                      ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-    // 将用户和模型消息统一为使用 MarkdownBody，以实现一致的渲染、
-    // 多行选择，并解决手势冲突。
-    final textContent = message.displayText.isEmpty && isStreaming && !isUser
-        ? "..." // 仅为流式模型响应显示省略号
-        : message.displayText;
-
-    return MarkdownBody(
-      data: textContent,
-      selectable: false, // 由父级的 SelectionArea 处理选择
-      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
-        code: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontFamily: 'monospace',
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(128),
-            ),
-      ),
-    );
-  }
-
-Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
-  switch (part.type) {
-    case MessagePartType.image:
-    case MessagePartType.generatedImage:
-      if (part.base64Data != null) {
-        return ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxHeight: 400, // Allow larger images
-          ),
-          child: CachedImageFromBase64(
-            base64String: part.base64Data!,
-            fit: BoxFit.contain,
-            cacheHeight: (400 * MediaQuery.of(context).devicePixelRatio).round(),
-          ),
-        );
-      }
-      return const SizedBox.shrink();
-    case MessagePartType.file:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.insert_drive_file_outlined, color: textColor, size: 24),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              part.fileName ?? '未知文件',
-              style: TextStyle(color: textColor),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    case MessagePartType.audio:
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.audiotrack_outlined, color: textColor, size: 24),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              part.fileName ?? '音频文件',
-              style: TextStyle(color: textColor),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      );
-    case MessagePartType.text:
-      return const SizedBox.shrink(); // Text parts are handled separately
-  }
-}
 }

@@ -21,4 +21,5 @@ const _$XmlActionEnumMap = {
   XmlAction.save: 'save',
   XmlAction.update: 'update',
   XmlAction.ignore: 'ignore',
+  XmlAction.collapsible: 'collapsible',
 };

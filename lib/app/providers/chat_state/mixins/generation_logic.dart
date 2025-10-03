@@ -318,8 +318,12 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
          if (chunk.error != null) {
            showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
            // On error, we still finalize to save what we have and clean up.
-           llmStreamSubscription?.cancel();
-           await _finalizeStreamedMessage(targetMessageId, hasError: true);
+           // Do not cancel the subscription here, let the error bubble up to onError.
+           // The onError handler will call finalize.
+           // llmStreamSubscription?.cancel();
+           if (!isFinalizing) {
+             await _finalizeStreamedMessage(targetMessageId, hasError: true);
+           }
            return;
          }
  
@@ -353,7 +357,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
        onDone: () async {
          // onDone is the single source of truth for saving a completed or canceled stream.
          if (!isFinalizing) {
-           await _finalizeStreamedMessage(targetMessageId);
+           await _finalizeStreamedMessage(targetMessageId, isCancelled: state.isCancelled);
          }
        },
        cancelOnError: true,
@@ -448,7 +452,6 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   }
 
   Future<void> cancelGeneration() async {
-    // If nothing is running, or it's already cancelled, do nothing.
     if ((!state.isLoading && !state.isStreaming && !state.isProcessingInBackground && !state.isGeneratingSuggestions) || state.isCancelled) {
       debugPrint("Cancel generation skipped: isLoading=${state.isLoading}, isStreaming=${state.isStreaming}, isProcessingInBackground=${state.isProcessingInBackground}, isGeneratingSuggestions=${state.isGeneratingSuggestions}, isCancelled=${state.isCancelled}");
       return;
@@ -456,151 +459,136 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
     debugPrint("Attempting to cancel generation for chat $chatId...");
 
-    try {
-      // 1. Set the cancellation flag in the state. This is the new source of truth.
-      if (mounted) {
-        state = state.copyWith(isCancelled: true);
-      }
+    // 1. Set the cancellation flag. This is the primary source of truth.
+    if (mounted) {
+      state = state.copyWith(isCancelled: true);
+    }
 
-      // 2. Cancel any active LLM request (covers main stream and background tasks)
+    try {
+      // 2. Cancel any active network/API request.
       await ref.read(llmServiceProvider).cancelActiveRequest();
 
-      // 3. Cancel the stream subscription if it exists.
-      // This will trigger its onDone/onError, which will see the isCancelled flag and stop.
-      if (llmStreamSubscription != null) {
-        await llmStreamSubscription?.cancel();
-        llmStreamSubscription = null;
-      }
+      // 3. Cancel the Dart stream subscription. This is crucial.
+      // It will trigger the `onDone` or `onError` callback in the stream listener.
+      await llmStreamSubscription?.cancel();
+      llmStreamSubscription = null;
 
-      // 4. Finalize state immediately for instant UI feedback.
-      // The async tasks will check the `isCancelled` state flag and stop themselves.
-      if (mounted) {
-        state = state.copyWith(
-          isLoading: false,
-          isStreaming: false,
-          isProcessingInBackground: false,
-          isGeneratingSuggestions: false, // Also clear this flag
-          clearStreaming: true,
-          clearStreamingMessage: true, // Also clear the cached message
-        );
-        stopUpdateTimer();
-        showTopMessage("已停止", backgroundColor: Colors.blueGrey);
+      // 4. Delegate finalization to the now-triggered onDone/onError handler.
+      // The handler will see `isCancelled` is true and save the partial message.
+      // We pass the temporary message ID if available.
+      final tempMessageId = state.streamingMessage?.id;
+      if (tempMessageId != null) {
+        // Manually call finalize here as a fallback, in case onDone isn't triggered
+        // by the cancel call under certain race conditions.
+        await _finalizeStreamedMessage(tempMessageId, isCancelled: true);
+      } else {
+        // If there's no streaming message, we can clean up the state directly.
+        if (mounted) {
+          state = state.copyWith(
+            isLoading: false,
+            isStreaming: false,
+            isProcessingInBackground: false,
+            isGeneratingSuggestions: false,
+          );
+          stopUpdateTimer();
+          showTopMessage("已停止", backgroundColor: Colors.blueGrey);
+        }
       }
     } catch (e) {
       debugPrint("Error during cancelGeneration: $e");
       if (mounted) {
         showTopMessage("取消操作时出错: $e", backgroundColor: Colors.red);
+        // Ensure state is cleaned up even on error
+        state = state.copyWith(isLoading: false, isStreaming: false, isProcessingInBackground: false, isGeneratingSuggestions: false);
+        stopUpdateTimer();
       }
     } finally {
       debugPrint("Cancellation process finished for chat $chatId.");
     }
   }
 
-  Future<void> _finalizeStreamedMessage(int messageId, {bool hasError = false}) async {
+  Future<void> _finalizeStreamedMessage(int messageId, {bool hasError = false, bool isCancelled = false}) async {
     if (!mounted || isFinalizing) return;
-    
-    // CRITICAL: If cancellation was requested, stop all finalization and post-processing.
-    if (state.isCancelled) {
-      isFinalizing = false; // Release lock
-      debugPrint("Finalization skipped for message ID $messageId because task was cancelled.");
-      return;
-    }
-
     isFinalizing = true;
-    debugPrint("Finalizing stream for message ID $messageId... Has Error: $hasError");
+
+    // Use the isCancelled parameter OR the state flag. The parameter is more immediate.
+    final bool wasCancelled = isCancelled || state.isCancelled;
+    debugPrint("Finalizing stream for message ID $messageId... Has Error: $hasError, Was Cancelled: $wasCancelled");
 
     final messageRepo = ref.read(messageRepositoryProvider);
     final messageToFinalize = state.streamingMessage;
-    bool wasRunning = state.isLoading || state.isStreaming;
- 
-    if (hasError && (messageToFinalize == null || messageToFinalize.rawText.trim().isEmpty || messageToFinalize.rawText == "...")) {
-      debugPrint("Stream ended in error with no content. Clearing temporary message.");
+
+    // If there's no content and it wasn't a successful stream, just clean up.
+    if (messageToFinalize == null || messageToFinalize.rawText.trim().isEmpty || messageToFinalize.rawText == "...") {
+      if (hasError || wasCancelled) {
+        debugPrint("Stream ended with no content due to error or cancellation. Clearing state.");
+        if (mounted) {
+          state = state.copyWith(
+            isLoading: false,
+            isStreaming: false,
+            isPrimaryResponseLoading: false,
+            isProcessingInBackground: false,
+            clearStreaming: true,
+            clearStreamingMessage: true,
+          );
+          stopUpdateTimer();
+        }
+        isFinalizing = false;
+        return;
+      }
+    }
+    
+    if (messageToFinalize == null) {
+      debugPrint("Finalization skipped: No message found in state.");
+      // Still need to clean up the loading state if something was running.
       if (mounted) {
-        state = state.copyWith(
-          isLoading: false, isStreaming: false, clearStreaming: true,
-          clearStreamingMessage: true,
-        );
+        state = state.copyWith(isLoading: false, isStreaming: false, isPrimaryResponseLoading: false);
         stopUpdateTimer();
       }
       isFinalizing = false;
       return;
     }
 
-    if (messageToFinalize == null) {
-      debugPrint("Finalization skipped: No message found in state.");
-      isFinalizing = false;
-      return;
-    }
-
-    // 1. Create a new message object for saving, stripping the temporary ID.
-    // This happens only on successful completion.
-    Message? finalMessageToSave;
-    if (!hasError) {
-      if (messageToFinalize.id > 0) {
-        // This is an update to an existing message.
-        finalMessageToSave = messageToFinalize;
-      } else {
-        // This is a new message. Create a new object without the temporary negative ID.
-        finalMessageToSave = Message(
-          chatId: messageToFinalize.chatId,
-          role: messageToFinalize.role,
-          parts: messageToFinalize.parts,
-          timestamp: messageToFinalize.timestamp,
-        );
-      }
-    }
-
-    // 2. The primary response (stream) is "done". Turn off its specific lock.
-    //    Keep the master `isLoading` lock on for background tasks.
+    // The primary response part is done (stream ended/cancelled/errored).
     if (mounted) {
       state = state.copyWith(
         isPrimaryResponseLoading: false,
         isStreaming: false,
         clearStreaming: true,
-        // CRITICAL: Do NOT clear isLoading or the streaming message here.
       );
     }
 
-    // 3. Now, with the main state cleared, run async pre-save and post-save processing.
     try {
       final chat = ref.read(currentChatProvider(chatId)).value;
-      if (chat != null && finalMessageToSave != null) {
-        // 3a. Process the message in-memory BEFORE saving.
-        final processedMessage = await getFinalProcessedMessage(chat, finalMessageToSave);
-        if (state.isCancelled) {
-          isFinalizing = false;
-          return;
-        }
+      if (chat != null) {
+        // Process the message in-memory BEFORE saving.
+        // For cancelled messages, we still process to handle any partial XML.
+        final processedMessage = await getFinalProcessedMessage(chat, messageToFinalize);
 
-        // 3b. Save the fully processed message to the database ONCE.
+        // Save the fully processed message to the database.
         final savedId = await messageRepo.saveMessage(processedMessage);
         final savedMessage = await messageRepo.getMessageById(savedId);
-        
-        // 3c. Run post-save async tasks.
+
         if (savedMessage != null) {
-          // CRITICAL: Update the state's streamingMessage with the one from the DB.
-          // This "promotes" the temporary message to a persistent one with a real ID,
-          // ensuring a seamless transition in the UI.
+          // "Promote" the temporary message to a persistent one in the state.
           if (mounted) {
             state = state.copyWith(streamingMessage: savedMessage);
           }
 
-          debugPrint("Running async post-save processing for newly saved message ID $savedId...");
-          if (!state.isCancelled) {
+          // Run post-save tasks ONLY if the stream completed successfully.
+          if (!wasCancelled && !hasError) {
+            debugPrint("Running async post-save processing for newly saved message ID $savedId...");
             await runAsyncProcessingTasks(savedMessage);
             debugPrint("Async post-save processing for message ID $savedId finished.");
-            if (mounted && !state.isCancelled) {
+            if (mounted && !state.isCancelled) { // Re-check state in case of race condition
               showTopMessage("已完成", backgroundColor: Colors.green);
             }
           } else {
-            debugPrint("Async post-save processing for message ID $savedId skipped due to cancellation.");
+            debugPrint("Async post-save processing for message ID $savedId skipped due to cancellation or error.");
           }
         }
-      } else if (wasRunning) {
-        debugPrint("Skipping async processing: chat or message not available.");
-        if (mounted) {
-          showTopMessage("已停止", backgroundColor: Colors.blueGrey);
-        }
+      } else {
+        debugPrint("Skipping message save/processing: chat not available.");
       }
     } catch (e) {
       debugPrint("Error during finalization's post-processing: $e");
@@ -608,6 +596,16 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         showTopMessage('后台处理任务出错: $e', backgroundColor: Colors.red);
       }
     } finally {
+      // Final state cleanup, regardless of success or failure.
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false, // Master lock OFF
+          isProcessingInBackground: false,
+          isStreamingMessageVisible: false, // Hide the temp message
+          isCancelled: false, // Reset cancellation flag for the next run
+        );
+        stopUpdateTimer();
+      }
       isFinalizing = false;
       debugPrint("Finalization process finished. isFinalizing reset to false.");
     }

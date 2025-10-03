@@ -115,43 +115,44 @@ class ContextXmlService {
 
         if (rule != null) {
           final action = rule.action;
-          final currentInnerXmlTrimmed = element.innerXml.trim();
-          final String? existingKeyInCumulativeMap = cumulativeStateMap.keys.firstWhereOrNull((k) => k.toLowerCase() == tagNameLower);
-          final String keyToUseForCumulativeMap = existingKeyInCumulativeMap ?? originalTagNameFromElement;
+          final currentOuterXml = element.toXmlString(pretty: false).trim();
+          final identifier = XmlProcessor.getElementIdentifier(element);
 
           if (action == XmlAction.save) {
-            if (currentInnerXmlTrimmed.isNotEmpty) {
-              cumulativeStateMap[keyToUseForCumulativeMap] = currentInnerXmlTrimmed;
+            if (currentOuterXml.isNotEmpty) {
+              cumulativeStateMap[identifier] = currentOuterXml;
             } else {
-              cumulativeStateMap.remove(keyToUseForCumulativeMap);
+              cumulativeStateMap.remove(identifier);
             }
           } else if (action == XmlAction.update) {
-            final previousInnerXmlFromCumulative = cumulativeStateMap[keyToUseForCumulativeMap];
-            if (previousInnerXmlFromCumulative != null && previousInnerXmlFromCumulative.isNotEmpty) {
-              if (currentInnerXmlTrimmed.isNotEmpty) {
+            final previousOuterXml = cumulativeStateMap[identifier];
+            if (previousOuterXml != null && previousOuterXml.isNotEmpty) {
+              if (currentOuterXml.isNotEmpty) {
                 try {
-                  final baseDoc = xml_pkg.XmlDocument.parse('<root>$previousInnerXmlFromCumulative</root>');
-                  final updateDoc = xml_pkg.XmlDocument.parse('<root>$currentInnerXmlTrimmed</root>');
-                  final mergedChildren = XmlProcessor.mergeNodeLists(baseDoc.rootElement.children, updateDoc.rootElement.children);
-                  final tempMergedElement = xml_pkg.XmlElement(xml_pkg.XmlName('temp'), [], mergedChildren);
-                  final mergedInnerXmlTrimmed = tempMergedElement.innerXml.trim();
+                  final baseElement = xml_pkg.XmlDocument.parse(previousOuterXml).rootElement;
+                  final updateElement = element; // The current element is the update
+                  final mergedElement = XmlProcessor.mergeElements(baseElement, updateElement);
+                  final mergedOuterXml = mergedElement.toXmlString(pretty: false).trim();
 
-                  if (mergedInnerXmlTrimmed.isNotEmpty) {
-                    cumulativeStateMap[keyToUseForCumulativeMap] = mergedInnerXmlTrimmed;
+                  if (mergedOuterXml.isNotEmpty) {
+                    cumulativeStateMap[identifier] = mergedOuterXml;
                   } else {
-                    cumulativeStateMap.remove(keyToUseForCumulativeMap);
+                    cumulativeStateMap.remove(identifier);
                   }
                 } catch (e) {
-                  debugPrint("  ContextXmlService:_calculateCurrentCarriedOverXml - Merge failed for <$originalTagNameFromElement> (key '$keyToUseForCumulativeMap'): $e. Retaining previous.");
+                  debugPrint("  ContextXmlService:_calculateCurrentCarriedOverXml - Merge failed for <$originalTagNameFromElement> (identifier '$identifier'): $e. Retaining previous.");
+                  // In case of merge failure, retain the previous valid XML state.
+                  cumulativeStateMap[identifier] = previousOuterXml;
                 }
               } else {
-                cumulativeStateMap.remove(keyToUseForCumulativeMap); // Current is empty, so remove.
+                // If the new content is empty, it signifies removal.
+                cumulativeStateMap.remove(identifier);
               }
-            } else { // No previous state or previous was empty.
-              if (currentInnerXmlTrimmed.isNotEmpty) {
-                cumulativeStateMap[keyToUseForCumulativeMap] = currentInnerXmlTrimmed; // Treat as save.
+            } else { // No previous state, treat as a simple save.
+              if (currentOuterXml.isNotEmpty) {
+                cumulativeStateMap[identifier] = currentOuterXml;
               } else {
-                cumulativeStateMap.remove(keyToUseForCumulativeMap); // Both empty, ensure removed.
+                cumulativeStateMap.remove(identifier);
               }
             }
           }

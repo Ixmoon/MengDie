@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xml/xml.dart';
 
 import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/chat.dart';
@@ -105,42 +106,42 @@ mixin BackgroundTasks on UiStateManager {
 
     // A helper to contain the logic of _executePostGenerationProcessing but return the final message
     Future<Message> getFinalProcessedMessage(Chat chat, Message initialMessage) async {
-      final originalRawText = initialMessage.rawText;
-      final displayText = XmlProcessor.stripXmlContent(originalRawText);
-      final initialXml = XmlProcessor.extractXmlContent(originalRawText);
+      // This is the full text received from the stream, including any XML.
+      final fullRawText = initialMessage.rawText;
 
+      // 1. Process the final text using rules to separate display text from extractable XML.
+      final processResult = XmlProcessor.processPostStream(fullRawText, chat.xmlRules);
+      final finalTextForDisplay = processResult.displayText;
+      final extractedXml = processResult.extractedXml;
+
+      // 2. Handle secondary XML generation if enabled.
       String? newSecondaryXmlContent;
-
       if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
         try {
           if (state.isCancelled) return initialMessage; // Early exit
-          // 重构：直接获取配置对象
           final apiConfig = getEffectiveApiConfig(specificConfigId: chat.secondaryXmlApiConfigId);
           final generatedText = await executeSpecialAction(
             prompt: chat.secondaryXmlPrompt!,
             apiConfig: apiConfig,
             actionType: SpecialActionType.secondaryXml,
-            targetMessage: initialMessage,
+            targetMessage: initialMessage, // Pass the original message for context
           );
           debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content START ==========");
           debugPrint(generatedText);
           debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content END ==========");
           newSecondaryXmlContent = generatedText;
         } catch (e) {
-          // If it fails, we log it but don't stop the whole finalization process.
-          // The error is already logged inside _executeSpecialAction.
-          // We rethrow to let the caller (_runAsyncProcessingTasks) know something failed.
           debugPrint("ChatStateNotifier($chatId): Secondary XML generation failed and will not be included.");
-          rethrow;
+          // Do not rethrow, just log the error and continue.
         }
       }
 
-      final newParts = [MessagePart.text(displayText)];
+      // 3. Create the final, processed message object.
+      final newParts = [MessagePart.text(finalTextForDisplay)];
 
-      // Return a new message object with all final values, ready to be saved.
       return initialMessage.copyWith(
         parts: newParts,
-        originalXmlContent: initialXml,
+        originalXmlContent: extractedXml,
         secondaryXmlContent: newSecondaryXmlContent,
       );
     }

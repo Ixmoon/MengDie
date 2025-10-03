@@ -10,6 +10,7 @@ import '../../data/sync/sync_service.dart';
 import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import '../../app/providers/repository_providers.dart';
+import '../../app/tools/xml_processor.dart';
 
 class ChatPageLogic {
   final WidgetRef ref;
@@ -274,33 +275,41 @@ class ChatPageLogic {
                 TextButton(
                   onPressed: () async {
                     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-                    final newDisplayText = textController.text.trim();
-                    final newXmlContent = xmlController.text.trim();
+                    final newDisplayTextFromInput = textController.text;
+                    final existingXmlFromInput = xmlController.text;
 
-                    if (newDisplayText.isEmpty && message.parts.any((p) => p.type != MessagePartType.text)) {
-                    } else if (newDisplayText.isEmpty) {
+                    // 验证：如果没有附件，则显示文本不能为空
+                    if (newDisplayTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
                       notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
                       return;
                     }
 
-                    Message updatedMessage;
-                    if (message.role == MessageRole.model) {
-                      final bool useSecondaryXml = chat.enableSecondaryXml;
-                      updatedMessage = message.copyWith(
-                        parts: [MessagePart.text(newDisplayText)],
-                        secondaryXmlContent: useSecondaryXml ? newXmlContent : message.secondaryXmlContent,
-                        originalXmlContent: !useSecondaryXml ? newXmlContent : message.originalXmlContent,
-                      );
-                    } else {
-                      final newParts = List<MessagePart>.from(message.parts);
-                      final textPartIndex = newParts.indexWhere((p) => p.type == MessagePartType.text);
-                      if (textPartIndex != -1) {
-                        newParts[textPartIndex] = MessagePart.text(newDisplayText);
-                      } else {
-                        newParts.add(MessagePart.text(newDisplayText));
-                      }
-                      updatedMessage = message.copyWith(parts: newParts);
+                    // 1. 只对用户编辑的“显示文本”应用XML规则
+                    final processResult = XmlProcessor.processPostStream(newDisplayTextFromInput, chat.xmlRules);
+                    final finalCleanDisplayText = processResult.displayText;
+                    final newlyExtractedXml = processResult.extractedXml;
+
+                    // 2. 健壮地合并XML：将新提取的XML追加到用户输入的原有XML之后
+                    final List<String> xmlParts = [];
+                    if (existingXmlFromInput.isNotEmpty) {
+                      xmlParts.add(existingXmlFromInput);
                     }
+                    if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) {
+                      xmlParts.add(newlyExtractedXml);
+                    }
+                    // 如果没有任何XML内容，则结果为null，确保清空操作能够被正确保存
+                    final finalCombinedXml = xmlParts.isEmpty ? null : xmlParts.join('\n');
+
+                    // 3. 构建并保存最终的消息
+                    final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                    newParts.add(MessagePart.text(finalCleanDisplayText));
+
+                    final updatedMessage = message.copyWith(
+                      parts: newParts,
+                      originalXmlContent: finalCombinedXml,
+                      // 明确地告诉 copyWith，如果 finalCombinedXml 为 null，我们就是要清空它
+                      clearOriginalXml: finalCombinedXml == null,
+                    );
                     
                     Navigator.pop(dialogContext);
                     await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
