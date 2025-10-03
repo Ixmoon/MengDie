@@ -4,7 +4,7 @@
 import 'package:flutter/foundation.dart';
 
 // 导入本地数据模型，例如用于数据转换的 Message 和 MessagePart
-import '../../domain/models/models.dart';
+import '../../../domain/models/models.dart';
 
 // --- 通用 LLM 数据结构 ---
 // 这些结构抽象了底层 LLM API 的具体细节 (例如 Gemini)。

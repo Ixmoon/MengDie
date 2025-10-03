@@ -4,7 +4,7 @@
 
 import 'dart:async';
 
-import '../../domain/models/api_config.dart';
+import '../../../domain/models/api_config.dart';
 import 'llm_models.dart';
 
 /// 所有 LLM 服务的抽象基类。

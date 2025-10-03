@@ -7,10 +7,10 @@ import 'package:flutter/foundation.dart';
 
 // 导入本地模型、服务和新的抽象数据模型
 import '../../domain/models/models.dart';
-import 'gemini_service.dart';
-import 'openai_service.dart';
-import 'llm_models.dart'; // 新增：导入通用数据模型
-import 'base_llm_service.dart';
+import 'llm_service/gemini_service.dart';
+import 'llm_service/openai_service.dart';
+import 'llm_service/llm_models.dart'; // 新增：导入通用数据模型
+import 'llm_service/base_llm_service.dart';
 
 
 // --- LLM Service Provider ---

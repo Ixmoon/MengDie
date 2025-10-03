@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart'; // Added import for MessageRole
-import '../../../../data/llmapi/llm_models.dart';
+import '../../../../data/llmapi/llm_service/llm_models.dart';
 import '../../../../data/llmapi/llm_service.dart';
 import '../../../../domain/models/chat.dart';
 import '../../repository_providers.dart';
