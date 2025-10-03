@@ -14,10 +14,10 @@ class XmlProcessResult {
 }
 
 class PostProcessResult {
-  final String displayText;
+  final String modelsText;
   final String? extractedXml;
 
-  PostProcessResult({required this.displayText, this.extractedXml});
+  PostProcessResult({required this.modelsText, this.extractedXml});
 }
 
 // --- XML Processor Class ---
@@ -406,9 +406,9 @@ for (final baseNode in baseNodes) {
 
   static PostProcessResult processPostStream(String rawText, List<XmlRule> rules) {
     final trimmedText = rawText.trim();
-    // 如果没有XML标签，直接返回，所有内容都是displayText
+    // 如果没有XML标签，直接返回，所有内容都是modelsText
     if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
-      return PostProcessResult(displayText: trimmedText, extractedXml: null);
+      return PostProcessResult(modelsText: trimmedText, extractedXml: null);
     }
 
     try {
@@ -419,7 +419,7 @@ for (final baseNode in baseNodes) {
 
       for (final node in document.rootElement.children) {
         if (node is XmlText) {
-          // 文本节点总是进入displayText
+          // 文本节点总是进入modelsText
           displayBuffer.write(node.value);
         } else if (node is XmlElement) {
           final tagNameLower = node.name.local.toLowerCase();
@@ -428,14 +428,14 @@ for (final baseNode in baseNodes) {
           switch (action) {
             case XmlAction.save:
             case XmlAction.update:
-              // 规则: save/update -> 移动到附加xml中, 不在displayText中保留任何内容
+              // 规则: save/update -> 移动到原生XML中, 不在modelsText中保留任何内容
               xmlBuffer.writeln(node.toXmlString(pretty: false));
               break;
             case XmlAction.ignore:
             case XmlAction.collapsible:
             case null: // No rule found
             default:
-              // 规则: ignore/collapsible/无规则 -> 保留在displayText中
+              // 规则: ignore/collapsible/无规则 -> 保留在modelsText中
               displayBuffer.write(node.toXmlString(pretty: false));
               break;
           }
@@ -444,14 +444,14 @@ for (final baseNode in baseNodes) {
 
       final extractedXml = xmlBuffer.toString().trim();
       return PostProcessResult(
-        displayText: displayBuffer.toString().trim(),
+        modelsText: displayBuffer.toString().trim(),
         extractedXml: extractedXml.isEmpty ? null : extractedXml,
       );
 
     } catch (e) {
       debugPrint("XML parsing failed during post-stream processing. Treating all content as display text. Error: $e");
-      // 解析失败时，将所有原始内容视为displayText，以防止数据丢失
-      return PostProcessResult(displayText: trimmedText, extractedXml: null);
+      // 解析失败时，将所有原始内容视为modelsText，以防止数据丢失
+      return PostProcessResult(modelsText: trimmedText, extractedXml: null);
     }
   }
 }

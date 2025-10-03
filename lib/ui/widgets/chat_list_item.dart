@@ -82,7 +82,7 @@ class ChatListItem extends ConsumerWidget {
                       chat.updatedAt.millisecondsSinceEpoch < 1000
                           ? '模板'
                           : firstModelMessageAsync.when(
-                              data: (message) => message?.displayText ?? '',
+                              data: (message) => message?.modelsText ?? '',
                               loading: () => '...',
                               error: (err, st) => '!',
                             ),

@@ -593,7 +593,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
         const _SectionTitle('自动化处理'),
         const SizedBox(height: 10),
         SwitchListTile(
-          title: const Text('启用上下文总结 (前处理)'),
+          title: const Text('启用上下文总结'),
           subtitle: const Text('在回复后，对被遗忘的旧消息进行总结'),
           value: chat.enablePreprocessing,
           onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enablePreprocessing: value)),
@@ -662,8 +662,8 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             ),
          ),
         SwitchListTile(
-          title: const Text('启用附加XML生成'),
-          subtitle: const Text('在回复后，使用附加提示词生成额外XML内容'),
+          title: const Text('启用原生XML生成'),
+          subtitle: const Text('在回复后，使用原生XML提示词生成额外XML内容'),
           value: chat.enableSecondaryXml,
           onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
         ),
@@ -673,7 +673,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             child: TextFormField(
               controller: _secondaryXmlPromptController,
               decoration: InputDecoration(
-                labelText: '附加XML提示词',
+                labelText: '原生XML提示词',
                 hintText: defaultSecondaryXmlPrompt,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
@@ -684,7 +684,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                       MaterialPageRoute(
                         builder: (context) => FullScreenTextEditorScreen(
                           initialText: _secondaryXmlPromptController.text,
-                          title: '编辑附加XML提示词',
+                          title: '编辑原生XML提示词',
                           defaultValue: defaultSecondaryXmlPrompt,
                         ),
                       ),
@@ -713,7 +713,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             child: DropdownButtonFormField<String?>(
               value: validConfigIds.contains(chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
               decoration: InputDecoration(
-                labelText: '用于附加XML的 API 配置',
+                labelText: '用于原生XML的 API 配置',
                 border: const OutlineInputBorder(),
                 hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}'
               ),

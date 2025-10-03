@@ -139,7 +139,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-    final textContent = message.displayText.isEmpty && isStreaming && !isUser ? "..." : message.displayText;
+    final textContent = message.modelsText.isEmpty && isStreaming && !isUser ? "..." : message.modelsText;
 
     // 统一使用 _renderTextContent 来处理所有情况
     final widgets = _renderTextContent(context, textContent, xmlRules, textColor, isStreaming);
@@ -204,7 +204,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-    final hasText = message.displayText.isNotEmpty;
+    final hasText = message.modelsText.isNotEmpty;
     final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
     final originalXml = message.originalXmlContent;
     final secondaryXml = message.secondaryXmlContent;
@@ -226,9 +226,9 @@ class MessageBubble extends StatelessWidget {
               );
             }),
             if (originalXml != null && originalXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '附加XML内容', originalXml, textColor, isStreaming),
+              _buildXmlExpansionTile(context, '原生XML内容', originalXml, textColor, isStreaming),
             if (secondaryXml != null && secondaryXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '次要XML内容', secondaryXml, textColor, isStreaming),
+              _buildXmlExpansionTile(context, '再生XML内容', secondaryXml, textColor, isStreaming),
             if (totalTokens != null && totalTokens! > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),

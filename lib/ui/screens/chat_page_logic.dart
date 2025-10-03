@@ -206,7 +206,7 @@ class ChatPageLogic {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('显示文本:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('模型消息:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: textController,
@@ -220,7 +220,7 @@ class ChatPageLogic {
                         suffixIcon: IconButton(
                           icon: const Icon(Icons.fullscreen),
                           tooltip: '全屏编辑',
-                          onPressed: () => openFullScreenEditor(textController, '编辑显示文本'),
+                          onPressed: () => openFullScreenEditor(textController, '编辑模型消息'),
                         ),
                       ),
                     ),
@@ -275,18 +275,18 @@ class ChatPageLogic {
                 TextButton(
                   onPressed: () async {
                     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-                    final newDisplayTextFromInput = textController.text;
+                    final newmodelsTextFromInput = textController.text;
                     final existingXmlFromInput = xmlController.text;
 
-                    // 验证：如果没有附件，则显示文本不能为空
-                    if (newDisplayTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
+                    // 验证：如果没有附件，则模型消息不能为空
+                    if (newmodelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
                       notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
                       return;
                     }
 
-                    // 1. 只对用户编辑的“显示文本”应用XML规则
-                    final processResult = XmlProcessor.processPostStream(newDisplayTextFromInput, chat.xmlRules);
-                    final finalCleanDisplayText = processResult.displayText;
+                    // 1. 只对用户编辑的“模型消息”应用XML规则
+                    final processResult = XmlProcessor.processPostStream(newmodelsTextFromInput, chat.xmlRules);
+                    final finalCleanmodelsText = processResult.modelsText;
                     final newlyExtractedXml = processResult.extractedXml;
 
                     // 2. 健壮地合并XML：将新提取的XML追加到用户输入的原有XML之后
@@ -302,7 +302,7 @@ class ChatPageLogic {
 
                     // 3. 构建并保存最终的消息
                     final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
-                    newParts.add(MessagePart.text(finalCleanDisplayText));
+                    newParts.add(MessagePart.text(finalCleanmodelsText));
 
                     final updatedMessage = message.copyWith(
                       parts: newParts,

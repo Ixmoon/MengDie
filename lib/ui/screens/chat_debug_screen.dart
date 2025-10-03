@@ -13,7 +13,7 @@ import '../../app/providers/chat_state/chat_data_providers.dart';
 
 
 
-// 此文件包含用于调试聊天上下文和携带 XML 的屏幕界面。
+// 此文件包含用于调试聊天上下文和合成 XML 的屏幕界面。
 // XML 和上下文构建的核心逻辑已移至 ContextXmlService。
 
 class ChatDebugScreen extends ConsumerStatefulWidget {
@@ -179,7 +179,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('计算出的携带 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
+                  Text('计算出的合成 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(8),
@@ -189,7 +189,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: SelectableText(
-                      _displayedCarriedOverXml ?? '(无携带 XML)', // Use renamed variable
+                      _displayedCarriedOverXml ?? '(无合成 XML)', // Use renamed variable
                       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                     ),
                   ),

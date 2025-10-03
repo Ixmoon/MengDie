@@ -88,7 +88,7 @@ class Message {
   final DateTime? updatedAt;
   final String? originalXmlContent;
   final String? secondaryXmlContent;
-  final String displayText;
+  final String modelsText;
 
   Message({
     this.id = 0,
@@ -100,7 +100,7 @@ class Message {
     this.originalXmlContent,
     this.secondaryXmlContent,
   })  : timestamp = timestamp ?? DateTime.now(),
-        displayText = parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
+        modelsText = parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
 
   String get rawText {
     return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');

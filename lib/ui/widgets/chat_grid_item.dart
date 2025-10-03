@@ -84,7 +84,7 @@ class ChatGridItem extends ConsumerWidget {
                     return Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        message.displayText,
+                        message.modelsText,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
                         maxLines: 1,

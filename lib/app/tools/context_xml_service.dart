@@ -3,14 +3,14 @@
 // 主要功能:
 // 1.  精确的上下文构建:
 //     - `buildApiRequestContext` 是核心方法，它负责整合所有上下文部分，包括系统提示词、被降级的系统提示词（用于特殊操作）、
-//       上下文摘要以及从历史消息中计算出的“携带”XML。
+//       上下文摘要以及从历史消息中计算出的合成XML。
 //     - 它实现了“先计算固定开销，后用剩余预算截断历史”的精确模式，确保最终发送的上下文严格遵守用户设置的 `maxTokens` 和 `maxTurns` 限制。
 // 2.  高性能的 Token 计算:
 //     - 利用 `Future.wait` 并行计算所有非历史记录部分（如系统提示、摘要等）的 Token 数量，以减少延迟。
 // 3.  历史记录截断:
 //     - `_limitHistoryForPrompt` 辅助方法根据 `buildApiRequestContext` 计算出的精确预算（Token 和轮次），对历史消息进行截断。
-// 4.  携带 XML 计算:
-//     - `_calculateCurrentCarriedOverXml` 方法遍历完整的消息历史，根据聊天中定义的 XML 规则（保存/更新），计算出在当前轮次需要“携带”的累积 XML 状态。
+// 4.  合成 XML 计算:
+//     - `_calculateCurrentCarriedOverXml` 方法遍历完整的消息历史，根据聊天中定义的 XML 规则（保存/更新），计算出在当前轮次需要合成的累积 XML 状态。
 // 5.  灵活性:
 //     - `buildApiRequestContext` 支持 `historyOverride` 参数，允许调用者传入自定义的消息列表进行上下文构建，
 //       这对于实现如“分块摘要”等高级功能至关重要，因为它复用了服务的精确截断逻辑。
@@ -91,7 +91,7 @@ class ContextXmlService {
           : msg.originalXmlContent;
 
       // Combine the display text with the appropriate XML content.
-      // The rawText (which is now just displayText) might contain other things,
+      // The rawText (which is now just modelsText) might contain other things,
       // but for XML calculation, we prioritize the dedicated fields.
       final fullTextForXmlParsing = '${msg.rawText}\n${xmlContent ?? ''}'.trim();
 

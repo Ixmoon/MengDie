@@ -111,7 +111,7 @@ mixin BackgroundTasks on UiStateManager {
 
       // 1. Process the final text using rules to separate display text from extractable XML.
       final processResult = XmlProcessor.processPostStream(fullRawText, chat.xmlRules);
-      final finalTextForDisplay = processResult.displayText;
+      final finalTextForDisplay = processResult.modelsText;
       final extractedXml = processResult.extractedXml;
 
       // 2. Handle secondary XML generation if enabled.
