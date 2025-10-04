@@ -250,11 +250,11 @@ class GeminiService implements BaseLlmService {
 
       if (isThoughtChunk && !_isThinkStreamActive) {
         _isThinkStreamActive = true;
-        result += '<think>';
+        result += '<think>\n';
       }
       if (!isThoughtChunk && _isThinkStreamActive) {
         _isThinkStreamActive = false;
-        result += '</think>';
+        result += '</think>\n';
       }
       
       result += text;
@@ -263,18 +263,39 @@ class GeminiService implements BaseLlmService {
 
   LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
     final candidates = data['candidates'] as List?;
-    if (candidates != null && candidates.isNotEmpty) {
-      final content = candidates.first['content'] as Map<String, dynamic>?;
-      final parts = content?['parts'] as List?;
-      if (parts != null && parts.isNotEmpty) {
-        // Assuming the response for once-off is a single text part
-        final text = parts.first['text'] as String?;
-        if (text != null) {
-          return LlmResponse(parts: [MessagePart.text(text)]);
-        }
+    if (candidates == null || candidates.isEmpty) {
+      return const LlmResponse.error("Invalid response: 'candidates' field is missing or empty.");
+    }
+
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) {
+      // It's possible to have a response with a finishReason but no parts.
+      return const LlmResponse(parts: []);
+    }
+
+    final stringBuffer = StringBuffer();
+    for (final part in parts) {
+      if (part is! Map<String, dynamic>) continue;
+
+      final text = part['text'] as String?;
+      if (text == null || text.isEmpty) continue;
+
+      final isThought = part['thought'] as bool? ?? false;
+      if (isThought) {
+        stringBuffer.writeln('<think>');
+        stringBuffer.writeln(text);
+        stringBuffer.writeln('</think>');
+      } else {
+        stringBuffer.write(text);
       }
     }
-    return const LlmResponse.error("Invalid response format from Gemini.");
+
+    if (stringBuffer.isNotEmpty) {
+      return LlmResponse(parts: [MessagePart.text(stringBuffer.toString())]);
+    }
+
+    return const LlmResponse.error("Invalid response: No valid text parts found in Gemini response.");
   }
 }
 
@@ -363,17 +384,32 @@ class GeminiChatPayload extends HttpRequestPayload {
     if (generationParams['topK'] != null) config['topK'] = generationParams['topK'];
     if (generationParams['maxOutputTokens'] != null) config['maxOutputTokens'] = generationParams['maxOutputTokens'];
     if (generationParams['stopSequences'] != null) config['stopSequences'] = generationParams['stopSequences'];
-    
-    // 根据官方文档，添加 thinkingConfig 来启用思考功能
-    final thinkingConfig = <String, dynamic>{};
-    // 始终包含 "thoughts" 以启用该功能
-    thinkingConfig['includeThoughts'] = true;
 
-    if (generationParams['thinkingBudget'] != null) {
-      thinkingConfig['thinkingBudget'] = generationParams['thinkingBudget'];
+    final bool includeThoughts = generationParams['includeThoughts'] as bool? ?? false;
+    final int? thinkingBudget = generationParams['thinkingBudget'] as int?;
+
+    // Final logic based on detailed user feedback:
+    // Only construct thinkingConfig if a budget is explicitly set (not null).
+    if (thinkingBudget != null) {
+      final thinkingConfig = <String, dynamic>{};
+
+      // Rule: Add 'includeThoughts' only if the caller requests it AND thinking is active.
+      if (includeThoughts && thinkingBudget != 0) {
+        thinkingConfig['includeThoughts'] = true;
+      }
+
+      // Rule: Add 'thinkingBudget' key unless it's for dynamic thinking (-1).
+      // This correctly includes the case where thinkingBudget is 0 to disable thinking.
+      if (thinkingBudget != -1) {
+        thinkingConfig['thinkingBudget'] = thinkingBudget;
+      }
+      
+      // Rule: Only attach the thinkingConfig object if it contains any keys.
+      // This prevents sending an empty `thinkingConfig: {}`.
+      if (thinkingConfig.isNotEmpty) {
+        config['thinkingConfig'] = thinkingConfig;
+      }
     }
-    
-    config['thinkingConfig'] = thinkingConfig;
     
     return config;
   }

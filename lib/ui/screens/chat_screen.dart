@@ -9,7 +9,9 @@ import 'chat_page_content.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  final VoidCallback? onBackButtonPressed; // 新增
+
+  const ChatScreen({super.key, this.onBackButtonPressed}); // 新增
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -83,7 +85,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final currentIndex = chats.indexWhere((c) => c.id == activeChatId);
 
             if (chats.length <= 1 || currentIndex == -1) {
-              return ChatPageContent(key: ValueKey(activeChatId), chatId: activeChatId);
+              return ChatPageContent(
+                key: ValueKey(activeChatId),
+                chatId: activeChatId,
+                onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
+              );
             }
             
             // 使用一个基于聊天列表ID的唯一Key来驱动一个新的StatefulWidget。
@@ -93,6 +99,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               key: ValueKey(chats.map((c) => c.id).join(',')),
               chats: chats,
               initialIndex: currentIndex,
+              onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
             );
           },
         );
@@ -106,11 +113,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 class _ChatPageView extends ConsumerStatefulWidget {
   final List<Chat> chats;
   final int initialIndex;
+  final VoidCallback? onBackButtonPressed; // 新增
 
   const _ChatPageView({
     super.key,
     required this.chats,
     required this.initialIndex,
+    this.onBackButtonPressed, // 新增
   });
 
   @override
@@ -146,7 +155,11 @@ class _ChatPageViewState extends ConsumerState<_ChatPageView> {
       },
       itemBuilder: (context, index) {
         final chat = widget.chats[index];
-        return ChatPageContent(key: ValueKey(chat.id), chatId: chat.id);
+        return ChatPageContent(
+          key: ValueKey(chat.id),
+          chatId: chat.id,
+          onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
+        );
       },
     );
   }

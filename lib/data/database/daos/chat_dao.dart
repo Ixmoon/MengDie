@@ -273,4 +273,11 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       return newChatId;
     });
   }
+
+  /// 查找所有 backgroundImagePath 包含 '/template' 但 parentFolderId 不为 null 的聊天。
+  Future<List<ChatData>> findLostTemplates() {
+    final query = select(chats)
+      ..where((t) => t.backgroundImagePath.like('%/template%') & t.parentFolderId.isNotNull());
+    return query.get();
+  }
 }

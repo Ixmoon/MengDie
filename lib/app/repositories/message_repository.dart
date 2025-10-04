@@ -89,6 +89,14 @@ class MessageRepository {
     return false;
   }
 
+  Future<int> insertMessage(Message message, int index) async {
+    debugPrint("MessageRepository: 插入消息 at index: $index (Chat ID: ${message.chatId})...");
+    final companion = MessageMapper.toCompanion(message);
+    final newId = await _messageDao.insertMessageAt(companion, index);
+    await _chatDao.touchChat(message.chatId);
+    return newId;
+  }
+
   // --- 数据库监听流 ---
   Stream<List<Message>> watchMessagesForChat(int chatId) {
     debugPrint("MessageRepository: 监听聊天 ID: $chatId 的消息变化 (Drift)...");

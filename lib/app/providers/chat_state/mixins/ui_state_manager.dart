@@ -24,6 +24,7 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
         isBubbleTransparent: _prefs.getBool('chat_${chatId}_is_bubble_transparent') ?? false,
         isBubbleHalfWidth: _prefs.getBool('chat_${chatId}_is_bubble_half_width') ?? false,
         isAutoHeightEnabled: _prefs.getBool('chat_${chatId}_is_auto_height_enabled') ?? false,
+        highlightQuotes: _prefs.getBool('chat_${chatId}_highlight_quotes') ?? false,
       );
     }
 
@@ -84,6 +85,14 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
       _prefs.setBool('chat_${chatId}_is_auto_height_enabled', newValue);
       showTopMessage('智能半高模式已: ${newValue ? "开启" : "关闭"}');
       debugPrint("Chat ($chatId) 智能半高模式切换为: $newValue");
+    }
+
+    void toggleHighlightQuotes() {
+      final newValue = !state.highlightQuotes;
+      state = state.copyWith(highlightQuotes: newValue);
+      _prefs.setBool('chat_${chatId}_highlight_quotes', newValue);
+      showTopMessage('引号内容高亮已: ${newValue ? "开启" : "关闭"}');
+      debugPrint("Chat ($chatId) 引号高亮切换为: $newValue");
     }
 
     void setMessageListHeightMode(bool isHalfHeight) {

@@ -161,8 +161,9 @@ class XmlProcessor {
           // Don't process children as their content is handled by the merge/save logic
           break;
 
+        case XmlAction.collapsible:
         case XmlAction.content:
-          debugPrint("XML content: <$tagName>");
+          debugPrint("XML content/collapsible: <$tagName>");
           // Do nothing, effectively hiding/ignoring this tag and its content
           break;
       }
@@ -332,91 +333,86 @@ for (final baseNode in baseNodes) {
   // static int min(int a, int b) => a < b ? a : b;
 
   /// Strips XML tags and their content from a string, returning only the text outside the tags.
-  /// Uses XML parsing to handle structure correctly.
+  /// Uses a robust method that first tries strict parsing and falls back to a more lenient approach.
   static String stripXmlContent(String rawText) {
-    // Trim the input first to handle leading/trailing whitespace
     final trimmedText = rawText.trim();
-    // Basic check if the text likely contains any tags
     if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
-      return trimmedText; // Return trimmed text if no tags are apparent
+      return trimmedText;
     }
+
+    // --- First Pass: Strict XML Parsing ---
+    // This is the most accurate way to strip content if the XML is well-formed.
     try {
-      // Wrap in a root element for robust parsing, even if rawText is just text or an XML fragment
       final document = XmlDocument.parse('<root>$trimmedText</root>');
       final buffer = StringBuffer();
-
-      // Iterate through the direct children of the synthetic root element
       for (final node in document.rootElement.children) {
         if (node is XmlText) {
-          // Append text nodes directly
           buffer.write(node.value);
         }
-        // Ignore XmlElement nodes and their children in this context,
-        // as we only want text *outside* the primary tags.
-        // Also ignore comments, CDATA sections within the root for context building.
       }
-
-      // Return the collected text, trimmed again to remove any potential whitespace
-      // resulting from XML element removal.
       return buffer.toString().trim();
-
     } catch (e) {
-      debugPrint("Error stripping XML content with XML parser: $e. Falling back to regex stripping.");
-      // Fallback to regex-based stripping for incomplete chunks
-      // This regex removes tag-like structures.
-      // It replaces a matched tag with a space to preserve word separation, then trims.
-      String strippedFallback = trimmedText.replaceAll(RegExp(r'<[^>]*>'), ' ');
-      return strippedFallback.trim();
+      debugPrint("Error stripping XML with strict parser: $e. Falling back to robust regex stripping.");
+      // --- Fallback: Robust Regex-based Stripping ---
+      // This regex finds all occurrences of <tag>...</tag> and removes them.
+      // It's non-greedy and handles nested tags within the outer tag being removed.
+      String result = trimmedText;
+      final tagNames = RegExp(r'<(\w+)[^>]*>').allMatches(trimmedText).map((m) => m.group(1)!).toSet();
+
+      for (final tagName in tagNames) {
+        final regex = RegExp(r'<' + tagName + r'\b[^>]*>.*?</' + tagName + r'>', dotAll: true, caseSensitive: false);
+        result = result.replaceAll(regex, ' ');
+      }
+      // Final cleanup for any remaining stray tags.
+      result = result.replaceAll(RegExp(r'<[^>]+>'), ' ');
+      return result.replaceAll(RegExp(r'\s+'), ' ').trim();
     }
   }
 
   /// Strips only the XML tags that have an 'ignore' rule, returning all other text and XML.
+  /// This method is robust and handles incomplete or malformed XML gracefully.
   static String stripIgnoredXmlContent(String rawText, List<XmlRule> rules) {
     final trimmedText = rawText.trim();
     if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
       return trimmedText;
     }
 
-    // Create a quick lookup set for ignored tag names (lowercase).
     final ignoredTags = rules
         .where((r) => r.ignoreInContext && r.tagName != null)
         .map((r) => r.tagName!.toLowerCase())
         .toSet();
 
     if (ignoredTags.isEmpty) {
-      return trimmedText; // No ignore rules, so nothing to strip.
+      return trimmedText;
     }
 
-    try {
-      final document = XmlDocument.parse('<root>$trimmedText</root>');
-      final buffer = StringBuffer();
+    final buffer = StringBuffer();
+    int lastIndex = 0;
 
-      void processNode(XmlNode node) {
-        if (node is XmlElement) {
-          if (!ignoredTags.contains(node.name.local.toLowerCase())) {
-            // If the tag is NOT ignored, append its outer XML and stop processing its children
-            // because they are already included in the outer XML string.
-            buffer.write(node.toXmlString(pretty: false));
-          }
-          // If the tag IS ignored, do nothing (effectively removing it and its children).
-        } else if (node is XmlText) {
-          // Always append text nodes.
-          buffer.write(node.value);
-        } else {
-          // For other node types like CDATA, comments, etc., append their string representation.
-          buffer.write(node.toXmlString(pretty: false));
-        }
+    // Regex to find all well-formed, complete tags (either self-closing or with a matching closing tag).
+    final tagRegex = RegExp(r'<(\w+)\b[^>]*?(?:\/>|>(?:.|\s)*?<\/\1>)', dotAll: true, caseSensitive: false);
+
+    for (final match in tagRegex.allMatches(trimmedText)) {
+      // Append the text between the last match and this one.
+      buffer.write(trimmedText.substring(lastIndex, match.start));
+      
+      final tagName = match.group(1)!.toLowerCase();
+      
+      // If the found tag is NOT in the ignored set, append it to the buffer.
+      if (!ignoredTags.contains(tagName)) {
+        buffer.write(match.group(0)!);
       }
       
-      for (final node in document.rootElement.children) {
-        processNode(node);
-      }
-
-      return buffer.toString().trim();
-    } catch (e) {
-      debugPrint("Error stripping ignored XML content: $e. Returning original text.");
-      return trimmedText; // On failure, return the original text to avoid data loss.
+      lastIndex = match.end;
     }
+
+    // Append any remaining text after the last complete tag.
+    // This ensures incomplete tags at the end are preserved.
+    if (lastIndex < trimmedText.length) {
+      buffer.write(trimmedText.substring(lastIndex));
+    }
+
+    return buffer.toString().trim();
   }
 
   /// Extracts only the XML elements from a string, discarding text nodes at the root level.
@@ -453,54 +449,86 @@ for (final baseNode in baseNodes) {
     return '<$tagName>$content</$tagName>';
   }
 
+  /// Processes a raw text stream, separating content for display (modelsText)
+  /// from content to be saved/updated (extractedXml) based on robust XML parsing.
+  /// This method implements a "Strict First, Fallback Gracefully" strategy.
   static PostProcessResult processPostStream(String rawText, List<XmlRule> rules) {
     final trimmedText = rawText.trim();
-    // 如果没有XML标签，直接返回，所有内容都是modelsText
-    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
+    if (rules.isEmpty || !trimmedText.contains('<')) {
       return PostProcessResult(modelsText: trimmedText, extractedXml: null);
     }
 
-    try {
-      final document = XmlDocument.parse('<root>$trimmedText</root>');
-      final displayBuffer = StringBuffer();
-      final xmlBuffer = StringBuffer();
-      final ruleMap = { for (var rule in rules) rule.tagName?.toLowerCase(): rule.action };
+    final displayBuffer = StringBuffer();
+    final xmlBuffer = StringBuffer();
+    int lastIndex = 0;
 
-      for (final node in document.rootElement.children) {
-        if (node is XmlText) {
-          // 文本节点总是进入modelsText
-          displayBuffer.write(node.value);
-        } else if (node is XmlElement) {
-          final tagNameLower = node.name.local.toLowerCase();
-          final action = ruleMap[tagNameLower];
+    // 1. Create a regex to find all potential XML blocks based on rule tag names.
+    final tagNames = rules.map((r) => r.tagName).where((t) => t != null).join('|');
+    if (tagNames.isEmpty) {
+      return PostProcessResult(modelsText: trimmedText, extractedXml: null);
+    }
+    // This regex finds elements that start with a known tag and are properly closed.
+    // It's non-greedy (.*?) to handle adjacent tags correctly.
+    final regex = RegExp(r'<(' + tagNames + r')\b[^>]*>.*?</\1>', dotAll: true, caseSensitive: false);
+    
+    final matches = regex.allMatches(trimmedText);
 
-          switch (action) {
-            case XmlAction.save:
-            case XmlAction.update:
-              // 规则: save/update -> 移动到原生XML中, 不在modelsText中保留任何内容
-              xmlBuffer.writeln(node.toXmlString(pretty: false));
-              break;
-            case XmlAction.content:
-            case null: // No rule found
-            default:
-              // 规则: content/无规则 -> 保留在modelsText中
-              displayBuffer.write(node.toXmlString(pretty: false));
-              break;
-          }
-        }
+    for (final match in matches) {
+      // 2. Append the text between the last match and this one to the display buffer.
+      if (match.start > lastIndex) {
+        displayBuffer.write(trimmedText.substring(lastIndex, match.start));
       }
 
-      final extractedXml = xmlBuffer.toString().trim();
-      return PostProcessResult(
-        modelsText: displayBuffer.toString().trim(),
-        extractedXml: extractedXml.isEmpty ? null : extractedXml,
-      );
+      final chunk = match.group(0)!;
+      final tagName = match.group(1)!.toLowerCase();
+      final rule = _findRule(rules, tagName);
 
-    } catch (e) {
-      debugPrint("XML parsing failed during post-stream processing. Treating all content as display text. Error: $e");
-      // 解析失败时，将所有原始内容视为modelsText，以防止数据丢失
-      return PostProcessResult(modelsText: trimmedText, extractedXml: null);
+      // 3. "First, Be Strict": Validate the internal structure of the identified chunk.
+      bool isValidXml = false;
+      try {
+        XmlDocument.parse(chunk);
+        isValidXml = true;
+        debugPrint("XMLProcessor: Successfully validated chunk for <$tagName>");
+      } catch (e) {
+        debugPrint("XMLProcessor: Validation failed for chunk <$tagName>. Treating as plain text. Error: $e");
+        // isValidXml remains false
+      }
+
+      // 4. Apply rules only if the chunk is valid XML.
+      if (isValidXml && rule != null) {
+        switch (rule.action) {
+          case XmlAction.save:
+          case XmlAction.update:
+            // Rule: save/update -> Move to native XML buffer.
+            xmlBuffer.writeln(chunk);
+            debugPrint("XMLProcessor: Moved chunk for <$tagName> to XML buffer.");
+            break;
+          case XmlAction.content:
+          case XmlAction.collapsible:
+          default:
+            // Rule: content/collapsible/no rule -> Keep in display text.
+            displayBuffer.write(chunk);
+            debugPrint("XMLProcessor: Kept chunk for <$tagName> in display buffer.");
+            break;
+        }
+      } else {
+        // "Fallback Gracefully": If not valid XML, treat it as plain text for display.
+        displayBuffer.write(chunk);
+      }
+
+      lastIndex = match.end;
     }
+
+    // 5. Append any remaining text after the last match.
+    if (lastIndex < trimmedText.length) {
+      displayBuffer.write(trimmedText.substring(lastIndex));
+    }
+
+    final extractedXml = xmlBuffer.toString().trim();
+    return PostProcessResult(
+      modelsText: displayBuffer.toString().trim(),
+      extractedXml: extractedXml.isEmpty ? null : extractedXml,
+    );
   }
 }
 

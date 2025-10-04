@@ -101,12 +101,13 @@ class _MessageListState extends ConsumerState<MessageList> {
                 secondaryXmlContent: message.secondaryXmlContent,
               );
               return MessageBubble(
-                key: ValueKey("${message.id}_${message.parts.indexOf(part)}"),
+                key: ValueKey("${message.id}_${message.parts.indexOf(part)}_${chatState.isBubbleTransparent}_${chatState.isBubbleHalfWidth}_${chatState.highlightQuotes}"),
                 message: singlePartMessage,
                 xmlRules: widget.xmlRules,
                 isStreaming: isThisMessageStreaming,
                 isTransparent: chatState.isBubbleTransparent,
                 isHalfWidth: chatState.isBubbleHalfWidth,
+                highlightQuotes: chatState.highlightQuotes,
                 onTap: () => widget.onMessageTap(message, part, allMessages),
                 totalTokens: isLastMessage && part == message.parts.last && !isThisMessageStreaming
                     ? chatState.totalTokens

@@ -15,8 +15,9 @@ import '../widgets/top_message_banner.dart';
 import 'chat_page_logic.dart';
 
 class ChatPageContent extends ConsumerStatefulWidget {
-  const ChatPageContent({super.key, required this.chatId});
+  const ChatPageContent({super.key, required this.chatId, this.onBackButtonPressed});
   final int chatId;
+  final VoidCallback? onBackButtonPressed; // 新增
 
   @override
   ConsumerState<ChatPageContent> createState() => _ChatPageContentState();
@@ -171,6 +172,8 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                 onRemoveCoverImage: _logic.removeCoverImage,
                 onForcePush: _logic.handleForcePush,
                 isPushing: _logic.isPushing,
+                onAddMessageAtEnd: _logic.addMessageAtEnd,
+                onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
               ),
               body: SafeArea(
                 child: Column(

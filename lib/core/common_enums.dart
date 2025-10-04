@@ -21,7 +21,8 @@ enum MessageRole {
 enum XmlAction {
   save,
   update,
-  content, // Formerly collapsible
+  collapsible,
+  content,
 }
 
 enum LocalHarmCategory {

@@ -18,6 +18,9 @@ import '../chat_data_providers.dart';
 import '../special_action_type.dart';
 import 'ui_state_manager.dart';
 
+/// A private exception to signal that the background task was intentionally cancelled.
+class _BackgroundTaskCancelledException implements Exception {}
+
 mixin BackgroundTasks on UiStateManager {
     // Abstract dependencies required by this mixin, as per instructions.
     // These are expected to be implemented by the class using this mixin.
@@ -63,11 +66,33 @@ mixin BackgroundTasks on UiStateManager {
         // 3. Run tasks and clear state in a finally block
         if (tasks.isNotEmpty) {
           try {
-            await Future.wait(tasks);
+            // A future that throws an exception when cancellation is requested.
+            // This allows us to break out of the Future.any() and proceed to the finally block.
+            Future<void> cancellationWatcher() async {
+              while (mounted && !state.isCancelled) {
+                // Check for cancellation periodically.
+                await Future.delayed(const Duration(milliseconds: 100));
+              }
+              if (state.isCancelled) {
+                // Throwing a specific exception allows for clean handling of the cancellation flow.
+                throw _BackgroundTaskCancelledException();
+              }
+            }
+
+            // Race the background tasks against the cancellation watcher.
+            // If cancellationWatcher wins, Future.any completes with an exception.
+            // If Future.wait(tasks) wins, it completes normally.
+            await Future.any([
+              Future.wait(tasks),
+              cancellationWatcher(),
+            ]);
+
             debugPrint("ChatStateNotifier($chatId): Async processing tasks completed.");
-            // Show completion message only on success and if not cancelled
-            // The "Completed" message is now shown by the caller contexts
-            // (_finalizeStreamedMessage or _handleSingleResponse) after this whole process finishes.
+            
+          } on _BackgroundTaskCancelledException {
+            // This is the expected outcome when the user cancels.
+            debugPrint("ChatStateNotifier($chatId): Async processing tasks cancelled by user.");
+            // Do nothing here; the 'finally' block will handle all UI state cleanup.
           } catch (e) {
             if (!state.isCancelled) { // Only show error if not cancelled by user
               debugPrint("ChatStateNotifier($chatId): Error during async processing tasks: $e");
@@ -342,8 +367,7 @@ mixin BackgroundTasks on UiStateManager {
 
       final globalSettings = ref.read(globalSettingsProvider);
       if (!globalSettings.enableAutoTitleGeneration ||
-          globalSettings.titleGenerationPrompt.isEmpty ||
-          globalSettings.titleGenerationApiConfigId == null) {
+          globalSettings.titleGenerationPrompt.isEmpty) {
         return;
       }
 

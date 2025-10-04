@@ -50,6 +50,13 @@ class _HistoryLimitResult {
   _HistoryLimitResult(this.kept, this.dropped);
 }
 
+// Helper class for carried-over XML result
+class _CarriedOverXmlResult {
+  final String? xmlString;
+  final int contributingMessageCount;
+  _CarriedOverXmlResult(this.xmlString, this.contributingMessageCount);
+}
+
 // Provider for the new service
 final contextXmlServiceProvider = Provider<ContextXmlService>((ref) {
   return ContextXmlService(ref);
@@ -62,9 +69,9 @@ class ContextXmlService {
 
   /// Calculates the current carried-over XML based on the full message history and chat rules.
   /// This method DOES NOT persist anything.
-  String? _calculateCurrentCarriedOverXml(Chat chat, List<Message> fullHistory) {
+  _CarriedOverXmlResult _calculateCurrentCarriedOverXml(Chat chat, List<Message> fullHistory) {
     if (fullHistory.isEmpty) {
-      return null;
+      return _CarriedOverXmlResult(null, 0);
     }
 
     final tagRuleInfoMap = <String, XmlRule>{};
@@ -75,6 +82,7 @@ class ContextXmlService {
     }
 
     Map<String, String> cumulativeStateMap = {};
+    final Set<int> contributingMessageIds = {};
 
     for (int i = 0; i < fullHistory.length; i++) {
       final msg = fullHistory[i];
@@ -99,12 +107,22 @@ class ContextXmlService {
         continue;
       }
 
+      // --- 使用健壮的XML处理器来安全地提取有效的XML块 ---
+      // 这确保了不完整的标签不会导致整个消息被跳过。
+      final postProcessResult = XmlProcessor.processPostStream(fullTextForXmlParsing, chat.xmlRules);
+      final safeXmlContent = postProcessResult.extractedXml;
+
+      if (safeXmlContent == null || safeXmlContent.isEmpty) {
+        continue;
+      }
+
       xml_pkg.XmlDocument? doc;
       try {
-        // Attempt to parse the combined text.
-        doc = xml_pkg.XmlDocument.parse('<root>$fullTextForXmlParsing</root>');
+        // 现在只解析被验证为结构完整的XML。
+        doc = xml_pkg.XmlDocument.parse('<root>$safeXmlContent</root>');
       } catch (e) {
-        debugPrint("ContextXmlService:_calculateCurrentCarriedOverXml - Failed to parse XML in message ID ${msg.id}: $e. Skipping message for XML calculation.");
+        // 这个catch现在只会在极特殊情况下触发，例如processPostStream的逻辑有bug。
+        debugPrint("ContextXmlService:_calculateCurrentCarriedOverXml - FATAL: Failed to parse even the safe XML for message ID ${msg.id}: $e. Skipping.");
         continue;
       }
 
@@ -114,6 +132,7 @@ class ContextXmlService {
         final rule = tagRuleInfoMap[tagNameLower];
 
         if (rule != null) {
+          contributingMessageIds.add(msg.id);
           final action = rule.action;
           final currentOuterXml = element.toXmlString(pretty: false).trim();
           final identifier = XmlProcessor.getElementIdentifier(element);
@@ -159,7 +178,10 @@ class ContextXmlService {
         }
       }
     }
-    return XmlProcessor.serializeCarriedOver(cumulativeStateMap);
+    return _CarriedOverXmlResult(
+      XmlProcessor.serializeCarriedOver(cumulativeStateMap),
+      contributingMessageIds.length,
+    );
 }
 
 /// Helper to limit history based on chat configuration. Operates on a pre-fetched list.
@@ -276,7 +298,9 @@ Future<ApiRequestContext> buildApiRequestContext({
         : lastModelMessageInFullHistory.originalXmlContent;
   }
 
-  final String? calculatedCarriedOverXml = _calculateCurrentCarriedOverXml(chat, fullHistory);
+  final carriedOverResult = _calculateCurrentCarriedOverXml(chat, fullHistory);
+  final String? calculatedCarriedOverXml = carriedOverResult.xmlString;
+  final int contributingMessageCount = carriedOverResult.contributingMessageCount;
 
   // --- 1. Prepare all "fixed" (non-history) context parts ---
   final List<LlmContent> fixedContextParts = [];
@@ -372,8 +396,8 @@ Future<ApiRequestContext> buildApiRequestContext({
     finalContextParts.add(LlmContent("model", [LlmTextPart(lastModelMessageXml)]));
   }
 
-  if (xmlExists) {
-    finalContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml)]));
+  if (xmlExists && contributingMessageCount >= 2) {
+    finalContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml!)]));
   }
 
   if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {

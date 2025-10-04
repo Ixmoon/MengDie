@@ -17,6 +17,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'cached_image.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/tools/xml_processor.dart';
 
 /// 网格视图中的聊天项小部件
 class ChatGridItem extends ConsumerWidget {
@@ -84,7 +85,7 @@ class ChatGridItem extends ConsumerWidget {
                     return Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        message.modelsText,
+                        XmlProcessor.stripXmlContent(message.modelsText).trim(),
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
                         maxLines: 1,

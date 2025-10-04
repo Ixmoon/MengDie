@@ -55,7 +55,7 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
      if (chatId == null) return;
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
-   var selectedAction = existingRule?.action ?? XmlAction.content;
+   var selectedAction = existingRule?.action ?? XmlAction.collapsible;
    var ignoreInContext = existingRule?.ignoreInContext ?? false;
 
    showDialog(
@@ -85,6 +85,9 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
                    items: XmlAction.values.map((action) {
                      String description;
                      switch (action) {
+                       case XmlAction.collapsible:
+                         description = '折叠 (默认)';
+                         break;
                        case XmlAction.content:
                          description = '直接显示内容';
                          break;

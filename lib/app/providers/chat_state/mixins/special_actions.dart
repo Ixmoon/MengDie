@@ -27,6 +27,8 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         String? promptOverride,
         int? messageToUpdateId,
         String? apiConfigIdOverride,
+        bool forceNonStreaming = false,
+        bool requestThoughts = false,
     });
     void startUpdateTimer();
     void stopUpdateTimer();
@@ -152,6 +154,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
             return;
         }
 
+        // Force non-streaming for this special action, regardless of the global setting.
         await sendMessage(
             isContinuation: true,
             promptOverride: globalSettings.resumePrompt,
@@ -159,6 +162,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
             apiConfigIdOverride: getEffectiveApiConfigId(
                 specificConfigId: globalSettings.resumeApiConfigId,
             ),
+            forceNonStreaming: true,
         );
     }
 

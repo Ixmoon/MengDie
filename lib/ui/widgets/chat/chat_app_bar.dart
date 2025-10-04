@@ -14,6 +14,8 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final VoidCallback onRemoveCoverImage;
   final VoidCallback onForcePush;
   final bool isPushing;
+  final Function(MessageRole) onAddMessageAtEnd;
+  final VoidCallback? onBackButtonPressed; // 新增：自定义返回按钮回调
 
   const ChatAppBar({
     super.key,
@@ -23,6 +25,8 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
     required this.onRemoveCoverImage,
     required this.onForcePush,
     required this.isPushing,
+    required this.onAddMessageAtEnd,
+    this.onBackButtonPressed, // 新增
   });
 
   PopupMenuItem<String> _buildPopupMenuItem({
@@ -59,7 +63,7 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
         tooltip: '返回列表',
-        onPressed: () {
+        onPressed: onBackButtonPressed ?? () { // 修改：优先使用自定义回调
           ref.read(activeChatIdProvider.notifier).state = null;
           context.go('/list');
         },
@@ -120,10 +124,14 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 _buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
                 _buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
                 _buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
+                _buildPopupMenuItem(value: 'toggleHighlightQuotes', icon: chatState.highlightQuotes ? Icons.format_quote : Icons.format_quote_outlined, label: chatState.highlightQuotes ? '关闭引号高亮' : '开启引号高亮'),
                 const PopupMenuDivider(),
                 _buildPopupMenuItem(value: 'exportChat', icon: Icons.file_download_outlined, label: '导出到文件'),
                 _buildPopupMenuItem(value: 'exportAsTemplate', icon: Icons.flip_to_front_outlined, label: '另存为模板'),
                 _buildPopupMenuItem(value: 'exportAsChat', icon: Icons.control_point_duplicate_outlined, label: '克隆为新聊天'),
+                const PopupMenuDivider(),
+                _buildPopupMenuItem(value: 'add_user_message', icon: Icons.add_comment_outlined, label: '添加用户消息'),
+                _buildPopupMenuItem(value: 'add_model_message', icon: Icons.add_comment_outlined, label: '添加模型消息'),
                 const PopupMenuDivider(),
                 _buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
               ],
@@ -160,6 +168,9 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'toggleMessageListHeight':
                 notifier.toggleMessageListHeightMode();
                 break;
+              case 'toggleHighlightQuotes':
+                notifier.toggleHighlightQuotes();
+                break;
               case 'exportChat':
                 notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
                 try {
@@ -188,6 +199,12 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'exportAsChat':
                 // 统一调用 ChatStateNotifier 的方法
                 await notifier.duplicateChat(upToMessageId: 0, asTemplate: false);
+                break;
+              case 'add_user_message':
+                onAddMessageAtEnd(MessageRole.user);
+                break;
+              case 'add_model_message':
+                onAddMessageAtEnd(MessageRole.model);
                 break;
             }
           },

@@ -15,6 +15,7 @@ class ChatScreenState {
   final bool isBubbleHalfWidth;
   final bool isMessageListHalfHeight;
   final bool isAutoHeightEnabled; // New state for the feature toggle
+  final bool highlightQuotes; // New state for highlighting quotes
   final int? totalTokens;
   final List<List<String>>? helpMeReplySuggestions; // Changed to a list of lists for pagination
   final int helpMeReplyPageIndex; // To track the current page of suggestions
@@ -39,6 +40,7 @@ class ChatScreenState {
     this.isBubbleHalfWidth = false,
     this.isMessageListHalfHeight = false,
     this.isAutoHeightEnabled = false, // Default to false
+    this.highlightQuotes = false, // Default to false
     this.totalTokens,
     this.helpMeReplySuggestions,
     this.helpMeReplyPageIndex = 0,
@@ -68,6 +70,7 @@ class ChatScreenState {
     bool? isBubbleHalfWidth,
     bool? isMessageListHalfHeight,
     bool? isAutoHeightEnabled,
+    bool? highlightQuotes,
     int? totalTokens,
     bool clearTotalTokens = false,
     List<List<String>>? helpMeReplySuggestions,
@@ -96,6 +99,7 @@ class ChatScreenState {
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
       isMessageListHalfHeight: isMessageListHalfHeight ?? this.isMessageListHalfHeight,
       isAutoHeightEnabled: isAutoHeightEnabled ?? this.isAutoHeightEnabled,
+      highlightQuotes: highlightQuotes ?? this.highlightQuotes,
       totalTokens: clearTotalTokens ? null : (totalTokens ?? this.totalTokens),
       helpMeReplySuggestions: clearHelpMeReplySuggestions ? null : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
       helpMeReplyPageIndex: clearHelpMeReplySuggestions ? 0 : (helpMeReplyPageIndex ?? this.helpMeReplyPageIndex),

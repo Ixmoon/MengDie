@@ -87,7 +87,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         return;
       }
 
-      notifier.sendMessage(userParts: parts);
+      notifier.sendMessage(userParts: parts, requestThoughts: true);
       widget.messageController.clear();
       setState(() {
         _attachments.clear();

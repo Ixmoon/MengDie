@@ -11,6 +11,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // 导入应用配置和核心 Provider
 import 'ui/theme.dart'; // 导入主题配置
@@ -20,6 +21,7 @@ import 'app/providers/settings_providers.dart';
 import 'data/sync/sync_service.dart';
 import 'data/database/connections/remote.dart';
 import 'app/providers/core_providers.dart';
+import 'app/providers/repository_providers.dart';
 
 // --- 应用主函数 ---
 // 将 main 函数修改为 async 以便在启动前执行异步操作
@@ -37,6 +39,16 @@ void main() async {
 	// 初始化需要持久化存储的 Provider
 	await container.read(themeModeProvider.notifier).init();
 	await container.read(syncSettingsProvider.notifier).init();
+
+	// --- 一次性数据恢复 ---
+	final prefs = await SharedPreferences.getInstance();
+	if (prefs.getBool('v1_templates_recovered') != true) {
+		final recoveredCount = await container.read(chatRepositoryProvider).recoverLostTemplates();
+		if (recoveredCount > 0) {
+			debugPrint('成功恢复 $recoveredCount 个丢失的模板。');
+		}
+		await prefs.setBool('v1_templates_recovered', true);
+	}
 
 	// 初始化 SyncService
 	final db = container.read(appDatabaseProvider);

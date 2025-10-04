@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart'; // 导入 SharedPre
 import '../../app/providers/chat_state/chat_data_providers.dart';
 import '../widgets/chat_list_app_bar.dart';
 import '../widgets/chat_list_body.dart';
+import 'chat_screen.dart'; // 导入聊天屏幕
 
 // --- 文件功能 ---
 // 本文件是聊天列表页面的主屏幕，作为状态管理和业务逻辑的核心协调中心。
@@ -717,9 +718,17 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             // 如果是文件夹，则进入文件夹
             ref.read(currentFolderIdProvider.notifier).state = chat.id;
           } else {
-            // 如果是模板，则进入聊天设置页面以编辑
+            // 如果是模板，则像普通聊天一样打开它进行编辑
+            final prefs = await ref.read(sharedPreferencesProvider.future);
+            await prefs.setInt('last_open_chat_id', chat.id);
             ref.read(activeChatIdProvider.notifier).state = chat.id;
-            context.push('/chat/settings');
+            if (!mounted) return;
+            // 终极修复：使用标准的 Navigator.push 来确保可以正确返回，绕过 go_router 的固定返回逻辑
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => ChatScreen(
+                onBackButtonPressed: () => Navigator.of(context).pop(),
+              )),
+            );
           }
           break;
       }

@@ -22,5 +22,6 @@ Map<String, dynamic> _$XmlRuleToJson(XmlRule instance) => <String, dynamic>{
 const _$XmlActionEnumMap = {
   XmlAction.save: 'save',
   XmlAction.update: 'update',
+  XmlAction.collapsible: 'collapsible',
   XmlAction.content: 'content',
 };

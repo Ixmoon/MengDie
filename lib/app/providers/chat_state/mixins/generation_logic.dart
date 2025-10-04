@@ -95,7 +95,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         await (this as dynamic).generateImage(userMessage);
       } else {
         // 调用文本生成逻辑
-        await sendMessage(userMessage: userMessage, isRegeneration: true);
+        await sendMessage(userMessage: userMessage, isRegeneration: true, requestThoughts: true);
       }
     }
 
@@ -122,6 +122,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     String? promptOverride,
     int? messageToUpdateId,
     String? apiConfigIdOverride,
+    bool forceNonStreaming = false, // New parameter to override stream mode
+    bool requestThoughts = false,
   }) async {
     // Branch for image generation
     if (state.isImageGenerationMode && !isRegeneration && !isContinuation) {
@@ -264,14 +266,17 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
      // 重构：LlmService 不再处理配置逻辑，由 Notifier 决定
     final apiConfig = getEffectiveApiConfig(specificConfigId: apiConfigIdOverride);
     
-    if (state.isStreamMode) {
-        await _handleStreamResponse(llmService, apiConfig, llmApiContext, messageToUpdateId: messageToUpdateId);
+    // Use the new parameter to override the stream mode check when needed.
+    final bool shouldUseStream = state.isStreamMode && !forceNonStreaming;
+
+    if (shouldUseStream) {
+        await _handleStreamResponse(llmService, apiConfig, llmApiContext, requestThoughts: requestThoughts, messageToUpdateId: messageToUpdateId);
     } else {
-        await _handleSingleResponse(llmService, apiConfig, llmApiContext, carriedOverXmlForThisTurn, messageToUpdateId: messageToUpdateId);
+        await _handleSingleResponse(llmService, apiConfig, llmApiContext, carriedOverXmlForThisTurn, requestThoughts: requestThoughts, messageToUpdateId: messageToUpdateId);
     }
    }
 
-  Future<void> _handleStreamResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, {int? messageToUpdateId}) async {
+  Future<void> _handleStreamResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, {required bool requestThoughts, int? messageToUpdateId}) async {
     final messageRepo = ref.read(messageRepositoryProvider);
    int targetMessageId; // Will be a temporary negative ID or a real one for resume
     Message baseMessage;
@@ -315,7 +320,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       isStreaming: true,
     );
  
-     final stream = llmService.sendMessageStream(llmContext: llmContext, apiConfig: apiConfig);
+     final stream = llmService.sendMessageStream(llmContext: llmContext, apiConfig: apiConfig, requestThoughts: requestThoughts);
      llmStreamSubscription?.cancel();
      llmStreamSubscription = stream.listen(
        (chunk) async {
@@ -371,11 +376,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
        cancelOnError: true,
      );
   }
- 
-  Future<void> _handleSingleResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, String? initialCarriedOverXml, {int? messageToUpdateId}) async {
-    try {
-      final response = await llmService.sendMessageOnce(llmContext: llmContext, apiConfig: apiConfig);
-      if (!mounted) return;
+ Future<void> _handleSingleResponse(LlmService llmService, ApiConfig apiConfig, List<LlmContent> llmContext, String? initialCarriedOverXml, {required bool requestThoughts, int? messageToUpdateId}) async {
+   try {
+     final response = await llmService.sendMessageOnce(llmContext: llmContext, apiConfig: apiConfig, requestThoughts: requestThoughts);
+     if (!mounted) return;
+
  
       if (state.isCancelled) return; // Check for cancellation after response
       if (response.isSuccess && response.parts.isNotEmpty) {
@@ -485,22 +490,24 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       // The handler will see `isCancelled` is true and save the partial message.
       // We pass the temporary message ID if available.
       final tempMessageId = state.streamingMessage?.id;
+      // Regardless of whether there was a streaming message or not,
+      // we must reset all loading states.
+      if (mounted) {
+        state = state.copyWith(
+          isLoading: false,
+          isStreaming: false,
+          isPrimaryResponseLoading: false,
+          isProcessingInBackground: false,
+          isGeneratingSuggestions: false, // <-- CRITICAL FIX: Reset this state as well.
+          isCancelled: false, // Reset cancellation flag after handling
+        );
+        stopUpdateTimer();
+        showTopMessage("已停止", backgroundColor: Colors.blueGrey);
+      }
+      
+      // If there was a streaming message, we still need to finalize it to save partial progress.
       if (tempMessageId != null) {
-        // Manually call finalize here as a fallback, in case onDone isn't triggered
-        // by the cancel call under certain race conditions.
         await _finalizeStreamedMessage(tempMessageId, isCancelled: true);
-      } else {
-        // If there's no streaming message, we can clean up the state directly.
-        if (mounted) {
-          state = state.copyWith(
-            isLoading: false,
-            isStreaming: false,
-            isProcessingInBackground: false,
-            isGeneratingSuggestions: false,
-          );
-          stopUpdateTimer();
-          showTopMessage("已停止", backgroundColor: Colors.blueGrey);
-        }
       }
     } catch (e) {
       debugPrint("Error during cancelGeneration: $e");

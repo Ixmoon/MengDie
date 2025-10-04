@@ -70,8 +70,10 @@ class LlmService {
   Stream<LlmStreamChunk> sendMessageStream({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig, // 直接接收配置对象
+    bool requestThoughts = false,
   }) {
     final generationParams = _prepareGenerationParams(apiConfig);
+    generationParams['includeThoughts'] = requestThoughts;
 
     _activeServiceType = apiConfig.apiType;
     debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
@@ -98,8 +100,11 @@ class LlmService {
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig, // 直接接收配置对象
+    bool requestThoughts = false,
   }) async {
     final generationParams = _prepareGenerationParams(apiConfig);
+    // 将摘要请求状态传递给参数 map
+    generationParams['includeThoughts'] = requestThoughts;
 
     _activeServiceType = apiConfig.apiType;
     debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");

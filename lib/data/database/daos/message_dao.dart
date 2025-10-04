@@ -78,6 +78,46 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
   Future<int> deleteMessage(int messageId) async {
     return await (delete(messages)..where((t) => t.id.equals(messageId))).go();
   }
+
+  /// Inserts a message at a specific index in the chat's timeline.
+  Future<int> insertMessageAt(MessagesCompanion newMessage, int index) async {
+    return transaction(() async {
+      final chatId = newMessage.chatId.value;
+      final allMessagesForChat = await (select(messages)
+            ..where((t) => t.chatId.equals(chatId))
+            ..orderBy([(t) => OrderingTerm(expression: t.timestamp)]))
+          .get();
+
+      DateTime newTimestamp;
+
+      if (allMessagesForChat.isEmpty || index >= allMessagesForChat.length) {
+        // Insert at the end
+        newTimestamp = DateTime.now().toUtc();
+      } else if (index <= 0) {
+        // Insert at the beginning
+        final firstTimestamp = allMessagesForChat.first.timestamp;
+        newTimestamp = firstTimestamp.subtract(const Duration(milliseconds: 1));
+      } else {
+        // Insert in the middle
+        final prevTimestamp = allMessagesForChat[index - 1].timestamp;
+        final nextTimestamp = allMessagesForChat[index].timestamp;
+        final middleMillis = (prevTimestamp.millisecondsSinceEpoch + nextTimestamp.millisecondsSinceEpoch) ~/ 2;
+        newTimestamp = DateTime.fromMillisecondsSinceEpoch(middleMillis, isUtc: true);
+        
+        // Ensure timestamp is unique, though extremely unlikely to collide.
+        if (newTimestamp.isAtSameMomentAs(prevTimestamp) || newTimestamp.isAtSameMomentAs(nextTimestamp)) {
+          newTimestamp = nextTimestamp.subtract(const Duration(milliseconds: 1));
+        }
+      }
+
+      final companionWithTimestamp = newMessage.copyWith(
+        timestamp: Value(newTimestamp),
+        id: const Value.absent(), // Ensure it's an insert
+      );
+
+      return await into(messages).insert(companionWithTimestamp);
+    });
+  }
   
   Stream<List<MessageData>> watchMessagesForChat(int chatId) {
     return (select(messages)

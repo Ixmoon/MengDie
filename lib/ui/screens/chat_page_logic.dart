@@ -97,6 +97,8 @@ class ChatPageLogic {
           );
         }
 
+        options.addAll(_buildInsertMessageOptions(modalContext, messageIndex));
+
         options.add(
           ListTile(
             leading: Icon(Icons.delete_outline, color: Colors.red.shade400),
@@ -563,6 +565,76 @@ class ChatPageLogic {
       await ref.read(chatRepositoryProvider).saveChat(updatedChat);
       if (!context.mounted) return;
       ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);
+    }
+  }
+
+  List<Widget> _buildInsertMessageOptions(BuildContext modalContext, int messageIndex) {
+    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+
+    Future<void> insertAndEdit(int index, MessageRole role) async {
+      // Close the bottom sheet first.
+      Navigator.pop(modalContext);
+      
+      final newId = await notifier.insertMessage(index, role);
+      if (newId == null || !context.mounted) return;
+
+      // A short delay to allow the UI to update with the new message bubble.
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Find the newly created message from the updated list.
+      final messages = ref.read(chatMessagesProvider(chatId)).value ?? [];
+      final newMessage = messages.firstWhere((m) => m.id == newId, orElse: () {
+        debugPrint("Could not find newly inserted message with id $newId");
+        // Return a dummy message with a non-positive ID to indicate "not found".
+        return Message(id: -1, chatId: chatId, role: MessageRole.user, parts: []);
+      });
+
+      if (newMessage.id > 0) {
+        showEditMessageDialog(newMessage);
+      }
+    }
+
+    return [
+      const Divider(),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_top_outlined),
+        title: const Text('在此之前插入用户消息'),
+        onTap: () => insertAndEdit(messageIndex, MessageRole.user),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_top_outlined),
+        title: const Text('在此之前插入模型消息'),
+        onTap: () => insertAndEdit(messageIndex, MessageRole.model),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_bottom_outlined),
+        title: const Text('在此之后插入用户消息'),
+        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.user),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_bottom_outlined),
+        title: const Text('在此之后插入模型消息'),
+        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.model),
+      ),
+    ];
+  }
+
+  Future<void> addMessageAtEnd(MessageRole role) async {
+    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+    final messages = ref.read(chatMessagesProvider(chatId)).value ?? [];
+    final newId = await notifier.insertMessage(messages.length, role);
+    if (newId == null || !context.mounted) return;
+
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    final updatedMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
+    final newMessage = updatedMessages.firstWhere((m) => m.id == newId, orElse: () {
+      debugPrint("Could not find newly inserted message with id $newId at the end");
+      return Message(id: -1, chatId: chatId, role: role, parts: []);
+    });
+
+    if (newMessage.id > 0) {
+      showEditMessageDialog(newMessage);
     }
   }
 }

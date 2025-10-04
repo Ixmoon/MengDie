@@ -18,6 +18,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'cached_image.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/tools/xml_processor.dart';
 
 /// 列表视图中的聊天项小部件
 class ChatListItem extends ConsumerWidget {
@@ -47,8 +48,8 @@ class ChatListItem extends ConsumerWidget {
                 leading: const Icon(Icons.folder_outlined),
                 title: Text(chat.title ?? '未命名文件夹'),
                 subtitle: Text(
-                  chat.updatedAt.millisecondsSinceEpoch < 1000
-                      ? '文件夹'
+                  chat.isTemplate
+                      ? '模板文件夹'
                       : '文件夹 - ${DateFormat.yMd().add_Hm().format(chat.updatedAt)}',
                 ),
                 trailing: isMultiSelectMode ? Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank) : null,
@@ -79,15 +80,20 @@ class ChatListItem extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      chat.updatedAt.millisecondsSinceEpoch < 1000
-                          ? '模板'
-                          : firstModelMessageAsync.when(
-                              data: (message) => message?.modelsText ?? '',
-                              loading: () => '...',
-                              error: (err, st) => '!',
-                            ),
+                      firstModelMessageAsync.when(
+                        data: (message) {
+                          final text = XmlProcessor.stripXmlContent(message?.modelsText ?? '').trim();
+                          // 如果模板没有消息，仍然显示"模板"
+                          if (text.isEmpty && chat.isTemplate) {
+                            return '模板';
+                          }
+                          return text;
+                        },
+                        loading: () => '...',
+                        error: (err, st) => '!',
+                      ),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: chat.updatedAt.millisecondsSinceEpoch < 1000 ? Theme.of(context).colorScheme.primary : null,
+                        color: chat.isTemplate ? Theme.of(context).colorScheme.primary : null,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

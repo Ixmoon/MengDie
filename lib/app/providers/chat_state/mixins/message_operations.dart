@@ -152,4 +152,27 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
       return null;
     }
   }
+
+  Future<int?> insertMessage(int index, MessageRole role) async {
+    if (!mounted) return null;
+    try {
+      final messageRepo = ref.read(messageRepositoryProvider);
+      final newMessage = Message(
+        chatId: chatId,
+        role: role,
+        parts: [MessagePart.text('')], // Start with an empty text part
+      );
+      final newId = await messageRepo.insertMessage(newMessage, index);
+      if (mounted) {
+        showTopMessage('消息已插入', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+      }
+      return newId;
+    } catch (e) {
+      debugPrint("Notifier 插入消息时出错: $e");
+      if (mounted) {
+        showTopMessage('插入消息失败: $e', backgroundColor: Colors.red);
+      }
+      return null;
+    }
+  }
 }
