@@ -96,7 +96,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             // 当列表变化时，Key会变化，旧的_ChatPageView状态会被销毁，新的会被创建，
             // 从而确保PageController总是以正确的初始状态被创建。
             return _ChatPageView(
-              key: ValueKey(chats.map((c) => c.id).join(',')),
+              key: ValueKey(Object.hashAll(chats.map((c) => c.id))),
               chats: chats,
               initialIndex: currentIndex,
               onBackButtonPressed: widget.onBackButtonPressed, // 传递回调

@@ -36,6 +36,7 @@ class Chat {
   final String? helpMeReplyPrompt;
   final String? helpMeReplyApiConfigId;
   final HelpMeReplyTriggerMode helpMeReplyTriggerMode;
+  final int? lastSummarizedMessageId;
 
   // Not part of the database, used for export/import
   @JsonKey(includeIfNull: false, defaultValue: [])
@@ -74,6 +75,7 @@ class Chat {
     this.helpMeReplyApiConfigId,
     this.helpMeReplyTriggerMode = HelpMeReplyTriggerMode.manual,
     this.messages = const [],
+    this.lastSummarizedMessageId,
   });
 
   Chat copyWith({
@@ -103,6 +105,7 @@ class Chat {
     Object? helpMeReplyApiConfigId = _sentinel,
     HelpMeReplyTriggerMode? helpMeReplyTriggerMode,
     List<Message>? messages,
+    Object? lastSummarizedMessageId = _sentinel,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -131,6 +134,9 @@ class Chat {
       helpMeReplyApiConfigId: helpMeReplyApiConfigId == _sentinel ? this.helpMeReplyApiConfigId : helpMeReplyApiConfigId as String?,
       helpMeReplyTriggerMode: helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
       messages: messages ?? this.messages,
+      lastSummarizedMessageId: (contextSummary == _sentinel ? this.contextSummary : contextSummary as String?)?.isEmpty ?? true
+          ? null
+          : (lastSummarizedMessageId == _sentinel ? this.lastSummarizedMessageId : lastSummarizedMessageId as int?),
     );
   }
 

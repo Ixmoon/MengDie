@@ -88,25 +88,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
 
       if (mounted) {
         showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
-        clearHelpMeReplySuggestions(); 
-
-        final chatRepo = ref.read(chatRepositoryProvider);
-        final chat = await chatRepo.getChat(chatId);
-        if (chat != null && chat.contextSummary != null) {
-          final contextXmlService = ref.read(contextXmlServiceProvider);
-          final tempContext = await contextXmlService.buildApiRequestContext(
-            chatId: chatId,
-            currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
-          );
-          final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
-
-          if (isMessageInSummarizedScope) {
-            await chatRepo.saveChat(chat.copyWith(contextSummary: null));
-            debugPrint("ChatStateNotifier($chatId): 因被编辑的消息在摘要范围内，已清除上下文摘要。");
-          } else {
-            debugPrint("ChatStateNotifier($chatId): 被编辑的消息不在摘要范围内，保留上下文摘要。");
-          }
-        }
+        clearHelpMeReplySuggestions();
       }
     } catch (e) {
       debugPrint("Notifier 更新消息时出错: $e");

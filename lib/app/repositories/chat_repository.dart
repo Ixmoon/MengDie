@@ -217,6 +217,7 @@ class ChatRepository {
     int sourceChatId, {
     int? upToMessageId,
     bool asTemplate = false,
+    bool shouldClearSummary = true, // 新增参数，默认为 true 以保持旧行为的安全性
   }) async {
     debugPrint("ChatRepository: duplicateChat from $sourceChatId, upToMessageId: $upToMessageId, asTemplate: $asTemplate");
 
@@ -252,7 +253,9 @@ class ChatRepository {
       title: Value(newTitle),
       createdAt: Value(now),
       updatedAt: Value(now),
-      contextSummary: const Value(null),
+      // 核心修改：根据 shouldClearSummary 的值来决定是否保留或清除总结。
+      contextSummary: shouldClearSummary ? const Value(null) : Value(originalChat.contextSummary),
+      lastSummarizedMessageId: shouldClearSummary ? const Value(null) : Value(originalChat.lastSummarizedMessageId),
       orderIndex: const Value(null),
       // 关键修复：如果是另存为模板，则强制将其放入根目录，忽略原始文件夹。
       parentFolderId: asTemplate ? const Value(null) : Value(originalChat.parentFolderId),

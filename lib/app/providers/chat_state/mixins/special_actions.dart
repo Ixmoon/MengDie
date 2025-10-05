@@ -277,7 +277,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
             chatId: chatId,
             currentUserMessage: targetMessage,
             chatSystemPromptOverride: prompt,
-            lastMessageOverride: prompt,
+            lastMessageOverride: prompt, // This will now be appended at the end
             keepAsSystemPrompt: false,
         );
 

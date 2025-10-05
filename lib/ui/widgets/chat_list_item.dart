@@ -18,7 +18,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'cached_image.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';
-import '../../app/tools/xml_processor.dart';
+import 'chat_display_utils.dart';
 
 /// 列表视图中的聊天项小部件
 class ChatListItem extends ConsumerWidget {
@@ -81,14 +81,7 @@ class ChatListItem extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(
                       firstModelMessageAsync.when(
-                        data: (message) {
-                          final text = XmlProcessor.stripXmlContent(message?.modelsText ?? '').trim();
-                          // 如果模板没有消息，仍然显示"模板"
-                          if (text.isEmpty && chat.isTemplate) {
-                            return '模板';
-                          }
-                          return text;
-                        },
+                        data: (message) => generatePreviewText(message, chat),
                         loading: () => '...',
                         error: (err, st) => '!',
                       ),

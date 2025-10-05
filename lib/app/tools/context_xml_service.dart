@@ -35,11 +35,13 @@ class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;
   final List<Message> droppedMessages;
+  final List<Message> keptMessages;
 
   ApiRequestContext({
     required this.contextParts,
     this.carriedOverXml,
     required this.droppedMessages,
+    required this.keptMessages,
   });
 }
 
@@ -86,11 +88,6 @@ class ContextXmlService {
 
     for (int i = 0; i < fullHistory.length; i++) {
       final msg = fullHistory[i];
-      // XML calculation should only consider model messages.
-      if (msg.role != MessageRole.model) {
-        continue;
-      }
-
       // FIX: Construct the full XML text for parsing by respecting the chat setting.
       // If secondary XML is enabled, use it; otherwise, use the original.
       // This ensures that the context calculation uses the correct, separated XML fields.
@@ -265,38 +262,28 @@ Future<_HistoryLimitResult> _limitHistoryForPrompt({
 
 /// Builds the list of LlmContent to be sent to the LLM API, respecting all context rules.
 /// This is the primary method for constructing the prompt.
-///
-/// The new logic is:
-/// 1. Concurrently calculate tokens for all "fixed" context parts (system prompt, summary, XML).
-/// 2. Calculate the remaining token and turn budget for the message history.
-/// 3. Call a helper to truncate the message history within this specific budget.
-/// 4. Assemble all parts into the final context.
 Future<ApiRequestContext> buildApiRequestContext({
-  required int chatId, // 重构：传入 chatId
+  required int chatId,
   required Message currentUserMessage,
   String? lastMessageOverride,
   int? messageIdToPreserveXml,
   String? chatSystemPromptOverride,
   bool? keepAsSystemPrompt,
-  List<Message>? historyOverride, // New: Allows providing a custom history list, skipping DB fetch.
+  List<Message>? historyOverride,
 }) async {
   final messageRepo = _ref.read(messageRepositoryProvider);
   final llmService = _ref.read(llmServiceProvider);
-  // 重构：从 Notifier 获取 chat 和 apiConfig
   final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
   final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
   final apiConfig = notifier.getEffectiveApiConfig();
 
-  // Use the historyOverride if provided, otherwise fetch from the database.
-  final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
-
-  final lastModelMessageInFullHistory = fullHistory.lastWhereOrNull((m) => m.role == MessageRole.model);
-  String? lastModelMessageXml;
-  if (lastModelMessageInFullHistory != null) {
-    lastModelMessageXml = chat.enableSecondaryXml
-        ? lastModelMessageInFullHistory.secondaryXmlContent
-        : lastModelMessageInFullHistory.originalXmlContent;
-  }
+  // NEW: Respect lastSummarizedMessageId. If it exists, only fetch messages after it.
+  // This is the core change for the rolling summary mechanism.
+  final List<Message> fullHistory = historyOverride ??
+      await messageRepo.getMessagesForChat(
+        chat.id,
+        afterMessageId: chat.lastSummarizedMessageId,
+      );
 
   final carriedOverResult = _calculateCurrentCarriedOverXml(chat, fullHistory);
   final String? calculatedCarriedOverXml = carriedOverResult.xmlString;
@@ -306,7 +293,6 @@ Future<ApiRequestContext> buildApiRequestContext({
   final List<LlmContent> fixedContextParts = [];
   final effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
   final bool systemPromptExists = effectiveSystemPrompt != null && effectiveSystemPrompt.trim().isNotEmpty;
-  final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
   final bool xmlExists = calculatedCarriedOverXml != null && calculatedCarriedOverXml.isNotEmpty;
 
   if (systemPromptExists) {
@@ -318,31 +304,25 @@ Future<ApiRequestContext> buildApiRequestContext({
      fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.systemPrompt!)]));
   }
 
-  if (summaryExists) {
-    fixedContextParts.add(LlmContent("user", [LlmTextPart(chat.contextSummary!)]));
-  }
-
   // --- 2. Calculate budget for history ---
   int fixedTokens = 0;
-  int fixedTurns = 0; // Summary and/or XML count as one turn
+  int fixedTurns = 0;
   int historyTokenBudget = chat.contextConfig.maxContextTokens ?? 256000;
   int historyTurnBudget = chat.contextConfig.maxTurns;
 
-  // Concurrently calculate tokens for all fixed parts
   if (fixedContextParts.isNotEmpty) {
     try {
       final tokenFutures = fixedContextParts.map((part) => llmService.countTokens(llmContext: [part], apiConfig: apiConfig));
       final tokenCounts = await Future.wait(tokenFutures);
       fixedTokens = tokenCounts.sum;
-      debugPrint("ContextXmlService: Calculated fixed tokens: $fixedTokens");
     } catch (e) {
       debugPrint("ContextXmlService: Error calculating fixed tokens: $e. Aborting.");
-      // If we can't calculate fixed tokens, we can't safely build context.
-      return ApiRequestContext(contextParts: [], carriedOverXml: calculatedCarriedOverXml, droppedMessages: fullHistory);
+      return ApiRequestContext(contextParts: [], carriedOverXml: calculatedCarriedOverXml, droppedMessages: fullHistory, keptMessages: const []);
     }
   }
 
-  if (summaryExists || xmlExists) {
+  // Carried-over XML counts as one turn if it exists. Summary is now part of history.
+  if (xmlExists) {
     fixedTurns = 1;
   }
 
@@ -361,14 +341,35 @@ Future<ApiRequestContext> buildApiRequestContext({
 
   // --- 4. Assemble the final context ---
   final List<LlmContent> finalContextParts = List.from(fixedContextParts);
+  final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
+
+  // NEW: Handle summary injection before processing history
+  if (summaryExists && limitedHistoryForPrompt.isNotEmpty) {
+    final firstMessage = limitedHistoryForPrompt.first;
+    // If the first message is NOT a model, we inject a new model message here.
+    if (firstMessage.role != MessageRole.model) {
+        finalContextParts.add(LlmContent("model", [LlmTextPart(chat.contextSummary!)]));
+    }
+  }
+  
+  // Find the last user and model messages within the limited history
+  final lastUserMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull((m) => m.role == MessageRole.user);
+  final lastModelMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull((m) => m.role == MessageRole.model);
 
   for (final message in limitedHistoryForPrompt) {
+    final isFirstMessageInHistory = message.id == limitedHistoryForPrompt.firstOrNull?.id;
+
     if (message.role == MessageRole.model) {
-      // For model messages, we manually build the LlmContent to handle XML stripping.
       final List<LlmPart> modelParts = [];
+
+      // NEW: Prepend summary if this is the first message and it's a model message
+      if (summaryExists && isFirstMessageInHistory && message.role == MessageRole.model) {
+        modelParts.add(LlmTextPart("${chat.contextSummary!}\n"));
+      }
+
+      // Add text parts, stripping ignored XML
       for (final part in message.parts) {
         if (part.type == MessagePartType.text && part.text != null) {
-          // Apply selective XML stripping based on 'ignore' rules.
           final filteredText = (message.id == messageIdToPreserveXml)
               ? part.text!
               : XmlProcessor.stripIgnoredXmlContent(part.text!, chat.xmlRules);
@@ -376,40 +377,135 @@ Future<ApiRequestContext> buildApiRequestContext({
             modelParts.add(LlmTextPart(filteredText));
           }
         } else {
-          // For non-text parts (like generated images), convert them directly.
           final llmPart = LlmContent.fromMessage(Message(chatId: chatId, role: MessageRole.model, parts: [part])).parts.firstOrNull;
           if (llmPart != null) {
             modelParts.add(llmPart);
           }
         }
       }
-      if (modelParts.isNotEmpty) {
-        finalContextParts.add(LlmContent("model", modelParts));
+      
+      // ONLY for the last model message, append its original XML
+      if (message.id == lastModelMessageInHistory?.id) {
+        final originalXml = chat.enableSecondaryXml ? message.secondaryXmlContent : message.originalXmlContent;
+        if (originalXml != null && originalXml.isNotEmpty) {
+          modelParts.add(LlmTextPart(originalXml));
+        }
       }
-    } else {
-      // For user messages, the standard conversion is sufficient.
-      finalContextParts.add(LlmContent.fromMessage(message));
+
+      if (modelParts.isNotEmpty) {
+        finalContextParts.add(LlmContent("model", modelParts, messageId: message.id));
+      }
+
+    } else if (message.role == MessageRole.user) {
+      // ONLY for the last user message, apply special composition.
+      if (message.id == lastUserMessageInHistory?.id) {
+        final List<LlmPart> combinedUserParts = [];
+
+        // 1. Add carried-over XML
+        if (xmlExists && contributingMessageCount >= 2) {
+          combinedUserParts.add(LlmTextPart(calculatedCarriedOverXml!));
+        }
+
+        // 2. Add current user message text (or override)
+        final userText = lastMessageOverride ?? message.rawText;
+        if (userText.isNotEmpty) {
+          combinedUserParts.add(LlmTextPart(userText));
+        }
+        
+        // 3. Add current user message's original XML
+        final originalUserXml = chat.enableSecondaryXml ? message.secondaryXmlContent : message.originalXmlContent;
+        if (originalUserXml != null && originalUserXml.isNotEmpty) {
+          combinedUserParts.add(LlmTextPart(originalUserXml));
+        }
+
+        if (combinedUserParts.isNotEmpty) {
+          finalContextParts.add(LlmContent("user", combinedUserParts, messageId: message.id));
+        }
+      } else {
+        // For all other historical user messages, add them normally without their original XML.
+        finalContextParts.add(LlmContent.fromMessage(message));
+      }
     }
   }
 
-  if (lastModelMessageXml != null && lastModelMessageXml.isNotEmpty) {
-    finalContextParts.add(LlmContent("model", [LlmTextPart(lastModelMessageXml)]));
-  }
-
-  if (xmlExists && contributingMessageCount >= 2) {
-    finalContextParts.add(LlmContent("user", [LlmTextPart(calculatedCarriedOverXml!)]));
-  }
-
-  if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+  // Handle case where there's no user message in history but an override is present
+  if (lastUserMessageInHistory == null && lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+    finalContextParts.add(LlmContent("user", [LlmTextPart(lastMessageOverride)]));
+  } else if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+    // NEW LOGIC: If an override is provided, always append it as the very last user message.
+    // This is crucial for special actions like "Secondary XML" or "Help Me Reply"
+    // which need to add a final instruction after the full context.
     finalContextParts.add(LlmContent("user", [LlmTextPart(lastMessageOverride)]));
   }
-  
+
   debugPrint("ContextXmlService:buildApiRequestContext - Returning context with ${finalContextParts.length} parts. Kept ${limitedHistoryForPrompt.length} history messages, dropped ${droppedMessages.length}.");
 
+  final mergedContext = _mergeConsecutiveMessages(finalContextParts);
+  if (mergedContext.length != finalContextParts.length) {
+    debugPrint("ContextXmlService:buildApiRequestContext - Merged consecutive messages. Count before: ${finalContextParts.length}, after: ${mergedContext.length}.");
+  }
+
   return ApiRequestContext(
-    contextParts: finalContextParts,
+    contextParts: mergedContext,
     carriedOverXml: calculatedCarriedOverXml,
     droppedMessages: droppedMessages,
+    keptMessages: limitedHistoryForPrompt,
   );
+}
+
+/// A final processing step to merge consecutive LlmContent parts with the same role.
+/// This ensures the final context sent to the API adheres to the alternating user/model format.
+List<LlmContent> _mergeConsecutiveMessages(List<LlmContent> originalParts) {
+  if (originalParts.length < 2) {
+    return originalParts;
+  }
+
+  final List<LlmContent> mergedParts = [];
+  final List<LlmContent> processingQueue = List.from(originalParts);
+
+  LlmContent accumulator = processingQueue.removeAt(0);
+
+  while (processingQueue.isNotEmpty) {
+    final current = processingQueue.removeAt(0);
+
+    if (accumulator.role == current.role) {
+      // Roles are the same, merge them.
+      final List<LlmPart> combinedParts = List.from(accumulator.parts);
+
+      // Smart text merging: if the last part of the accumulator and the first part
+      // of the current content are both text, merge them with a newline.
+      if (combinedParts.isNotEmpty &&
+          combinedParts.last is LlmTextPart &&
+          current.parts.isNotEmpty &&
+          current.parts.first is LlmTextPart) {
+        final lastTextPart = combinedParts.removeLast() as LlmTextPart;
+        final firstTextPart = current.parts.first as LlmTextPart;
+
+        final mergedText = '${lastTextPart.text ?? ''}\n${firstTextPart.text ?? ''}'.trim();
+        if (mergedText.isNotEmpty) {
+          combinedParts.add(LlmTextPart(mergedText));
+        }
+
+        // Add remaining parts from current, skipping the one we just merged
+        combinedParts.addAll(current.parts.skip(1));
+      } else {
+        // Simple concatenation for non-text or non-adjacent text parts
+        combinedParts.addAll(current.parts);
+      }
+
+      // Create a new LlmContent with the merged parts.
+      // We keep the messageId of the first message in the sequence.
+      accumulator = LlmContent(accumulator.role, combinedParts, messageId: accumulator.messageId);
+    } else {
+      // Roles are different, push the accumulator and start a new one.
+      mergedParts.add(accumulator);
+      accumulator = current;
+    }
+  }
+
+  // Add the last accumulated part
+  mergedParts.add(accumulator);
+
+  return mergedParts;
 }
 }

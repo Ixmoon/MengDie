@@ -11,11 +11,16 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
 
   MessageDao(this.db) : super(db);
 
-  Future<List<MessageData>> getMessagesForChat(int chatId) {
-    return (select(messages)
-          ..where((t) => t.chatId.equals(chatId))
-          ..orderBy([(t) => OrderingTerm(expression: t.timestamp)]))
-        .get();
+  Future<List<MessageData>> getMessagesForChat(int chatId, {int? afterMessageId}) {
+    final query = select(messages)
+      ..where((t) => t.chatId.equals(chatId))
+      ..orderBy([(t) => OrderingTerm(expression: t.timestamp)]);
+
+    if (afterMessageId != null) {
+      query.where((t) => t.id.isBiggerThanValue(afterMessageId));
+    }
+
+    return query.get();
   }
 
   Future<List<MessageData>> getLastNMessagesForChat(int chatId, int n) {

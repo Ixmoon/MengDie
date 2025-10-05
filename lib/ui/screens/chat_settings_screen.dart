@@ -10,10 +10,131 @@ import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
 import '../../app/providers/chat_state/chat_data_providers.dart';
 
 // --- 默认提示词常量 ---
-const String defaultContinuePrompt = '请根据你上一次的回复继续补充或续写。';
-const String defaultPreprocessingPrompt = '根据对话以及之前的总结（如果有）进行详细的总结概括，尤其要分析并保留关键的信息，进行有条理的归纳。';
-const String defaultSecondaryXmlPrompt = '使用<Summary><summary id=“”></summary></Summary>对最新一轮对话进行总结，已有内容无需重复总结，如果新的内容较少，直接回复<Summary>略</Summary>即可。';
-const String defaultHelpMeReplyPrompt = '假如你是我，请根据以上对话，为我设想三个不同的回复，并使用序号1. 2. 3.分别标注。（不要包含任何其他非序号的回复内容。）';
+const String defaultContinuePrompt = '''
+<system_command>
+用户没有发送任何消息，你需要继续回复并拼接到上一次的回复中，请根据你上一次的回复继续延申并与上一次回复衔接自然。
+</system_command>
+''';
+const String defaultPreprocessingPrompt = '''
+<system_command>
+你现在进入回忆思考模式，需要为你与用户之间的持续互动创建一份精确且结构化的上下文总结。这份总结是保持对话连贯性、记忆关键信息和高效推进后续任务的核心。该总结不会给用户或任何人看到，仅作为你自身参考之用，所以一切请以服务你自己为主要目标。
+核心指令：
+首次创建：若这是第一次生成总结，请全面回顾迄今为止的所有互动内容。
+迭代更新：若需更新已有总结，请将 [上一份总结] 与 [新的互动内容] 无缝地融合成一份全新的、统一的总结。在更新时，请务必整合并精炼信息，将已过时或重要性降低的旧内容适度简化，以防止总结无限膨胀，同时确保核心信息和长期目标得以保留。
+补充: 请包含对话中的关键内容的直接引文，以便明确关键事实、决策点和任何明确的用户偏好避免产生歧义。
+你的总结可以参考以下的示例（仅供学习参考，请根据对话任务类型和具体任务调整，切勿照搬）：
+
+# 示例1:
+
+**1. 宏观背景 (Overall Context):**
+*   **互动历程回顾 (Interaction History):** 高度概括你与用户互动的起点、关键转折点和总体目标。这部分旨在让任何接手者能迅速理解“你与用户是如何走到这一步的”。
+*   **当前焦点 (Immediate Focus):** 详细描述在请求总结前，你与用户正在进行的具体任务、讨论的话题或处理的情境。
+
+**2. 核心原则与框架 (Core Principles & Framework):**
+*   列出所有指导你与用户互动的基础规则、关键假设、使用的模型或共同遵守的规范。这可以是技术栈、设计哲学、故事的世界观设定，或是沟通中的情感边界。
+
+**3. 关键实体与要素 (Key Entities & Elements):**
+*   枚举并描述互动中所有重要的“名词”。根据情境，这可以是人物、代码模块、文件、物品、地点、概念或反复出现的情感。
+    - **[实体/要素 1]:**
+        - **定义/描述:** 它的本质、作用和核心属性。
+        - **当前状态:** 它最近的变化、所处的位置或相关的情绪状态。
+    - **[实体/要素 2]:**
+        - [...]
+
+**4. 已达成的进展与共识 (Progress & Resolutions):**
+*   记录已经解决的问题、完成的任务、达成的协议、澄清的误解或确认的事实。这部分是衡量你与用户进展的里程碑。
+
+**5. 待办事项与未来方向 (Pending Goals & Next Steps):**
+*   清晰地列出所有悬而未决的任务、未解的疑问、长期的目标或计划进行的下一步行动。
+*   为保证准确性，在描述下一步计划时，可直接引用你与用户最近互动中的关键指令或意图。
+    - **[待办事项 1]:** [描述任务详情，以及你与用户计划如何着手。]
+    - **[潜在方向 2]:** [描述一个未来的可能性或需要进一步探索的领域。]
+
+# 示例2:
+
+**故事背景 (Story Context):** 用于无缝衔接故事的宏观与微观背景。
+  1.  **故事主线回顾 (Main Plot Recap):** 高度概括故事的开端、发展和主要转折点，让读者能快速理解整个故事的脉络。
+  2.  **当前情节焦点 (Current Plot Focus):** 详细描述总结前正在发生的事情。聚焦于最近的角色互动、所处的场景、面临的直接挑战或目标。
+
+**核心设定与要素 (Core Settings & Elements):** 列出故事世界观、关键规则（如魔法体系、科技水平）、特殊物品、重要概念或反复出现的主题，这些是理解故事行为逻辑的基础。
+
+**关键角色与地点 (Key Characters & Locations):** 枚举故事中的核心参与者和重要场景。
+  - **[角色名1]:**
+    - **简介:** 总结其核心动机、性格特点、关键能力以及与其他角色的关系。
+    - **状态更新:** 记录其最近的行动、状态变化（如受伤、获得新能力/信息）或心理活动。
+  - **[角色名2]:**
+    - [...]
+  - **[地点名1]:**
+    - **简介:** 描述其特点、在故事中的作用以及其独特的氛围或规则。
+    - **近期事件:** 概述最近在此发生的关键事件。
+  - [...]
+
+**已解决的冲突与谜团 (Resolved Conflicts & Mysteries):** 记录已被角色解决的挑战、战胜的敌人、揭开的谜底或完成的重要任务。这有助于追踪故事的进展和角色的成长。
+
+**悬而未决的线索与未来走向 (Pending Clues & Future Directions):** 概述所有未解的谜题、隐藏的伏笔、角色的长期目标以及潜在的冲突。这部分是推动故事继续发展的钩子。对于后续步骤，可以引用最近的对话或行动来明确即将展开的情节。
+  - **[线索/任务1]:** [详细描述，以及角色们计划如何应对]
+  - **[潜在冲突2]:** [详细描述，以及预示其可能爆发的迹象]
+  - [...]
+
+# 示例3:
+
+1. 先前的对话：
+  [详细描述]
+2. 当前工作：
+  [详细描述]
+3. 关键技术概念：
+  - [概念1]
+  - [概念2]
+  - [...]
+4. 相关文件和代码：
+  - [文件名1]
+	- [关于此文件重要性的摘要]
+	- [对此文件所做更改的摘要（如有）]
+	- [重要代码片段]
+  - [文件名2]
+	- [重要代码片段]
+  - [...]
+5. 问题解决：
+  [详细描述]
+6. 待办任务和后续步骤：
+  - [任务1详情及后续步骤]
+  - [任务2详情及后续步骤]
+  - [...]
+
+输出要求：请仅输出这份结构化的总结，不要附加任何额外的开场白、评论或解释。
+</system_command>
+''';
+const String defaultSecondaryXmlPrompt = '''
+<system_command>
+对最新一轮对话进行总结，已有内容无需重复总结。
+<summary>
+ <round id="X">
+  <!-- 每轮对话的概括 -->
+ </round>
+ <message id="X">
+  <!-- 重要信息/线索/设定 -->
+ </message>
+ <goals id="X">
+  <status>
+  待进行/进行中/已完成<!-- 目标状态 -->
+  </status>
+  <goal>
+   <!-- 你需要达成的目标。 -->
+  </goal>
+ </goals>
+ <problem>
+  <!-- 此处用于自纠自省，分析此轮输出不足,在之后需要及时纠正。也可以在此处添加改进建议 -->
+ </problem>
+</summary>
+请仅输出这份结构化的总结，无需任何额外的开场白或解释。
+</system_command>
+''';
+const String defaultHelpMeReplyPrompt = '''
+<system_command>
+参考你与用户间的过往对话，仿造用户的风格（也可以给出比用户更高质量的回复），代替用户发言或者回复，为用户设想三个不同的回复，并使用序号1. 2. 3.分别标注，单个回复中不要有任何换行符号。
+请仅输出这份结构化的选项，无需任何额外的开场白或解释。
+</system_command>
+''';
 
 
 // 本文件包含用于配置单个聊天会话设置的屏幕界面。
@@ -707,8 +828,8 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             ),
          ),
         SwitchListTile(
-          title: const Text('启用原生XML生成'),
-          subtitle: const Text('在回复后，使用原生XML提示词生成额外XML内容'),
+          title: const Text('启用再生XML生成'),
+          subtitle: const Text('在回复后，使用再生XML提示词生成额外XML内容'),
           value: chat.enableSecondaryXml,
           onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
         ),
@@ -758,7 +879,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             child: DropdownButtonFormField<String?>(
               value: validConfigIds.contains(chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
               decoration: InputDecoration(
-                labelText: '用于原生XML的 API 配置',
+                labelText: '用于再生XML的 API 配置',
                 border: const OutlineInputBorder(),
                 hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}'
               ),

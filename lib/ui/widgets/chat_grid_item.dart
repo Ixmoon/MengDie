@@ -17,7 +17,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'cached_image.dart';
 import '../../app/providers/chat_state/chat_data_providers.dart';
-import '../../app/tools/xml_processor.dart';
+import 'chat_display_utils.dart';
 
 /// 网格视图中的聊天项小部件
 class ChatGridItem extends ConsumerWidget {
@@ -81,11 +81,12 @@ class ChatGridItem extends ConsumerWidget {
               if (!chat.isFolder && chat.updatedAt.millisecondsSinceEpoch >= 1000)
                 firstModelMessageAsync.when(
                   data: (message) {
-                    if (message == null) return const SizedBox.shrink();
+                    final previewText = generatePreviewText(message, chat);
+                    if (previewText.isEmpty) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Text(
-                        XmlProcessor.stripXmlContent(message.modelsText).trim(),
+                        previewText,
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
                         maxLines: 1,

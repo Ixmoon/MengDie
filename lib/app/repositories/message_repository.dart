@@ -24,8 +24,8 @@ class MessageRepository {
   MessageRepository(this._messageDao, this._chatDao);
 
   // --- 数据库操作 ---
-  Future<List<Message>> getMessagesForChat(int chatId) async {
-    final messageDataList = await _messageDao.getMessagesForChat(chatId);
+  Future<List<Message>> getMessagesForChat(int chatId, {int? afterMessageId}) async {
+    final messageDataList = await _messageDao.getMessagesForChat(chatId, afterMessageId: afterMessageId);
     return messageDataList.map(MessageMapper.fromData).toList();
   }
 

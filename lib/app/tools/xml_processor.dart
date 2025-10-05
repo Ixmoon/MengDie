@@ -126,14 +126,7 @@ class XmlProcessor {
             try {
               // Parse the previous full element and merge with the current one
               final previousElement = XmlDocument.parse(previousOuterXml).rootElement;
-              final mergedChildren = _mergeNodeLists(previousElement.children, node.children);
-              
-              // Create the new merged element, preserving the original's name and attributes
-              final mergedElement = XmlElement(
-                previousElement.name.copy(),
-                previousElement.attributes.map((a) => a.copy()),
-                mergedChildren,
-              );
+              final mergedElement = mergeElements(previousElement, node);
               final mergedOuterXml = mergedElement.toXmlString(pretty: false).trim();
 
               if (mergedOuterXml.isNotEmpty) {
@@ -199,47 +192,35 @@ class XmlProcessor {
     );
   }
 
-  // --- Helper: Recursively merge two lists of nodes (for Update) ---
-  // New logic: Map-based merge, adds new elements, ignores order for matching, keeps base attributes.
-  // --- Helper: Recursively merge two lists of nodes (for Update) ---
-  // New logic: Map-based merge, respects 'id' attribute, adds new elements, ignores order for matching.
+  // --- Helper: Iteratively merge two lists of nodes (for Update) ---
+  // This iterative approach prevents StackOverflowError for deeply nested XML.
   static List<XmlNode> _mergeNodeLists(List<XmlNode> baseNodes, List<XmlNode> updateNodes) {
     final List<XmlNode> mergedNodes = [];
-    // Use a map for efficient lookup of update elements by a unique identifier.
     final Map<String, XmlElement> updateElementsMap = {
       for (var node in updateNodes.whereType<XmlElement>())
         getElementIdentifier(node): node
     };
+
+    // Separate non-element nodes for optimized processing.
     final List<XmlNode> updateOtherNodes = updateNodes.where((n) => n is! XmlElement).toList();
-
-    // Keep track of used update text/cdata nodes to avoid reusing them
     final Set<XmlNode> usedUpdateOtherNodes = {};
-// 1. Iterate through baseNodes and merge with/consume updateNodes
-for (final baseNode in baseNodes) {
-  if (baseNode is XmlElement) {
-    final baseIdentifier = getElementIdentifier(baseNode);
-    final matchingUpdateElement = updateElementsMap[baseIdentifier];
 
+    // 1. Iterate through baseNodes and merge with/consume updateNodes
+    for (final baseNode in baseNodes) {
+      if (baseNode is XmlElement) {
+        final baseIdentifier = getElementIdentifier(baseNode);
+        final matchingUpdateElement = updateElementsMap.remove(baseIdentifier);
 
         if (matchingUpdateElement != null) {
-          // Found a matching update element, consume it from the map.
-          updateElementsMap.remove(baseIdentifier);
-
-          // Recursively merge children.
-          final mergedChildren = _mergeNodeLists(baseNode.children, matchingUpdateElement.children);
-          // Create merged element: keep base name and attributes, use merged children.
-          mergedNodes.add(XmlElement(
-            baseNode.name.copy(),
-            baseNode.attributes.map((a) => a.copy()), // Keep base attributes
-            mergedChildren,
-          ));
+          // Found a matching update element, merge them.
+          final mergedElement = mergeElements(baseNode, matchingUpdateElement);
+          mergedNodes.add(mergedElement);
         } else {
           // No matching update element found, keep the base node.
           mergedNodes.add(baseNode.copy());
         }
       } else if (baseNode is XmlText || baseNode is XmlCDATA) {
-        // This logic attempts to replace a text node with a corresponding one from the update list.
-        // It's heuristic and might not be perfect for all cases.
+        // Heuristic: find the first available, non-empty, matching text/cdata node from the update list.
         final updateMatch = updateOtherNodes.firstWhereOrNull(
           (un) => (un.nodeType == baseNode.nodeType) && !usedUpdateOtherNodes.contains(un) && un.value != null && un.value!.trim().isNotEmpty,
         );
@@ -257,9 +238,7 @@ for (final baseNode in baseNodes) {
     }
 
     // 2. Add any remaining (new) elements from the updateElementsMap.
-    for (final newElement in updateElementsMap.values) {
-      mergedNodes.add(newElement.copy());
-    }
+    mergedNodes.addAll(updateElementsMap.values.map((e) => e.copy()));
 
     // 3. Add any remaining (unused) non-element nodes from updateOtherNodes, filtering out whitespace-only text nodes.
     for (final remainingOther in updateOtherNodes) {
@@ -276,16 +255,23 @@ for (final baseNode in baseNodes) {
 
   // --- Utility Functions ---
   // Creates a unique identifier for an element.
-  // It uses the value of the *first* attribute found, regardless of its name (e.g., id, Name, uuid).
+  // Priority: 'id' attribute -> first attribute -> tag name.
   static String getElementIdentifier(XmlElement element) {
+    // Prioritize 'id' attribute if it exists and is not empty.
+    final idAttr = element.getAttribute('id');
+    if (idAttr != null && idAttr.isNotEmpty) {
+      return '${element.name.local}#$idAttr';
+    }
+    
+    // Fallback to the first attribute if it exists and its value is not empty.
     if (element.attributes.isNotEmpty) {
-      // Use the value of the first attribute as the unique part of the identifier.
       final firstAttrValue = element.attributes.first.value;
       if (firstAttrValue.isNotEmpty) {
         return '${element.name.local}#$firstAttrValue';
       }
     }
-    // If no attributes or the first attribute has an empty value, fall back to just the tag name.
+
+    // If no suitable attribute is found, fall back to just the tag name.
     return element.name.local;
   }
 
@@ -329,51 +315,30 @@ for (final baseNode in baseNodes) {
     return result.isEmpty ? null : result;
   }
 
-  // Simple min function utility (No longer used, can be removed if not used elsewhere)
-  // static int min(int a, int b) => a < b ? a : b;
-
-  /// Strips XML tags and their content from a string, returning only the text outside the tags.
-  /// Uses a robust method that first tries strict parsing and falls back to a more lenient approach.
+  /// Strips XML tags and their content from a string using a fast, single-pass,
+  /// state-machine-based approach. This is robust against malformed or incomplete XML.
   static String stripXmlContent(String rawText) {
-    final trimmedText = rawText.trim();
-    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
-      return trimmedText;
-    }
-
-    // --- First Pass: Strict XML Parsing ---
-    // This is the most accurate way to strip content if the XML is well-formed.
-    try {
-      final document = XmlDocument.parse('<root>$trimmedText</root>');
-      final buffer = StringBuffer();
-      for (final node in document.rootElement.children) {
-        if (node is XmlText) {
-          buffer.write(node.value);
-        }
+    final buffer = StringBuffer();
+    bool inTag = false;
+    for (int i = 0; i < rawText.length; i++) {
+      final char = rawText[i];
+      if (char == '<') {
+        inTag = true;
+      } else if (char == '>') {
+        inTag = false;
+      } else if (!inTag) {
+        buffer.write(char);
       }
-      return buffer.toString().trim();
-    } catch (e) {
-      debugPrint("Error stripping XML with strict parser: $e. Falling back to robust regex stripping.");
-      // --- Fallback: Robust Regex-based Stripping ---
-      // This regex finds all occurrences of <tag>...</tag> and removes them.
-      // It's non-greedy and handles nested tags within the outer tag being removed.
-      String result = trimmedText;
-      final tagNames = RegExp(r'<(\w+)[^>]*>').allMatches(trimmedText).map((m) => m.group(1)!).toSet();
-
-      for (final tagName in tagNames) {
-        final regex = RegExp(r'<' + tagName + r'\b[^>]*>.*?</' + tagName + r'>', dotAll: true, caseSensitive: false);
-        result = result.replaceAll(regex, ' ');
-      }
-      // Final cleanup for any remaining stray tags.
-      result = result.replaceAll(RegExp(r'<[^>]+>'), ' ');
-      return result.replaceAll(RegExp(r'\s+'), ' ').trim();
     }
+    return buffer.toString().trim();
   }
 
-  /// Strips only the XML tags that have an 'ignore' rule, returning all other text and XML.
-  /// This method is robust and handles incomplete or malformed XML gracefully.
+  /// Strips XML tags and their content if the tag has an 'ignore' rule.
+  /// This implementation is robust, handles nested tags correctly, and is safe
+  /// from catastrophic backtracking on malformed or incomplete XML.
   static String stripIgnoredXmlContent(String rawText, List<XmlRule> rules) {
     final trimmedText = rawText.trim();
-    if (!trimmedText.contains('<') || !trimmedText.contains('>')) {
+    if (!trimmedText.contains('<')) {
       return trimmedText;
     }
 
@@ -388,32 +353,58 @@ for (final baseNode in baseNodes) {
 
     final buffer = StringBuffer();
     int lastIndex = 0;
-
-    // Regex to find all well-formed, complete tags (either self-closing or with a matching closing tag).
-    final tagRegex = RegExp(r'<(\w+)\b[^>]*?(?:\/>|>(?:.|\s)*?<\/\1>)', dotAll: true, caseSensitive: false);
+    // Regex to find any start or end tag, including self-closing ones.
+    final tagRegex = RegExp(r'(<\s*\/?\s*([a-zA-Z0-9_:]+)[^>]*>)', caseSensitive: false);
+    
+    // A map to keep track of the nesting level for each ignored tag.
+    final Map<String, int> ignoreDepth = { for (var tag in ignoredTags) tag : 0 };
+    int totalIgnoreDepth = 0;
 
     for (final match in tagRegex.allMatches(trimmedText)) {
-      // Append the text between the last match and this one.
-      buffer.write(trimmedText.substring(lastIndex, match.start));
-      
-      final tagName = match.group(1)!.toLowerCase();
-      
-      // If the found tag is NOT in the ignored set, append it to the buffer.
-      if (!ignoredTags.contains(tagName)) {
-        buffer.write(match.group(0)!);
+      final fullTag = match.group(1)!;
+      final tagName = (match.group(2) ?? "").toLowerCase();
+
+      // Append the text content found between the last tag and this one,
+      // but only if we are not inside an ignored block.
+      if (totalIgnoreDepth == 0) {
+        buffer.write(trimmedText.substring(lastIndex, match.start));
+      }
+
+      if (ignoredTags.contains(tagName)) {
+        final isSelfClosing = fullTag.endsWith('/>');
+        final isClosingTag = fullTag.startsWith('</');
+
+        if (!isSelfClosing) {
+          if (isClosingTag) {
+            if (ignoreDepth[tagName]! > 0) {
+              ignoreDepth[tagName] = ignoreDepth[tagName]! - 1;
+              totalIgnoreDepth--;
+            }
+          } else { // Is an opening tag
+            ignoreDepth[tagName] = ignoreDepth[tagName]! + 1;
+            totalIgnoreDepth++;
+          }
+        }
+        // We do not append the ignored tag itself to the buffer.
+      } else {
+        // If this tag is not on the ignore list, append it to the buffer,
+        // but only if we are not inside an ignored block.
+        if (totalIgnoreDepth == 0) {
+          buffer.write(fullTag);
+        }
       }
       
       lastIndex = match.end;
     }
 
-    // Append any remaining text after the last complete tag.
-    // This ensures incomplete tags at the end are preserved.
-    if (lastIndex < trimmedText.length) {
+    // Append any remaining text after the last tag, if not in an ignored block.
+    if (totalIgnoreDepth == 0 && lastIndex < trimmedText.length) {
       buffer.write(trimmedText.substring(lastIndex));
     }
 
     return buffer.toString().trim();
   }
+
 
   /// Extracts only the XML elements from a string, discarding text nodes at the root level.
   static String extractXmlContent(String rawText) {

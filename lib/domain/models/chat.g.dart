@@ -45,6 +45,8 @@ Chat _$ChatFromJson(Map<String, dynamic> json) => Chat(
               ?.map((e) => Message.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
+      lastSummarizedMessageId:
+          (json['lastSummarizedMessageId'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$ChatToJson(Chat instance) => <String, dynamic>{
@@ -74,6 +76,7 @@ Map<String, dynamic> _$ChatToJson(Chat instance) => <String, dynamic>{
       'helpMeReplyApiConfigId': instance.helpMeReplyApiConfigId,
       'helpMeReplyTriggerMode':
           _$HelpMeReplyTriggerModeEnumMap[instance.helpMeReplyTriggerMode]!,
+      'lastSummarizedMessageId': instance.lastSummarizedMessageId,
       'messages': instance.messages.map((e) => e.toJson()).toList(),
     };
 

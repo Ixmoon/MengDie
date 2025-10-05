@@ -113,6 +113,12 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   late final GeneratedColumn<String> contextSummary = GeneratedColumn<String>(
       'context_summary', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lastSummarizedMessageIdMeta =
+      const VerificationMeta('lastSummarizedMessageId');
+  @override
+  late final GeneratedColumn<int> lastSummarizedMessageId =
+      GeneratedColumn<int>('last_summarized_message_id', aliasedName, true,
+          type: DriftSqlType.int, requiredDuringInsert: false);
   static const VerificationMeta _preprocessingApiConfigIdMeta =
       const VerificationMeta('preprocessingApiConfigId');
   @override
@@ -192,6 +198,7 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         enablePreprocessing,
         preprocessingPrompt,
         contextSummary,
+        lastSummarizedMessageId,
         preprocessingApiConfigId,
         enableSecondaryXml,
         secondaryXmlPrompt,
@@ -287,6 +294,13 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           contextSummary.isAcceptableOrUnknown(
               data['context_summary']!, _contextSummaryMeta));
     }
+    if (data.containsKey('last_summarized_message_id')) {
+      context.handle(
+          _lastSummarizedMessageIdMeta,
+          lastSummarizedMessageId.isAcceptableOrUnknown(
+              data['last_summarized_message_id']!,
+              _lastSummarizedMessageIdMeta));
+    }
     if (data.containsKey('preprocessing_api_config_id')) {
       context.handle(
           _preprocessingApiConfigIdMeta,
@@ -381,6 +395,9 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
           DriftSqlType.string, data['${effectivePrefix}preprocessing_prompt']),
       contextSummary: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}context_summary']),
+      lastSummarizedMessageId: attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}last_summarized_message_id']),
       preprocessingApiConfigId: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}preprocessing_api_config_id']),
@@ -437,6 +454,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
   final bool? enablePreprocessing;
   final String? preprocessingPrompt;
   final String? contextSummary;
+  final int? lastSummarizedMessageId;
   final String? preprocessingApiConfigId;
   final bool? enableSecondaryXml;
   final String? secondaryXmlPrompt;
@@ -463,6 +481,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       this.enablePreprocessing,
       this.preprocessingPrompt,
       this.contextSummary,
+      this.lastSummarizedMessageId,
       this.preprocessingApiConfigId,
       this.enableSecondaryXml,
       this.secondaryXmlPrompt,
@@ -518,6 +537,10 @@ class ChatData extends DataClass implements Insertable<ChatData> {
     }
     if (!nullToAbsent || contextSummary != null) {
       map['context_summary'] = Variable<String>(contextSummary);
+    }
+    if (!nullToAbsent || lastSummarizedMessageId != null) {
+      map['last_summarized_message_id'] =
+          Variable<int>(lastSummarizedMessageId);
     }
     if (!nullToAbsent || preprocessingApiConfigId != null) {
       map['preprocessing_api_config_id'] =
@@ -593,6 +616,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       contextSummary: contextSummary == null && nullToAbsent
           ? const Value.absent()
           : Value(contextSummary),
+      lastSummarizedMessageId: lastSummarizedMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSummarizedMessageId),
       preprocessingApiConfigId: preprocessingApiConfigId == null && nullToAbsent
           ? const Value.absent()
           : Value(preprocessingApiConfigId),
@@ -646,6 +672,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       preprocessingPrompt:
           serializer.fromJson<String?>(json['preprocessingPrompt']),
       contextSummary: serializer.fromJson<String?>(json['contextSummary']),
+      lastSummarizedMessageId:
+          serializer.fromJson<int?>(json['lastSummarizedMessageId']),
       preprocessingApiConfigId:
           serializer.fromJson<String?>(json['preprocessingApiConfigId']),
       enableSecondaryXml:
@@ -684,6 +712,8 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       'enablePreprocessing': serializer.toJson<bool?>(enablePreprocessing),
       'preprocessingPrompt': serializer.toJson<String?>(preprocessingPrompt),
       'contextSummary': serializer.toJson<String?>(contextSummary),
+      'lastSummarizedMessageId':
+          serializer.toJson<int?>(lastSummarizedMessageId),
       'preprocessingApiConfigId':
           serializer.toJson<String?>(preprocessingApiConfigId),
       'enableSecondaryXml': serializer.toJson<bool?>(enableSecondaryXml),
@@ -717,6 +747,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           Value<bool?> enablePreprocessing = const Value.absent(),
           Value<String?> preprocessingPrompt = const Value.absent(),
           Value<String?> contextSummary = const Value.absent(),
+          Value<int?> lastSummarizedMessageId = const Value.absent(),
           Value<String?> preprocessingApiConfigId = const Value.absent(),
           Value<bool?> enableSecondaryXml = const Value.absent(),
           Value<String?> secondaryXmlPrompt = const Value.absent(),
@@ -755,6 +786,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
             : this.preprocessingPrompt,
         contextSummary:
             contextSummary.present ? contextSummary.value : this.contextSummary,
+        lastSummarizedMessageId: lastSummarizedMessageId.present
+            ? lastSummarizedMessageId.value
+            : this.lastSummarizedMessageId,
         preprocessingApiConfigId: preprocessingApiConfigId.present
             ? preprocessingApiConfigId.value
             : this.preprocessingApiConfigId,
@@ -818,6 +852,9 @@ class ChatData extends DataClass implements Insertable<ChatData> {
       contextSummary: data.contextSummary.present
           ? data.contextSummary.value
           : this.contextSummary,
+      lastSummarizedMessageId: data.lastSummarizedMessageId.present
+          ? data.lastSummarizedMessageId.value
+          : this.lastSummarizedMessageId,
       preprocessingApiConfigId: data.preprocessingApiConfigId.present
           ? data.preprocessingApiConfigId.value
           : this.preprocessingApiConfigId,
@@ -867,6 +904,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
+          ..write('lastSummarizedMessageId: $lastSummarizedMessageId, ')
           ..write('preprocessingApiConfigId: $preprocessingApiConfigId, ')
           ..write('enableSecondaryXml: $enableSecondaryXml, ')
           ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
@@ -898,6 +936,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
         enablePreprocessing,
         preprocessingPrompt,
         contextSummary,
+        lastSummarizedMessageId,
         preprocessingApiConfigId,
         enableSecondaryXml,
         secondaryXmlPrompt,
@@ -928,6 +967,7 @@ class ChatData extends DataClass implements Insertable<ChatData> {
           other.enablePreprocessing == this.enablePreprocessing &&
           other.preprocessingPrompt == this.preprocessingPrompt &&
           other.contextSummary == this.contextSummary &&
+          other.lastSummarizedMessageId == this.lastSummarizedMessageId &&
           other.preprocessingApiConfigId == this.preprocessingApiConfigId &&
           other.enableSecondaryXml == this.enableSecondaryXml &&
           other.secondaryXmlPrompt == this.secondaryXmlPrompt &&
@@ -956,6 +996,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
   final Value<bool?> enablePreprocessing;
   final Value<String?> preprocessingPrompt;
   final Value<String?> contextSummary;
+  final Value<int?> lastSummarizedMessageId;
   final Value<String?> preprocessingApiConfigId;
   final Value<bool?> enableSecondaryXml;
   final Value<String?> secondaryXmlPrompt;
@@ -982,6 +1023,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
+    this.lastSummarizedMessageId = const Value.absent(),
     this.preprocessingApiConfigId = const Value.absent(),
     this.enableSecondaryXml = const Value.absent(),
     this.secondaryXmlPrompt = const Value.absent(),
@@ -1009,6 +1051,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.enablePreprocessing = const Value.absent(),
     this.preprocessingPrompt = const Value.absent(),
     this.contextSummary = const Value.absent(),
+    this.lastSummarizedMessageId = const Value.absent(),
     this.preprocessingApiConfigId = const Value.absent(),
     this.enableSecondaryXml = const Value.absent(),
     this.secondaryXmlPrompt = const Value.absent(),
@@ -1038,6 +1081,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     Expression<bool>? enablePreprocessing,
     Expression<String>? preprocessingPrompt,
     Expression<String>? contextSummary,
+    Expression<int>? lastSummarizedMessageId,
     Expression<String>? preprocessingApiConfigId,
     Expression<bool>? enableSecondaryXml,
     Expression<String>? secondaryXmlPrompt,
@@ -1068,6 +1112,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       if (preprocessingPrompt != null)
         'preprocessing_prompt': preprocessingPrompt,
       if (contextSummary != null) 'context_summary': contextSummary,
+      if (lastSummarizedMessageId != null)
+        'last_summarized_message_id': lastSummarizedMessageId,
       if (preprocessingApiConfigId != null)
         'preprocessing_api_config_id': preprocessingApiConfigId,
       if (enableSecondaryXml != null)
@@ -1103,6 +1149,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       Value<bool?>? enablePreprocessing,
       Value<String?>? preprocessingPrompt,
       Value<String?>? contextSummary,
+      Value<int?>? lastSummarizedMessageId,
       Value<String?>? preprocessingApiConfigId,
       Value<bool?>? enableSecondaryXml,
       Value<String?>? secondaryXmlPrompt,
@@ -1129,6 +1176,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
       preprocessingPrompt: preprocessingPrompt ?? this.preprocessingPrompt,
       contextSummary: contextSummary ?? this.contextSummary,
+      lastSummarizedMessageId:
+          lastSummarizedMessageId ?? this.lastSummarizedMessageId,
       preprocessingApiConfigId:
           preprocessingApiConfigId ?? this.preprocessingApiConfigId,
       enableSecondaryXml: enableSecondaryXml ?? this.enableSecondaryXml,
@@ -1199,6 +1248,10 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     if (contextSummary.present) {
       map['context_summary'] = Variable<String>(contextSummary.value);
     }
+    if (lastSummarizedMessageId.present) {
+      map['last_summarized_message_id'] =
+          Variable<int>(lastSummarizedMessageId.value);
+    }
     if (preprocessingApiConfigId.present) {
       map['preprocessing_api_config_id'] =
           Variable<String>(preprocessingApiConfigId.value);
@@ -1253,6 +1306,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
           ..write('enablePreprocessing: $enablePreprocessing, ')
           ..write('preprocessingPrompt: $preprocessingPrompt, ')
           ..write('contextSummary: $contextSummary, ')
+          ..write('lastSummarizedMessageId: $lastSummarizedMessageId, ')
           ..write('preprocessingApiConfigId: $preprocessingApiConfigId, ')
           ..write('enableSecondaryXml: $enableSecondaryXml, ')
           ..write('secondaryXmlPrompt: $secondaryXmlPrompt, ')
@@ -3645,6 +3699,7 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
+  Value<int?> lastSummarizedMessageId,
   Value<String?> preprocessingApiConfigId,
   Value<bool?> enableSecondaryXml,
   Value<String?> secondaryXmlPrompt,
@@ -3672,6 +3727,7 @@ typedef $$ChatsTableUpdateCompanionBuilder = ChatsCompanion Function({
   Value<bool?> enablePreprocessing,
   Value<String?> preprocessingPrompt,
   Value<String?> contextSummary,
+  Value<int?> lastSummarizedMessageId,
   Value<String?> preprocessingApiConfigId,
   Value<bool?> enableSecondaryXml,
   Value<String?> secondaryXmlPrompt,
@@ -3766,6 +3822,10 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
 
   ColumnFilters<String> get contextSummary => $composableBuilder(
       column: $table.contextSummary,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get lastSummarizedMessageId => $composableBuilder(
+      column: $table.lastSummarizedMessageId,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get preprocessingApiConfigId => $composableBuilder(
@@ -3893,6 +3953,10 @@ class $$ChatsTableOrderingComposer
       column: $table.contextSummary,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get lastSummarizedMessageId => $composableBuilder(
+      column: $table.lastSummarizedMessageId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get preprocessingApiConfigId => $composableBuilder(
       column: $table.preprocessingApiConfigId,
       builder: (column) => ColumnOrderings(column));
@@ -3988,6 +4052,9 @@ class $$ChatsTableAnnotationComposer
   GeneratedColumn<String> get contextSummary => $composableBuilder(
       column: $table.contextSummary, builder: (column) => column);
 
+  GeneratedColumn<int> get lastSummarizedMessageId => $composableBuilder(
+      column: $table.lastSummarizedMessageId, builder: (column) => column);
+
   GeneratedColumn<String> get preprocessingApiConfigId => $composableBuilder(
       column: $table.preprocessingApiConfigId, builder: (column) => column);
 
@@ -4077,6 +4144,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
+            Value<int?> lastSummarizedMessageId = const Value.absent(),
             Value<String?> preprocessingApiConfigId = const Value.absent(),
             Value<bool?> enableSecondaryXml = const Value.absent(),
             Value<String?> secondaryXmlPrompt = const Value.absent(),
@@ -4105,6 +4173,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,
+            lastSummarizedMessageId: lastSummarizedMessageId,
             preprocessingApiConfigId: preprocessingApiConfigId,
             enableSecondaryXml: enableSecondaryXml,
             secondaryXmlPrompt: secondaryXmlPrompt,
@@ -4132,6 +4201,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<bool?> enablePreprocessing = const Value.absent(),
             Value<String?> preprocessingPrompt = const Value.absent(),
             Value<String?> contextSummary = const Value.absent(),
+            Value<int?> lastSummarizedMessageId = const Value.absent(),
             Value<String?> preprocessingApiConfigId = const Value.absent(),
             Value<bool?> enableSecondaryXml = const Value.absent(),
             Value<String?> secondaryXmlPrompt = const Value.absent(),
@@ -4160,6 +4230,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             enablePreprocessing: enablePreprocessing,
             preprocessingPrompt: preprocessingPrompt,
             contextSummary: contextSummary,
+            lastSummarizedMessageId: lastSummarizedMessageId,
             preprocessingApiConfigId: preprocessingApiConfigId,
             enableSecondaryXml: enableSecondaryXml,
             secondaryXmlPrompt: secondaryXmlPrompt,

@@ -39,6 +39,48 @@ mixin BackgroundTasks on UiStateManager {
     @override
     void stopUpdateTimer();
 
+    /// Manually triggers summarization on the oldest 30% of the entire chat history.
+    Future<void> manuallySummarizeHistory() async {
+      showTopMessage("正在生成手动总结...", duration: const Duration(seconds: 120));
+      try {
+        final messageRepo = ref.read(messageRepositoryProvider);
+        final allMessages = await messageRepo.getMessagesForChat(chatId);
+
+        if (allMessages.length < 3) {
+          showTopMessage("消息太少，无法总结。", backgroundColor: Colors.orange);
+          return;
+        }
+
+        // Calculate the number of messages to summarize (oldest 30% of *all* messages).
+        final countToSummarize = (allMessages.length * 0.3).ceil();
+        final messagesToSummarize = allMessages.sublist(0, countToSummarize);
+
+        // Get the next 4 messages (2 rounds) as following context.
+        final followingMessages = allMessages.length > countToSummarize
+            ? allMessages.sublist(countToSummarize, (countToSummarize + 4 > allMessages.length) ? allMessages.length : countToSummarize + 4)
+            : <Message>[];
+
+        debugPrint("ChatStateNotifier($chatId): Starting manual summarization for ${messagesToSummarize.length} messages, with ${followingMessages.length} following messages for context.");
+
+        // We pass `null` for existingSummary to generate a completely new one.
+        final finalSummary = await _summarizeMessages(messagesToSummarize, null, followingMessages: followingMessages);
+
+        if (finalSummary.isNotEmpty) {
+          final chatRepo = ref.read(chatRepositoryProvider);
+          final chat = await chatRepo.getChat(chatId);
+          if (chat != null && mounted) {
+            await chatRepo.saveChat(chat.copyWith(contextSummary: finalSummary));
+            showTopMessage("手动总结已保存。", backgroundColor: Colors.green);
+          }
+        } else {
+          throw Exception("总结过程返回了空内容。");
+        }
+      } catch (e) {
+        debugPrint("ChatStateNotifier($chatId): Error during manual summarization: $e");
+        showTopMessage("手动总结出错: $e", backgroundColor: Colors.red);
+      }
+    }
+
     Future<void> runAsyncProcessingTasks(Message modelMessage) async {
         if (!mounted) return;
         final chat = ref.read(currentChatProvider(chatId)).value;
@@ -51,11 +93,14 @@ mixin BackgroundTasks on UiStateManager {
             state = state.copyWith(isProcessingInBackground: true);
         }
 
+        // 2. Fetch the complete, updated message history ONCE to ensure all tasks use the same data source.
+        final allMessages = await ref.read(messageRepositoryProvider).getMessagesForChat(chatId);
+
         List<Future> tasks = [];
 
-        // 2. Gather all tasks that must run *after* the message is saved.
-        tasks.add(executeAutoTitleGeneration(chat, modelMessage));
-        // _executePostGenerationProcessing is now done *before* saving, so it's removed from here.
+        // 3. Gather all tasks that must run *after* the message is saved.
+        tasks.add(executeAutoTitleGeneration(chat, modelMessage, allMessages));
+        tasks.add(executeSecondaryXmlGeneration(chat, modelMessage));
         if (chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false)) {
           tasks.add(executePreprocessing(chat));
         }
@@ -139,171 +184,191 @@ mixin BackgroundTasks on UiStateManager {
       final finalTextForDisplay = processResult.modelsText;
       final extractedXml = processResult.extractedXml;
 
-      // 2. Handle secondary XML generation if enabled.
-      String? newSecondaryXmlContent;
-      if (chat.enableSecondaryXml && (chat.secondaryXmlPrompt?.isNotEmpty ?? false)) {
-        try {
-          if (state.isCancelled) return initialMessage; // Early exit
-          final apiConfig = getEffectiveApiConfig(specificConfigId: chat.secondaryXmlApiConfigId);
-          final generatedText = await executeSpecialAction(
-            prompt: chat.secondaryXmlPrompt!,
-            apiConfig: apiConfig,
-            actionType: SpecialActionType.secondaryXml,
-            targetMessage: initialMessage, // Pass the original message for context
-          );
-          debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content START ==========");
-          debugPrint(generatedText);
-          debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content END ==========");
-          newSecondaryXmlContent = generatedText;
-        } catch (e) {
-          debugPrint("ChatStateNotifier($chatId): Secondary XML generation failed and will not be included.");
-          // Do not rethrow, just log the error and continue.
-        }
-      }
-
-      // 3. Create the final, processed message object.
+      // 2. Create the final, processed message object.
       final newParts = [MessagePart.text(finalTextForDisplay)];
 
+      // Secondary XML is now handled as a post-processing async task.
       return initialMessage.copyWith(
         parts: newParts,
         originalXmlContent: extractedXml,
-        secondaryXmlContent: newSecondaryXmlContent,
       );
     }
 
-    /// Executes the new, robust summarization process for dropped messages.
-    /// Implements a robust, "intelligent merge" incremental summarization algorithm.
+    Future<void> executeSecondaryXmlGeneration(Chat chat, Message targetMessage) async {
+      if (state.isCancelled) return;
+      // Condition check must be inside the async task
+      if (!chat.enableSecondaryXml || (chat.secondaryXmlPrompt?.isEmpty ?? true)) {
+        return;
+      }
+
+      debugPrint("ChatStateNotifier($chatId): Starting secondary XML generation...");
+
+      try {
+        if (state.isCancelled) return;
+        final apiConfig = getEffectiveApiConfig(specificConfigId: chat.secondaryXmlApiConfigId);
+        final generatedText = await executeSpecialAction(
+          prompt: chat.secondaryXmlPrompt!,
+          apiConfig: apiConfig,
+          actionType: SpecialActionType.secondaryXml,
+          targetMessage: targetMessage,
+        );
+        debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content START ==========");
+        debugPrint(generatedText);
+        debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content END ==========");
+
+        if (generatedText.isNotEmpty && mounted && !state.isCancelled) {
+          final messageRepo = ref.read(messageRepositoryProvider);
+          final updatedMessage = targetMessage.copyWith(secondaryXmlContent: generatedText);
+          await messageRepo.saveMessage(updatedMessage);
+          debugPrint("ChatStateNotifier($chatId): Secondary XML generation successful. Message updated.");
+        } else if (mounted && !state.isCancelled) {
+          debugPrint("ChatStateNotifier($chatId): Secondary XML generation resulted in empty content. Skipping update.");
+        }
+      } catch (e) {
+        if (!state.isCancelled) {
+          debugPrint("ChatStateNotifier($chatId): Secondary XML generation failed: $e");
+          // Do not rethrow, as this is a background task and shouldn't block or show a major error.
+        }
+      }
+    }
+
+    /// Executes automatic summarization using a dynamic 70%-100% budget window.
     Future<void> executePreprocessing(Chat chat) async {
       if (state.isCancelled) return;
-      debugPrint("ChatStateNotifier($chatId): Executing intelligent merge summarization...");
+      debugPrint("ChatStateNotifier($chatId): Checking for automatic summarization trigger...");
 
       final contextXmlService = ref.read(contextXmlServiceProvider);
       final chatRepo = ref.read(chatRepositoryProvider);
-      final messageRepo = ref.read(messageRepositoryProvider);
 
-      // 1. Get the complete, current message history.
-      final allMessages = await messageRepo.getMessagesForChat(chatId);
-      if (allMessages.length < 2) {
-        debugPrint("ChatStateNotifier($chatId): Not enough messages for context diff, skipping.");
+      // 1. Build context with a 100% budget. If messages are dropped, it means we've exceeded 100%.
+      final contextResult = await contextXmlService.buildApiRequestContext(
+        chatId: chatId,
+        currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("trigger check")]),
+      );
+
+      // 2. If nothing was dropped, we are within the 100% budget. No action needed.
+      if (contextResult.droppedMessages.isEmpty) {
+        debugPrint("ChatStateNotifier($chatId): Context is within 100% budget. No summarization needed.");
         return;
       }
 
-      // 2. Simulate context "AFTER" the latest turn to find all currently dropped messages.
-      final contextAfter = await contextXmlService.buildApiRequestContext(
-        chatId: chatId,
-        currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("after")]),
-      );
-      final droppedMessagesAfter = contextAfter.droppedMessages;
+      debugPrint("ChatStateNotifier($chatId): Context budget exceeded 100%. Triggering summarization to trim down to 70%.");
 
-      // If nothing is dropped now, there's nothing to do.
-      if (droppedMessagesAfter.isEmpty) {
-        debugPrint("ChatStateNotifier($chatId): No messages are dropped. Clearing summary if it exists.");
-        if (chat.contextSummary != null) {
-          await chatRepo.saveChat(chat.copyWith(contextSummary: null));
-        }
-        return;
+      // 3. Calculate the target message count to keep (70% of the budget).
+      // Note: We use the turn limit from the chat config for this calculation.
+      final targetTurnCount = (chat.contextConfig.maxTurns * 2 * 0.7).floor();
+      final keptMessages = contextResult.keptMessages;
+
+      if (keptMessages.length <= targetTurnCount) {
+        // This case is unlikely if droppedMessages is not empty, but as a safeguard:
+        // If the kept part is already within the 70% target, we only need to summarize the dropped part.
+        debugPrint("ChatStateNotifier($chatId): Kept messages are already within 70% target. Summarizing dropped messages only.");
       }
 
-      // 3. Simulate context "BEFORE" the latest turn.
-      final historyBefore = allMessages.sublist(0, allMessages.length - 2);
-      final contextBefore = await contextXmlService.buildApiRequestContext(
-        chatId: chatId,
-        currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("before")]),
-        historyOverride: historyBefore,
-      );
-      final droppedMessagesBefore = contextBefore.droppedMessages;
-
-      // 4. Determine the messages to summarize based on whether a summary already exists.
-      final List<Message> messagesToSummarize;
-
-      if (chat.contextSummary == null || chat.contextSummary!.isEmpty) {
-        // SCENARIO A: No existing summary. We must summarize ALL currently dropped messages
-        // to build the summary from scratch.
-        messagesToSummarize = droppedMessagesAfter;
-        debugPrint("ChatStateNotifier($chatId): No existing summary. Summarizing all ${messagesToSummarize.length} dropped messages.");
-      } else {
-        // SCENARIO B: Existing summary found. We only need to summarize the "diff" -
-        // the messages that were newly dropped in this turn.
-        final droppedIdsBefore = droppedMessagesBefore.map((m) => m.id).toSet();
-        messagesToSummarize = droppedMessagesAfter
-            .where((msg) => !droppedIdsBefore.contains(msg.id))
-            .toList();
-        debugPrint("ChatStateNotifier($chatId): Existing summary found. Summarizing diff of ${messagesToSummarize.length} messages.");
-      }
+      // 4. Determine the exact set of messages to summarize.
+      // This includes ALL dropped messages PLUS the oldest messages from the kept list until we reach the 70% target.
+      final countToSummarizeFromKept = keptMessages.length - targetTurnCount;
+      final List<Message> messagesToSummarize = [
+        ...contextResult.droppedMessages,
+        if (countToSummarizeFromKept > 0) ...keptMessages.sublist(0, countToSummarizeFromKept),
+      ];
 
       if (messagesToSummarize.isEmpty) {
-        debugPrint("ChatStateNotifier($chatId): Context diff is empty. No new messages to summarize.");
-        return; // Nothing new was dropped, so the existing summary is still valid.
+        debugPrint("ChatStateNotifier($chatId): Calculation resulted in no messages to summarize. Skipping.");
+        return;
       }
+      final lastMessageToSummarize = messagesToSummarize.last;
 
-      debugPrint("ChatStateNotifier($chatId): Found ${messagesToSummarize.length} new messages to summarize.");
+      // 5. The "following messages" for context are the ones that will remain in the history (the newest 70%).
+      final followingMessages = (countToSummarizeFromKept > 0 && keptMessages.length > countToSummarizeFromKept)
+          ? keptMessages.sublist(countToSummarizeFromKept, (countToSummarizeFromKept + 4 > keptMessages.length) ? keptMessages.length : countToSummarizeFromKept + 4)
+          : <Message>[];
+
+      debugPrint("ChatStateNotifier($chatId): Summarizing ${messagesToSummarize.length} messages to trim context. Following context size: ${followingMessages.length}.");
       if (state.isCancelled) return;
 
-      // 5. Chunking & Summarization
-      // The logic now takes the existing summary and merges it with the new "diff".
+      // 6. Generate the new summary chunk, merging with any previous summary.
+      final newSummaryChunk = await _summarizeMessages(
+        messagesToSummarize,
+        chat.contextSummary,
+        followingMessages: followingMessages,
+      );
+
+      // 7. Save the new summary and update the boundary ID.
+      if (newSummaryChunk.isNotEmpty && mounted) {
+        // The new boundary is the ID of the FIRST message that was KEPT.
+        final newBoundaryId = contextResult.keptMessages.firstOrNull?.id;
+        await chatRepo.saveChat(chat.copyWith(
+          contextSummary: newSummaryChunk,
+          lastSummarizedMessageId: newBoundaryId,
+        ));
+        debugPrint("ChatStateNotifier($chatId): Automatic summarization successful. New boundary ID: $newBoundaryId");
+      } else if (mounted) {
+        debugPrint("ChatStateNotifier($chatId): Automatic summarization resulted in an empty summary. Nothing to save.");
+      }
+    }
+
+    /// A reusable helper to summarize a list of messages in parallel chunks.
+    Future<String> _summarizeMessages(List<Message> messages, String? existingSummary, {List<Message>? followingMessages}) async {
+      if (state.isCancelled) return "";
+      final chat = ref.read(currentChatProvider(chatId)).value;
+      if (chat == null) return "";
+
+      final contextXmlService = ref.read(contextXmlServiceProvider);
+
+      // 1. Chunking: Split the messages into non-overlapping chunks based on the chat's context budget.
       final List<List<Message>> chunks = [];
-      List<Message> remainingToChunk = List.from(messagesToSummarize);
+      List<Message> remainingToChunk = List.from(messages);
 
       while (remainingToChunk.isNotEmpty) {
-        if (state.isCancelled) return;
+        if (state.isCancelled) return "";
+        // We reuse the context builder to accurately determine how many messages fit in one chunk.
         final chunkingContext = await contextXmlService.buildApiRequestContext(
             chatId: chatId,
             currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("chunking")]),
             historyOverride: remainingToChunk,
             chatSystemPromptOverride: chat.preprocessingPrompt);
         
-        final List<Message> droppedInThisChunk = chunkingContext.droppedMessages;
-        final Set<int> droppedIds = droppedInThisChunk.map((m) => m.id).toSet();
-        final List<Message> currentChunk = remainingToChunk.where((m) => !droppedIds.contains(m.id)).toList();
+        // The messages that were *kept* by the context builder form our current chunk.
+        final List<Message> currentChunk = chunkingContext.keptMessages;
+        // The messages that were *dropped* are what we'll process in the next iteration.
+        final List<Message> nextRemaining = chunkingContext.droppedMessages;
 
         if (currentChunk.isEmpty) {
-          debugPrint("Warning: Chunking produced an empty chunk. Discarding remaining ${remainingToChunk.length} messages.");
+          debugPrint("Warning: Chunking produced an empty chunk. Discarding remaining ${nextRemaining.length} messages.");
           break;
         }
         chunks.add(currentChunk);
-        remainingToChunk = droppedInThisChunk;
+        remainingToChunk = nextRemaining;
       }
 
       if (chunks.isEmpty) {
-        debugPrint("ChatStateNotifier($chatId): Chunking of diff resulted in no chunks to process.");
-        return;
+        debugPrint("ChatStateNotifier($chatId): Chunking resulted in no chunks to process.");
+        return existingSummary ?? "";
       }
 
-      // 6. Parallel Intelligent Merge Execution
-      // **CRITICAL FIX**: Reverse the chunks so they are processed from OLDEST to NEWEST.
-      // This ensures the existing summary is merged with the oldest part of the new diff.
-      final reversedChunks = chunks.reversed.toList();
-      final existingSummary = chat.contextSummary;
+      // 2. Parallel Summarization
       final List<Future<String>> summaryFutures = [];
-
-      for (int i = 0; i < reversedChunks.length; i++) {
-        final chunk = reversedChunks[i];
-        // The very first chunk (which is now the OLDEST part of the history)
-        // gets the existing summary to perform the intelligent merge.
-        final summaryForThisChunk = (i == 0) ? existingSummary : null;
-        summaryFutures.add(summarizeChunkWithRetry(chat, chunk, summaryForThisChunk));
+      for (final chunk in chunks) {
+        // Each chunk is summarized independently. "previousSummary" is null because they run in parallel.
+        // The same "followingMessages" are passed to each to provide consistent context.
+        summaryFutures.add(_summarizeChunkWithRetry(chat, chunk, null, followingMessages: followingMessages));
       }
 
       final summaryResults = await Future.wait(summaryFutures);
-      if (state.isCancelled) return;
+      if (state.isCancelled) return "";
 
-      // 7. Aggregation & Full Replacement
-      // The result from the first future is the new, fully-merged summary.
-      // Subsequent results are summaries of any further chunks, which we join.
-      final finalSummary = summaryResults.where((s) => s.isNotEmpty).join('\n\n---\n\n');
-
-      if (finalSummary.isNotEmpty) {
-        // We are performing a full replacement of the old summary with the new one.
-        await chatRepo.saveChat(chat.copyWith(contextSummary: finalSummary));
-        debugPrint("ChatStateNotifier($chatId): Intelligent merge summarization successful. New summary saved.");
-      } else {
-        debugPrint("ChatStateNotifier($chatId): Summarization resulted in an empty summary. Nothing to save.");
-        throw Exception("Summarization failed: All chunks resulted in empty content.");
-      }
+      // 3. Aggregation: Join the results from all chunks, plus any existing summary.
+      final newSummaries = summaryResults.where((s) => s.isNotEmpty).join('\n\n---\n\n');
+      final finalSummary = (existingSummary != null && existingSummary.isNotEmpty)
+          ? '$existingSummary\n\n---\n\n$newSummaries'
+          : newSummaries;
+          
+      return finalSummary;
     }
 
     /// A robust helper to summarize a single chunk of messages with a retry mechanism.
-    Future<String> summarizeChunkWithRetry(Chat chat, List<Message> chunk, String? previousSummary) async {
+    Future<String> _summarizeChunkWithRetry(Chat chat, List<Message> chunk, String? previousSummary, {List<Message>? followingMessages}) async {
       const maxRetries = 3;
       final llmService = ref.read(llmServiceProvider);
       final summaryPrompt = chat.preprocessingPrompt!;
@@ -317,6 +382,11 @@ mixin BackgroundTasks on UiStateManager {
             LlmContent("system", [LlmTextPart(summaryPrompt)])
           ];
 
+          // Add the original system prompt (demoted to user role) to give context to the summarizer.
+          if (chat.systemPrompt != null && chat.systemPrompt!.trim().isNotEmpty) {
+            summaryContext.add(LlmContent("user", [LlmTextPart(chat.systemPrompt!)]));
+          }
+
           // If a previous summary is provided (only for the first chunk), add it.
           if (previousSummary != null && previousSummary.isNotEmpty) {
             final previousSummaryText = XmlProcessor.wrapWithTag('previous_summary', previousSummary);
@@ -328,8 +398,18 @@ mixin BackgroundTasks on UiStateManager {
             summaryContext.add(LlmContent.fromMessage(message));
           }
 
-          // Add the guiding prompt at the end.
-          summaryContext.add(LlmContent("user", [LlmTextPart(summaryPrompt)]));
+          // Add the guiding prompt at the end, optionally with the following conversation for context.
+          String finalPromptText = summaryPrompt;
+          if (followingMessages != null && followingMessages.isNotEmpty) {
+            final followingConversation = followingMessages.map((m) {
+              final role = m.role == MessageRole.user ? 'User' : 'Assistant';
+              // Safely join parts, handling potential nulls
+              final text = m.parts.map((p) => p.text ?? '').where((t) => t.isNotEmpty).join(' ');
+              return '$role: $text';
+            }).join('\n\n');
+            finalPromptText += '\n\n--- 以下是后续的实际对话，请确保总结与后续实际对话连贯，后续的实际对话切勿纳入总结中 ---\n$followingConversation';
+          }
+          summaryContext.add(LlmContent("user", [LlmTextPart(finalPromptText)]));
 
           // 重构：直接获取配置对象
           final apiConfig = getEffectiveApiConfig(specificConfigId: chat.preprocessingApiConfigId);
@@ -360,7 +440,7 @@ mixin BackgroundTasks on UiStateManager {
       return ""; // Should be unreachable, but ensures a return value
     }
 
-    Future<void> executeAutoTitleGeneration(Chat chat, Message currentModelMessage) async {
+    Future<void> executeAutoTitleGeneration(Chat chat, Message currentModelMessage, List<Message> allMessages) async {
       if (state.isCancelled) return;
       await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted || state.isCancelled) return;
@@ -371,7 +451,7 @@ mixin BackgroundTasks on UiStateManager {
         return;
       }
 
-      final allMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
+      // Use the passed-in message list, ensuring a unified data source.
       final modelMessagesCount = allMessages.where((m) => m.role == MessageRole.model).length;
 
       if (modelMessagesCount != 1) {

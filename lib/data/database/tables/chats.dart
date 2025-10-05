@@ -30,6 +30,7 @@ class Chats extends Table {
   BoolColumn get enablePreprocessing => boolean().nullable()();
   TextColumn get preprocessingPrompt => text().nullable()();
   TextColumn get contextSummary => text().nullable()(); // Stores the last summary from pre-processing
+  IntColumn get lastSummarizedMessageId => integer().nullable()(); // ID of the last message included in the summary
   TextColumn get preprocessingApiConfigId => text().nullable()();
 
   BoolColumn get enableSecondaryXml => boolean().nullable()();

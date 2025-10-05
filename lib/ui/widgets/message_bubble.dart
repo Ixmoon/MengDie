@@ -23,7 +23,6 @@ class MessageBubble extends StatelessWidget {
   final bool highlightQuotes; // 新增：是否高亮引号内容
   final int? totalTokens; // Add totalTokens to display the token count
   final String? carriedOverXml; // The synthesized XML context for the latest user message
-
   const MessageBubble({
     super.key,
     required this.message,
@@ -444,10 +443,16 @@ class MessageBubble extends StatelessWidget {
     final textContent = message.modelsText.isEmpty && isStreaming && !isUser ? "..." : message.modelsText;
     final widgets = _renderTextContent(context, textContent, xmlRules, textColor, isStreaming);
     if (widgets.isEmpty) return const SizedBox.shrink();
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: widgets,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        ),
+        ...widgets,
+      ],
     );
   }
 
@@ -526,9 +531,9 @@ class MessageBubble extends StatelessWidget {
               );
             }),
             if (originalXml != null && originalXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '原生XML内容', originalXml, textColor, isStreaming),
+              _buildXmlExpansionTile(context, '原生XML内容', originalXml, textColor, isStreaming, MessagePartType.text),
             if (secondaryXml != null && secondaryXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '再生XML内容', secondaryXml, textColor, isStreaming),
+              _buildXmlExpansionTile(context, '再生XML内容', secondaryXml, textColor, isStreaming, MessagePartType.text),
             if (totalTokens != null && totalTokens! > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
@@ -545,15 +550,20 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildXmlExpansionTile(BuildContext context, String title, String xmlContent, Color textColor, bool isStreaming) {
+  Widget _buildXmlExpansionTile(BuildContext context, String title, String xmlContent, Color textColor, bool isStreaming, MessagePartType partType) {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         initiallyExpanded: isStreaming,
         tilePadding: EdgeInsets.zero,
-        title: Text(
-          title,
-          style: TextStyle(fontWeight: FontWeight.bold, color: textColor.withOpacity(0.7), fontSize: 12),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: TextStyle(fontWeight: FontWeight.bold, color: textColor.withOpacity(0.7), fontSize: 12),
+            ),
+          ],
         ),
         children: [
           Align(
@@ -663,7 +673,7 @@ class MessageBubble extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Padding(
               padding: const EdgeInsets.all(10.0),
-              child: _buildXmlExpansionTile(context, '合成XML', carriedOverXml!, textColor, isStreaming),
+              child: _buildXmlExpansionTile(context, '合成XML', carriedOverXml!, textColor, isStreaming, MessagePartType.text),
             ),
           ),
         ),
@@ -682,3 +692,4 @@ class MessageBubble extends StatelessWidget {
     return messageCard;
   }
 }
+

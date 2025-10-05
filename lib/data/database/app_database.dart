@@ -36,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
   // the transaction() method directly to ensure a proper transaction context.
 
   @override
-  int get schemaVersion => 4; // Bumped version to 4 for messages.updatedAt
+  int get schemaVersion => 5; // Bumped version to 5 for chats.lastSummarizedMessageId
 
   @override
   MigrationStrategy get migration {
@@ -62,6 +62,10 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(messages, messages.updatedAt);
           // Then, backfill existing rows with the value from the timestamp column.
           await customStatement('UPDATE messages SET updated_at = timestamp WHERE updated_at IS NULL');
+        }
+        if (from < 5) {
+          // Add the lastSummarizedMessageId column to the chats table.
+          await m.addColumn(chats, chats.lastSummarizedMessageId);
         }
       },
     );

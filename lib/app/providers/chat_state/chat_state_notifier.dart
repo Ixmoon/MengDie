@@ -139,10 +139,34 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
         throw Exception("原始聊天不存在。");
       }
 
+      // 默认情况下，克隆或另存为模板时总是清除总结。
+      bool shouldClearSummary = true;
+
+      // 仅在分叉操作 (upToMessageId > 0) 且存在总结时，才进行检查。
+      if ((upToMessageId ?? 0) > 0 && originalChat.contextSummary != null) {
+        final contextXmlService = ref.read(contextXmlServiceProvider);
+        final tempContext = await contextXmlService.buildApiRequestContext(
+          chatId: chatId,
+          // 使用一个虚拟的当前消息来获取历史状态
+          currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
+        );
+        
+        // 检查分叉点是否在被丢弃（即已总结）的消息中。
+        final isForkingFromSummarized = tempContext.droppedMessages.any((m) => m.id == upToMessageId);
+        
+        // 如果分叉点不在已总结的部分，则不应清除总结，让新对话继承它。
+        if (!isForkingFromSummarized) {
+          shouldClearSummary = false;
+        }
+        debugPrint("ChatStateNotifier($chatId): 分叉检查 - 分叉点 $upToMessageId 是否在总结区? $isForkingFromSummarized. 是否清除总结? $shouldClearSummary.");
+      }
+
+
       final newChatId = await chatRepo.duplicateChat(
         chatId,
         upToMessageId: upToMessageId,
         asTemplate: asTemplate,
+        shouldClearSummary: shouldClearSummary, // 传递新参数
       );
 
       // 另存为模板时，不进行页面跳转，仅显示提示。

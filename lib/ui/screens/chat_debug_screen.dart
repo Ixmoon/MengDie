@@ -274,6 +274,14 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                               ),
                             ),
                           IconButton(
+                            icon: const Icon(Icons.compress),
+                            tooltip: '手动总结',
+                            onPressed: () {
+                              // Call the new manual summarization method
+                              ref.read(chatStateNotifierProvider(chatId).notifier).manuallySummarizeHistory();
+                            },
+                          ),
+                          IconButton(
                             icon: const Icon(Icons.open_in_full),
                             tooltip: '全屏编辑',
                             onPressed: () async {
@@ -352,13 +360,9 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
   }
 
   Widget _buildContextDisplayWidget() {
-    // _isLoading is handled by the main body builder now.
-    // This widget specifically focuses on displaying the context or error related to it.
     if (_errorLoadingContext.isNotEmpty && _displayedApiContextParts == null) {
-       // This might be redundant if the main body already shows the error.
-       // However, keeping it provides specific feedback if context parts are null due to an error during their fetch/build.
       return SelectableText( 
-        "加载API上下文预览时出错: $_errorLoadingContext", // More specific error for this section
+        "加载API上下文预览时出错: $_errorLoadingContext",
         style: const TextStyle(color: Colors.red, fontFamily: 'monospace', fontSize: 12),
       );
     } else if (_displayedApiContextParts == null || _displayedApiContextParts!.isEmpty) {
@@ -367,17 +371,14 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         style: TextStyle(fontFamily: 'monospace', fontSize: 12),
       );
     } else {
-      // 优化：在映射之前一次性获取消息列表
-      final chatId = ref.read(activeChatIdProvider);
-      if (chatId == null) return const SizedBox.shrink();
-      final messages = ref.read(chatMessagesProvider(chatId)).value;
-      final bool messagesAvailable = messages != null && messages.isNotEmpty;
-
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: _displayedApiContextParts!.asMap().entries.map((entry) {
-          final int contentIndex = entry.key;
-          final LlmContent content = entry.value;
+        children: _displayedApiContextParts!.map((content) {
+          // 将每个 LlmContent 块中的所有文本部分连接起来
+          final fullText = content.parts
+              .whereType<LlmTextPart>()
+              .map((p) => p.text)
+              .join('\n');
 
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -389,49 +390,10 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
                 ),
                 const SizedBox(height: 4),
-                if (content.parts.isNotEmpty)
-                  ...content.parts.map((part) {
-                    if (part is LlmTextPart) {
-                      // 优化：使用预先计算的索引和消息列表
-                      final message = (messagesAvailable && contentIndex < messages.length)
-                          ? messages[contentIndex]
-                          : null;
-                      final originalXml = message?.originalXmlContent;
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SelectableText(
-                            part.text.trim().isEmpty ? "(空文本部分)" : part.text,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                          ),
-                          if (originalXml != null && originalXml.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                '--- 原始XML (被后处理覆盖) ---',
-                                style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.orange.shade800, fontStyle: FontStyle.italic),
-                              ),
-                            ),
-                          if (originalXml != null && originalXml.isNotEmpty)
-                            SelectableText(
-                              originalXml,
-                              style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.orange.shade900),
-                            ),
-                        ],
-                      );
-                    } else {
-                      return SelectableText(
-                        "[未知的 LlmPart 类型: ${part.runtimeType}]",
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic),
-                      );
-                    }
-                  })
-                else
-                  const SelectableText(
-                    "(空内容部分)",
-                    style: TextStyle(fontFamily: 'monospace', fontSize: 12, fontStyle: FontStyle.italic),
-                  ),
+                SelectableText(
+                  fullText.trim().isEmpty ? "(空内容部分)" : fullText,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
               ],
             ),
           );

@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS chats (
     enable_preprocessing BOOLEAN,
     preprocessing_prompt TEXT,
     context_summary TEXT,
+    last_summarized_message_id INTEGER,
     preprocessing_api_config_id TEXT,
     enable_secondary_xml BOOLEAN,
     secondary_xml_prompt TEXT,

@@ -15,8 +15,9 @@ import '../../domain/models/models.dart';
 class LlmContent {
   final String role; // 例如, "user", "model", "system"
   final List<LlmPart> parts;
+  final int? messageId; // 新增：用于追踪此内容块的来源消息ID
 
-  const LlmContent(this.role, this.parts);
+  const LlmContent(this.role, this.parts, {this.messageId});
 
   /// 从本地的 Message 对象创建一个 LlmContent 实例。
   factory LlmContent.fromMessage(Message message) {
@@ -44,7 +45,7 @@ class LlmContent {
     // 将本地的 MessageRole 转换为 API 期望的字符串角色 ("user" 或 "model")
     final roleString = message.role == MessageRole.user ? 'user' : 'model';
     
-    return LlmContent(roleString, parts);
+    return LlmContent(roleString, parts, messageId: message.id);
   }
 }
 
