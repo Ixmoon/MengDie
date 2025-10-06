@@ -112,7 +112,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                 totalTokens: isLastMessage && part == message.parts.last && !isThisMessageStreaming
                     ? chatState.totalTokens
                     : null,
-                // 将合成的XML和标��传递给最新的用户消息
+                // 将合成的XML和标记传递给最新的用户消息
                 carriedOverXml: isLatestUserMessage ? widget.carriedOverXml : null,
               );
             }).toList();

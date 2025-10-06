@@ -6,7 +6,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/api_key_provider.dart';
 import '../../app/providers/chat_settings_provider.dart';
 import '../../app/providers/chat_state_providers.dart';
-import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
+import '../widgets/widget_utils.dart'; // 导入新的公用函数
 import '../../app/providers/chat_state/chat_data_providers.dart';
 
 // --- 默认提示词常量 ---
@@ -480,19 +480,15 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
               icon: const Icon(Icons.fullscreen),
               tooltip: '全屏编辑',
               onPressed: () async {
-                final newText = await Navigator.of(context).push<String>(
-                  MaterialPageRoute(
-                    builder: (context) => FullScreenTextEditorScreen(
-                      initialText: _systemPromptController.text,
-                      title: '编辑系统提示词',
-                    ),
-                  ),
+                final newText = await showFullScreenTextEditor(
+                  context,
+                  initialText: _systemPromptController.text,
+                  title: '编辑系统提示词',
                 );
                 if (newText != null) {
-                  // 直接更新 controller 和 provider 状态
                   _systemPromptController.text = newText;
                   notifier.updateSettings((c) => c.copyWith(
-                    systemPrompt: newText.isEmpty ? null : newText
+                    systemPrompt: newText.isEmpty ? null : newText,
                   ));
                 }
               },
@@ -517,19 +513,16 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
               icon: const Icon(Icons.fullscreen),
               tooltip: '全屏编辑',
               onPressed: () async {
-                final newText = await Navigator.of(context).push<String>(
-                  MaterialPageRoute(
-                    builder: (context) => FullScreenTextEditorScreen(
-                      initialText: _continuePromptController.text,
-                      title: '编辑续写提示词',
-                      defaultValue: defaultContinuePrompt,
-                    ),
-                  ),
+                final newText = await showFullScreenTextEditor(
+                  context,
+                  initialText: _continuePromptController.text,
+                  title: '编辑续写提示词',
+                  defaultValue: defaultContinuePrompt,
                 );
                 if (newText != null) {
                   _continuePromptController.text = newText;
                   notifier.updateSettings((c) => c.copyWith(
-                    continuePrompt: newText.isEmpty ? null : newText
+                    continuePrompt: newText.isEmpty ? null : newText,
                   ));
                 }
               },
@@ -777,19 +770,16 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   icon: const Icon(Icons.fullscreen),
                   tooltip: '全屏编辑',
                   onPressed: () async {
-                    final newText = await Navigator.of(context).push<String>(
-                      MaterialPageRoute(
-                        builder: (context) => FullScreenTextEditorScreen(
-                          initialText: _preprocessingPromptController.text,
-                          title: '编辑前处理提示词',
-                          defaultValue: defaultPreprocessingPrompt,
-                        ),
-                      ),
+                    final newText = await showFullScreenTextEditor(
+                      context,
+                      initialText: _preprocessingPromptController.text,
+                      title: '编辑前处理提示词',
+                      defaultValue: defaultPreprocessingPrompt,
                     );
                     if (newText != null) {
                       _preprocessingPromptController.text = newText;
                       notifier.updateSettings((c) => c.copyWith(
-                        preprocessingPrompt: newText.isEmpty ? null : newText
+                        preprocessingPrompt: newText.isEmpty ? null : newText,
                       ));
                     }
                   },
@@ -846,19 +836,16 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                   icon: const Icon(Icons.fullscreen),
                   tooltip: '全屏编辑',
                   onPressed: () async {
-                    final newText = await Navigator.of(context).push<String>(
-                      MaterialPageRoute(
-                        builder: (context) => FullScreenTextEditorScreen(
-                          initialText: _secondaryXmlPromptController.text,
-                          title: '编辑原生XML提示词',
-                          defaultValue: defaultSecondaryXmlPrompt,
-                        ),
-                      ),
+                    final newText = await showFullScreenTextEditor(
+                      context,
+                      initialText: _secondaryXmlPromptController.text,
+                      title: '编辑原生XML提示词',
+                      defaultValue: defaultSecondaryXmlPrompt,
                     );
                     if (newText != null) {
                       _secondaryXmlPromptController.text = newText;
                       notifier.updateSettings((c) => c.copyWith(
-                        secondaryXmlPrompt: newText.isEmpty ? null : newText
+                        secondaryXmlPrompt: newText.isEmpty ? null : newText,
                       ));
                     }
                   },
@@ -960,16 +947,13 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.fullscreen),
-                      tooltip: '全屏编辑',
+                      tooltip: '全��编辑',
                       onPressed: () async {
-                        final newText = await Navigator.of(context).push<String>(
-                          MaterialPageRoute(
-                            builder: (context) => FullScreenTextEditorScreen(
-                              initialText: _promptController.text,
-                              title: '编辑“帮我回复”提示词',
-                              defaultValue: defaultHelpMeReplyPrompt,
-                            ),
-                          ),
+                        final newText = await showFullScreenTextEditor(
+                          context,
+                          initialText: _promptController.text,
+                          title: '编辑“帮我回复”提示词',
+                          defaultValue: defaultHelpMeReplyPrompt,
                         );
                         if (newText != null) {
                           _promptController.text = newText;

@@ -13,7 +13,7 @@ import '../../app/providers/repository_providers.dart';
 import '../../app/tools/xml_processor.dart';
 
 class ChatPageLogic {
-  final WidgetRef ref;
+  final Ref ref;
   final int chatId;
   final BuildContext context;
   final VoidCallback onStateChange;

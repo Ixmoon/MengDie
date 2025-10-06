@@ -306,13 +306,28 @@ class XmlProcessor {
     return _serializeCarriedOver(map);
   }
 
-  // Serializes the state map back into a single XML string for storage.
+  // Serializes the state map back into a single, formatted XML string for storage.
   static String? _serializeCarriedOver(Map<String, String> map) {
     if (map.isEmpty) return null;
     // The values in the map are already complete XML strings.
-    // We just need to join them together.
-    final result = map.values.join('\n');
-    return result.isEmpty ? null : result;
+    // We join them without separators to parse as a single document for pretty printing.
+    final combinedXml = map.values.join('');
+    if (combinedXml.trim().isEmpty) return null;
+
+    try {
+      // Wrap in a root to ensure it's a valid document for parsing.
+      final document = XmlDocument.parse('<root>$combinedXml</root>');
+      // Pretty print each child of the root to format it with indentation.
+      final result = document.rootElement.children
+          .map((node) => node.toXmlString(pretty: true, indent: '  '))
+          .join('\n'); // Join each pretty-printed element with a newline.
+      return result.isEmpty ? null : result;
+    } catch (e) {
+      debugPrint("Error during XML serialization for pretty printing: $e. Falling back to simple join.");
+      // Fallback to original behavior if parsing fails.
+      final result = map.values.join('\n');
+      return result.isEmpty ? null : result;
+    }
   }
 
   /// Strips XML tags and their content from a string using a fast, single-pass,

@@ -277,17 +277,30 @@ Future<ApiRequestContext> buildApiRequestContext({
   final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
   final apiConfig = notifier.getEffectiveApiConfig();
 
-  // NEW: Respect lastSummarizedMessageId. If it exists, only fetch messages after it.
-  // This is the core change for the rolling summary mechanism.
-  final List<Message> fullHistory = historyOverride ??
-      await messageRepo.getMessagesForChat(
-        chat.id,
-        afterMessageId: chat.lastSummarizedMessageId,
-      );
+  // 1. 始终获取完整历史记录以确保XML计算的准确性。
+  final List<Message> fullHistory = historyOverride ?? await messageRepo.getMessagesForChat(chat.id);
 
-  final carriedOverResult = _calculateCurrentCarriedOverXml(chat, fullHistory);
-  final String? calculatedCarriedOverXml = carriedOverResult.xmlString;
-  final int contributingMessageCount = carriedOverResult.contributingMessageCount;
+  // 2. 基于完整历史计算合成XML (此结果用于函数返回值和最终状态)。
+  final totalCarriedOverResult = _calculateCurrentCarriedOverXml(chat, fullHistory);
+  final String? calculatedCarriedOverXml = totalCarriedOverResult.xmlString;
+  
+  // --- 新逻辑：计算用于注入到提示词中的、经过特殊处理的XML ---
+  String? mergedXmlForInjection;
+  // 寻找*完整*历史记录中的最后一条模型消息，以决定要排除什么。
+  final lastModelMessageInFullHistory = fullHistory.lastWhereOrNull((m) => m.role == MessageRole.model);
+
+  // 条件：有2条或更多消息贡献了XML状态。
+  if (totalCarriedOverResult.contributingMessageCount >= 2) {
+    // 创建一个不包含最后一条模型消息的历史记录列表（如果存在）。
+    final historyForMergeCalculation = lastModelMessageInFullHistory != null
+        ? fullHistory.where((m) => m.id != lastModelMessageInFullHistory.id).toList()
+        : fullHistory;
+    
+    // 使用缩减后的历史记录重新计算合并的XML。
+    // 这个结果仅用于注入到提示词中。
+    final partialCarriedOverResult = _calculateCurrentCarriedOverXml(chat, historyForMergeCalculation);
+    mergedXmlForInjection = partialCarriedOverResult.xmlString;
+  }
 
   // --- 1. Prepare all "fixed" (non-history) context parts ---
   final List<LlmContent> fixedContextParts = [];
@@ -329,10 +342,30 @@ Future<ApiRequestContext> buildApiRequestContext({
   historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 256000) - fixedTokens;
   historyTurnBudget = chat.contextConfig.maxTurns - fixedTurns;
 
-  // --- 3. Limit history using the calculated budget ---
+  // 3. 在内存中应用总结锚点，为上下文窗口准备历史记录。
+  // 这确保了XML计算不受影响，但上下文窗口从正确的点开始。
+  List<Message> historyForWindowing;
+  if (chat.lastSummarizedMessageId != null && chat.lastSummarizedMessageId! > 0) {
+    final summaryBoundaryMessage = await messageRepo.getMessageById(chat.lastSummarizedMessageId!);
+    if (summaryBoundaryMessage != null) {
+      historyForWindowing = fullHistory
+          .where((m) => m.timestamp.isAfter(summaryBoundaryMessage.timestamp))
+          .toList();
+      debugPrint("ContextXmlService: Found summary boundary at ${summaryBoundaryMessage.timestamp}. Filtering history for windowing, ${historyForWindowing.length} messages remaining.");
+    } else {
+      // Fallback: If the boundary message was deleted or is otherwise inaccessible, use the full history to avoid breaking the chat.
+      historyForWindowing = fullHistory;
+      debugPrint("ContextXmlService: Could not find summary boundary message with ID ${chat.lastSummarizedMessageId}. Using full history for windowing.");
+    }
+  } else {
+    // No boundary set, use the full history.
+    historyForWindowing = fullHistory;
+  }
+
+  // --- 4. Limit history using the calculated budget ---
   final historyResult = await _limitHistoryForPrompt(
     chatId: chatId,
-    fullHistory: fullHistory,
+    fullHistory: historyForWindowing, // 使用经过锚点过滤后的历史
     historyTokenBudget: historyTokenBudget,
     historyTurnBudget: historyTurnBudget,
   );
@@ -352,8 +385,10 @@ Future<ApiRequestContext> buildApiRequestContext({
     }
   }
   
-  // Find the last user and model messages within the limited history
-  final lastUserMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull((m) => m.role == MessageRole.user);
+  // 在*有限*历史记录中找到最后两个用户消息，以便注入XML。
+  final userMessagesInHistory = limitedHistoryForPrompt.where((m) => m.role == MessageRole.user).toList();
+  final lastUserMessageInHistory = userMessagesInHistory.lastOrNull;
+  final previousUserMessageInHistory = userMessagesInHistory.length > 1 ? userMessagesInHistory[userMessagesInHistory.length - 2] : null;
   final lastModelMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull((m) => m.role == MessageRole.model);
 
   for (final message in limitedHistoryForPrompt) {
@@ -397,22 +432,27 @@ Future<ApiRequestContext> buildApiRequestContext({
       }
 
     } else if (message.role == MessageRole.user) {
-      // ONLY for the last user message, apply special composition.
-      if (message.id == lastUserMessageInHistory?.id) {
+      // --- 用户消息处理逻辑重构 ---
+      final isLastUserMessage = message.id == lastUserMessageInHistory?.id;
+      final isPreviousUserMessage = message.id == previousUserMessageInHistory?.id;
+
+      // 1. 对于倒数第二条用户消息：附加合并后的XML（如果存在）
+      if (isPreviousUserMessage && mergedXmlForInjection != null && mergedXmlForInjection.isNotEmpty) {
+        final userParts = LlmContent.fromMessage(message).parts.toList();
+        userParts.add(LlmTextPart('\n$mergedXmlForInjection'));
+        finalContextParts.add(LlmContent("user", userParts, messageId: message.id));
+      
+      // 2. 对于最后一条用户消息：应用覆盖并附加其自身的原始XML
+      } else if (isLastUserMessage) {
         final List<LlmPart> combinedUserParts = [];
-
-        // 1. Add carried-over XML
-        if (xmlExists && contributingMessageCount >= 2) {
-          combinedUserParts.add(LlmTextPart(calculatedCarriedOverXml!));
-        }
-
-        // 2. Add current user message text (or override)
+        
+        // 添加当前用户消息文本（或覆盖文本）
         final userText = lastMessageOverride ?? message.rawText;
         if (userText.isNotEmpty) {
           combinedUserParts.add(LlmTextPart(userText));
         }
         
-        // 3. Add current user message's original XML
+        // 添加当前用户消息自身的原始XML
         final originalUserXml = chat.enableSecondaryXml ? message.secondaryXmlContent : message.originalXmlContent;
         if (originalUserXml != null && originalUserXml.isNotEmpty) {
           combinedUserParts.add(LlmTextPart(originalUserXml));
@@ -421,8 +461,9 @@ Future<ApiRequestContext> buildApiRequestContext({
         if (combinedUserParts.isNotEmpty) {
           finalContextParts.add(LlmContent("user", combinedUserParts, messageId: message.id));
         }
+      
+      // 3. 对于所有其他历史用户消息：正常添加
       } else {
-        // For all other historical user messages, add them normally without their original XML.
         finalContextParts.add(LlmContent.fromMessage(message));
       }
     }

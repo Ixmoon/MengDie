@@ -8,13 +8,11 @@ import '../../app/providers/chat_state_providers.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../app/tools/context_xml_service.dart';
 import '../widgets/app_card.dart';
-import '../widgets/fullscreen_text_editor.dart';
+import '../widgets/widget_utils.dart'; // 导入新的公用函数
 // import '../widgets/editable_debug_section.dart'; // No longer needed
 import '../../app/providers/chat_state/chat_data_providers.dart';
 import '../../app/providers/repository_providers.dart';
-
-
-
+import '../../app/repositories/message_repository.dart';
 // 此文件包含用于调试聊天上下文和合成 XML 的屏幕界面。
 // XML 和上下文构建的核心逻辑已移至 ContextXmlService。
 
@@ -87,6 +85,11 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       }
       return;
     }
+
+    // 同时更新状态和加载预览
+    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+    await notifier.updateContextDebugInfo();
+
     final chat = ref.read(currentChatProvider(chatId)).value;
     if (chat == null) {
       if (mounted) {
@@ -102,16 +105,15 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
     try {
       final contextXmlService = ref.read(contextXmlServiceProvider);
-      // Call the unified buildApiRequestContext
-      // Create a placeholder message for debugging purposes
-      final placeholderMessage = Message(
-        chatId: chat.id,
-        role: MessageRole.user,
-        parts: [MessagePart.text("[调试占位符]")],
-      );
+      final messageRepo = ref.read(messageRepositoryProvider);
+      final allMessages = await messageRepo.getMessagesForChat(chatId);
+      final messageForContextCheck = allMessages.isNotEmpty
+          ? allMessages.last
+          : Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("")]);
+
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chatId: chat.id,
-        currentUserMessage: placeholderMessage,
+        currentUserMessage: messageForContextCheck,
       );
 
       if (mounted) {
@@ -213,9 +215,76 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         }
 
 
+        final screenState = ref.watch(chatStateNotifierProvider(chatId));
+        final mode = screenState.contextManagementMode;
+
+        final String title;
+        final String currentLabel;
+        final double progress;
+
+        if (mode == ContextManagementMode.tokens) {
+          title = '上下文状态 (Token)';
+          final keptTokens = screenState.keptTokenCount ?? 0;
+          final limitTokens = screenState.contextTokenLimit ?? 1;
+          currentLabel = '窗口: $keptTokens / $limitTokens (Tokens)';
+          progress = keptTokens / limitTokens;
+        } else { // Default to turns
+          title = '上下文状态 (轮次)';
+          final keptTurns = screenState.keptMessageCount ?? 0;
+          final limitTurns = screenState.contextTurnLimit ?? 1;
+          currentLabel = '窗口: $keptTurns / $limitTurns (消息)';
+          progress = (limitTurns > 0) ? keptTurns / limitTurns : 0.0;
+        }
+        
+        final totalCount = screenState.totalMessageCount;
+
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
           children: [
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    minHeight: 6,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        currentLabel,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        '总计: ${totalCount ?? 'N/A'} (消息)',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '总结锚点 (ID):',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        '${chat.lastSummarizedMessageId ?? '无'}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,13 +354,10 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                             icon: const Icon(Icons.open_in_full),
                             tooltip: '全屏编辑',
                             onPressed: () async {
-                              final newSummary = await Navigator.of(context).push<String?>(
-                                MaterialPageRoute(
-                                  builder: (context) => FullScreenTextEditorScreen(
-                                    initialText: _contextSummaryController.text,
-                                    title: '编辑上下文总结',
-                                  ),
-                                ),
+                              final newSummary = await showFullScreenTextEditor(
+                                context,
+                                initialText: _contextSummaryController.text,
+                                title: '编辑上下文总结',
                               );
                               if (newSummary != null) {
                                 _contextSummaryController.text = newSummary;

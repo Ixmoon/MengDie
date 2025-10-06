@@ -6,12 +6,12 @@ import '../../domain/models/models.dart';
 import '../../data/sync/sync_service.dart';
 import '../../app/providers/chat_state_providers.dart';
 import 'chat_page_content.dart';
-import '../../app/providers/chat_state/chat_data_providers.dart';
+import '../../app/providers/ui_state_providers/chat_screen_providers.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
-  final VoidCallback? onBackButtonPressed; // 新增
+  final VoidCallback? onBackButtonPressed;
 
-  const ChatScreen({super.key, this.onBackButtonPressed}); // 新增
+  const ChatScreen({super.key, this.onBackButtonPressed});
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -38,9 +38,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       );
     }
 
-    final chatAsync = ref.watch(currentChatProvider(activeChatId));
+    // Watch the single, aggregated data provider.
+    // This encapsulates all the complex logic of fetching, combining,
+    // and validating the data needed for this screen.
+    final chatScreenDataAsync = ref.watch(chatScreenDataProvider(activeChatId));
 
-    return chatAsync.when(
+    return chatScreenDataAsync.when(
       loading: () => Scaffold(
         appBar: AppBar(
             leading: IconButton(
@@ -52,74 +55,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         appBar: AppBar(
             leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.go('/list'))),
-        body: Center(child: Text('无法加载聊天数据: $error')),
+                onPressed: () {
+                  // On error, it's safer to reset the active chat.
+                  ref.read(activeChatIdProvider.notifier).state = null;
+                  context.go('/list');
+                })),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text('无法加载聊天数据: $error'),
+          ),
+        ),
       ),
-      data: (chat) {
-        if (chat == null) {
-          return Scaffold(
-            appBar: AppBar(
-                leading: IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      ref.read(activeChatIdProvider.notifier).state = null;
-                      context.go('/list');
-                    })),
-            body: const Center(child: Text('聊天未找到或已被删除')),
+      data: (data) {
+        // If the sibling list contains only the current chat (or is empty for some reason),
+        // we don't need the PageView.
+        if (data.siblingChats.length <= 1) {
+          return ChatPageContent(
+            key: ValueKey(activeChatId),
+            chatId: activeChatId,
+            onBackButtonPressed: widget.onBackButtonPressed,
           );
         }
 
-        final siblingChatsAsync = ref.watch(chatListProvider((parentFolderId: chat.parentFolderId, mode: ChatListMode.normal)));
-
-        return siblingChatsAsync.when(
-          loading: () => Scaffold(
-            appBar: AppBar(),
-            body: const Center(child: CircularProgressIndicator()),
-          ),
-          error: (error, stack) => Scaffold(
-            appBar: AppBar(),
-            body: Center(child: Text('无法加载聊天列表: $error')),
-          ),
-          data: (siblingChats) {
-            final chats = siblingChats.where((c) => !c.isFolder).toList();
-            final currentIndex = chats.indexWhere((c) => c.id == activeChatId);
-
-            if (chats.length <= 1 || currentIndex == -1) {
-              return ChatPageContent(
-                key: ValueKey(activeChatId),
-                chatId: activeChatId,
-                onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
-              );
-            }
-            
-            // 使用一个基于聊天列表ID的唯一Key来驱动一个新的StatefulWidget。
-            // 当列表变化时，Key会变化，旧的_ChatPageView状态会被销毁，新的会被创建，
-            // 从而确保PageController总是以正确的初始状态被创建。
-            return _ChatPageView(
-              key: ValueKey(Object.hashAll(chats.map((c) => c.id))),
-              chats: chats,
-              initialIndex: currentIndex,
-              onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
-            );
-          },
+        // Use a unique key based on the chat list IDs to drive a new StatefulWidget.
+        // When the list changes, the key changes, destroying the old _ChatPageView state
+        // and creating a new one, ensuring the PageController is always created
+        // with the correct initial state.
+        return _ChatPageView(
+          key: ValueKey(Object.hashAll(data.siblingChats.map((c) => c.id))),
+          chats: data.siblingChats,
+          initialIndex: data.currentIndex,
+          onBackButtonPressed: widget.onBackButtonPressed,
         );
       },
     );
   }
 }
 
-/// 一个有状态的Widget，用于封装PageView和其PageController。
-/// 它的生命周期由传入的Key控制，确保在聊天列表变化时能够正确地重建。
+/// A stateful widget that encapsulates the PageView and its PageController.
+/// Its lifecycle is controlled by the incoming Key, ensuring it is rebuilt
+/// correctly when the chat list changes.
 class _ChatPageView extends ConsumerStatefulWidget {
   final List<Chat> chats;
   final int initialIndex;
-  final VoidCallback? onBackButtonPressed; // 新增
+  final VoidCallback? onBackButtonPressed;
 
   const _ChatPageView({
     super.key,
     required this.chats,
     required this.initialIndex,
-    this.onBackButtonPressed, // 新增
+    this.onBackButtonPressed,
   });
 
   @override
@@ -148,7 +134,7 @@ class _ChatPageViewState extends ConsumerState<_ChatPageView> {
       itemCount: widget.chats.length,
       onPageChanged: (index) {
         final newChatId = widget.chats[index].id;
-        // 使用ref.read来避免在回调中监听provider
+        // Use ref.read to avoid listening to the provider in a callback.
         if (ref.read(activeChatIdProvider) != newChatId) {
           ref.read(activeChatIdProvider.notifier).state = newChatId;
         }
@@ -158,7 +144,7 @@ class _ChatPageViewState extends ConsumerState<_ChatPageView> {
         return ChatPageContent(
           key: ValueKey(chat.id),
           chatId: chat.id,
-          onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
+          onBackButtonPressed: widget.onBackButtonPressed,
         );
       },
     );

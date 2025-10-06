@@ -28,6 +28,7 @@ mixin BackgroundTasks on UiStateManager {
     Ref get ref;
     @override
     int get chatId;
+    Future<void> updateContextDebugInfo(); // Dependency for debug info refresh
     Future<void> generateHelpMeReply({Function(List<String>)? onSuggestionsReady, bool forceRefresh = false});
     Future<String> executeSpecialAction({
         required String prompt,
@@ -39,40 +40,58 @@ mixin BackgroundTasks on UiStateManager {
     @override
     void stopUpdateTimer();
 
-    /// Manually triggers summarization on the oldest 30% of the entire chat history.
+    /// 手动触发总结，将当前上下文窗口压缩至约70%。
     Future<void> manuallySummarizeHistory() async {
       showTopMessage("正在生成手动总结...", duration: const Duration(seconds: 120));
       try {
-        final messageRepo = ref.read(messageRepositoryProvider);
-        final allMessages = await messageRepo.getMessagesForChat(chatId);
+        final contextXmlService = ref.read(contextXmlServiceProvider);
+        final chatRepo = ref.read(chatRepositoryProvider);
+        final chat = ref.read(currentChatProvider(chatId)).value;
+        if (chat == null) throw Exception("Chat data not available.");
 
-        if (allMessages.length < 3) {
-          showTopMessage("消息太少，无法总结。", backgroundColor: Colors.orange);
+        // 1. 获取当前的上下文窗口信息
+        final contextInfo = await contextXmlService.buildApiRequestContext(
+          chatId: chatId,
+          currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("manual summary check")]),
+        );
+        final keptMessages = contextInfo.keptMessages;
+
+        if (keptMessages.length < 3) {
+          showTopMessage("上下文窗口中的消息太少，无法总结。", backgroundColor: Colors.orange);
           return;
         }
 
-        // Calculate the number of messages to summarize (oldest 30% of *all* messages).
-        final countToSummarize = (allMessages.length * 0.3).ceil();
-        final messagesToSummarize = allMessages.sublist(0, countToSummarize);
+        // 2. 计算要从当前窗口中总结的消息数量（最旧的30%）
+        final countToSummarize = (keptMessages.length * 0.3).ceil();
+        final messagesToSummarize = keptMessages.sublist(0, countToSummarize);
+        final lastMessageToSummarize = messagesToSummarize.last;
 
-        // Get the next 4 messages (2 rounds) as following context.
-        final followingMessages = allMessages.length > countToSummarize
-            ? allMessages.sublist(countToSummarize, (countToSummarize + 4 > allMessages.length) ? allMessages.length : countToSummarize + 4)
+        // 3. 用于上下文的后续消息是窗口中剩余的70%的开头部分
+        final followingMessages = keptMessages.length > countToSummarize
+            ? keptMessages.sublist(countToSummarize, (countToSummarize + 4 > keptMessages.length) ? keptMessages.length : countToSummarize + 4)
             : <Message>[];
 
-        debugPrint("ChatStateNotifier($chatId): Starting manual summarization for ${messagesToSummarize.length} messages, with ${followingMessages.length} following messages for context.");
+        debugPrint("ChatStateNotifier($chatId): Starting manual summarization for ${messagesToSummarize.length} messages from the current context window.");
 
-        // We pass `null` for existingSummary to generate a completely new one.
-        final finalSummary = await _summarizeMessages(messagesToSummarize, null, followingMessages: followingMessages);
+        // 4. 生成新的总结块，并与任何已存在的总结合并
+        final newSummaryChunk = await _summarizeMessages(
+          messagesToSummarize,
+          chat.contextSummary, // 传入现有总结以进行合并
+          followingMessages: followingMessages,
+        );
 
-        if (finalSummary.isNotEmpty) {
-          final chatRepo = ref.read(chatRepositoryProvider);
-          final chat = await chatRepo.getChat(chatId);
-          if (chat != null && mounted) {
-            await chatRepo.saveChat(chat.copyWith(contextSummary: finalSummary));
-            showTopMessage("手动总结已保存。", backgroundColor: Colors.green);
-          }
-        } else {
+        // 5. 保存新的总结和边界ID
+        if (newSummaryChunk.isNotEmpty && mounted) {
+          // 关键修复：新的边界应该是被总结消息的最后一条ID
+          final newBoundaryId = messagesToSummarize.lastOrNull?.id;
+          await chatRepo.saveChat(chat.copyWith(
+            contextSummary: newSummaryChunk,
+            lastSummarizedMessageId: newBoundaryId,
+          ));
+          showTopMessage("手动总结已保存。", backgroundColor: Colors.green);
+          // 总结后立即刷新调试信息
+          updateContextDebugInfo();
+        } else if (mounted) {
           throw Exception("总结过程返回了空内容。");
         }
       } catch (e) {
@@ -296,13 +315,15 @@ mixin BackgroundTasks on UiStateManager {
 
       // 7. Save the new summary and update the boundary ID.
       if (newSummaryChunk.isNotEmpty && mounted) {
-        // The new boundary is the ID of the FIRST message that was KEPT.
-        final newBoundaryId = contextResult.keptMessages.firstOrNull?.id;
+        // 关键修复：新的边界应该是被总结消息的最后一条ID
+        final newBoundaryId = messagesToSummarize.lastOrNull?.id;
         await chatRepo.saveChat(chat.copyWith(
           contextSummary: newSummaryChunk,
           lastSummarizedMessageId: newBoundaryId,
         ));
         debugPrint("ChatStateNotifier($chatId): Automatic summarization successful. New boundary ID: $newBoundaryId");
+        // 总结后立即刷新调试信息
+        updateContextDebugInfo();
       } else if (mounted) {
         debugPrint("ChatStateNotifier($chatId): Automatic summarization resulted in an empty summary. Nothing to save.");
       }

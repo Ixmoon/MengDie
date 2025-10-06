@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../domain/enums.dart';
 import '../../../domain/models/message.dart';
-
-@immutable
+ 
+ @immutable
 class ChatScreenState {
   final bool isLoading; // Master lock for the entire process (send -> all background tasks done)
   final bool isPrimaryResponseLoading; // Lock for the direct user-facing response (stream/single)
@@ -26,6 +27,13 @@ class ChatScreenState {
   final bool isStreamingMessageVisible; // Controls the visibility of the streaming message in the UI
   final bool isImageGenerationMode;
   final String? carriedOverXml; // Holds the synthesized XML for the latest user message
+  // New fields for context debugging
+  final int? keptMessageCount;
+  final int? totalMessageCount;
+  final int? contextTurnLimit;
+  final int? keptTokenCount;
+  final int? contextTokenLimit;
+  final ContextManagementMode? contextManagementMode;
  
    const ChatScreenState({
      this.isLoading = false,
@@ -51,6 +59,12 @@ class ChatScreenState {
     this.isStreamingMessageVisible = false,
     this.isImageGenerationMode = false,
     this.carriedOverXml,
+    this.keptMessageCount,
+    this.totalMessageCount,
+    this.contextTurnLimit,
+    this.keptTokenCount,
+    this.contextTokenLimit,
+    this.contextManagementMode,
   });
  
    ChatScreenState copyWith({
@@ -85,6 +99,13 @@ class ChatScreenState {
     bool? isImageGenerationMode,
     String? carriedOverXml,
     bool clearCarriedOverXml = false,
+    int? keptMessageCount,
+    int? totalMessageCount,
+    int? contextTurnLimit,
+    int? keptTokenCount,
+    int? contextTokenLimit,
+    ContextManagementMode? contextManagementMode,
+    bool clearContextDebugInfo = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -110,6 +131,12 @@ class ChatScreenState {
       isStreamingMessageVisible: isStreamingMessageVisible ?? (clearStreamingMessage ? false : this.isStreamingMessageVisible),
       isImageGenerationMode: isImageGenerationMode ?? this.isImageGenerationMode,
       carriedOverXml: clearCarriedOverXml ? null : carriedOverXml ?? this.carriedOverXml,
+      keptMessageCount: clearContextDebugInfo ? null : keptMessageCount ?? this.keptMessageCount,
+      totalMessageCount: clearContextDebugInfo ? null : totalMessageCount ?? this.totalMessageCount,
+      contextTurnLimit: clearContextDebugInfo ? null : contextTurnLimit ?? this.contextTurnLimit,
+      keptTokenCount: clearContextDebugInfo ? null : keptTokenCount ?? this.keptTokenCount,
+      contextTokenLimit: clearContextDebugInfo ? null : contextTokenLimit ?? this.contextTokenLimit,
+      contextManagementMode: clearContextDebugInfo ? null : contextManagementMode ?? this.contextManagementMode,
     );
   }
 }

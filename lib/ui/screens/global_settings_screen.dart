@@ -7,7 +7,7 @@ import '../../app/providers/settings_providers.dart';
 import '../../domain/models/user.dart';
 import '../../domain/models/api_config.dart';
 import '../../app/providers/api_key_provider.dart';
-import '../widgets/fullscreen_text_editor.dart'; // 导入全屏文本编辑器
+import '../widgets/widget_utils.dart'; // 导入新的公用函数
 import '../../domain/enums.dart';
 import '../../core/app_constants.dart';
  
@@ -463,14 +463,11 @@ class _SyncSettingsWidgetState extends ConsumerState<_SyncSettingsWidget> {
                  icon: const Icon(Icons.fullscreen),
                  tooltip: '全屏编辑',
                  onPressed: () async {
-                   final newText = await Navigator.of(context).push<String>(
-                     MaterialPageRoute(
-                       builder: (context) => FullScreenTextEditorScreen(
-                         initialText: _promptController.text,
-                         title: '编辑 ${widget.title} 的提示词',
-                         defaultValue: _getDefaultPrompt(),
-                       ),
-                     ),
+                   final newText = await showFullScreenTextEditor(
+                     context,
+                     initialText: _promptController.text,
+                     title: '编辑 ${widget.title} 的提示词',
+                     defaultValue: _getDefaultPrompt(),
                    );
                    if (newText != null) {
                      _promptController.text = newText;

@@ -223,7 +223,7 @@ class ChatRepository {
 
     final originalChat = await getChat(sourceChatId);
     if (originalChat == null) {
-      throw Exception('找���到ID为 $sourceChatId 的原始聊天');
+      throw Exception('找到ID为 $sourceChatId 的原始聊天');
     }
 
     final now = DateTime.now();

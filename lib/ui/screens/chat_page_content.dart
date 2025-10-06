@@ -7,17 +7,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/providers/chat_state_providers.dart';
+import '../../app/providers/ui_state_providers/chat_page_providers.dart';
+import '../../domain/models/models.dart';
 import '../widgets/cached_image.dart';
 import '../widgets/chat/chat_app_bar.dart';
 import '../widgets/chat/chat_input_bar.dart';
 import '../widgets/chat/message_list.dart';
 import '../widgets/top_message_banner.dart';
-import 'chat_page_logic.dart';
+import '../../app/tools/xml_processor.dart';
 
 class ChatPageContent extends ConsumerStatefulWidget {
   const ChatPageContent({super.key, required this.chatId, this.onBackButtonPressed});
   final int chatId;
-  final VoidCallback? onBackButtonPressed; // 新增
+  final VoidCallback? onBackButtonPressed;
 
   @override
   ConsumerState<ChatPageContent> createState() => _ChatPageContentState();
@@ -26,42 +28,17 @@ class ChatPageContent extends ConsumerStatefulWidget {
 class _ChatPageContentState extends ConsumerState<ChatPageContent> {
   final ScrollController _scrollController = ScrollController();
   late final TextEditingController _messageController;
-  late final ChatPageLogic _logic;
 
   @override
   void initState() {
     super.initState();
     debugPrint("[ChatPageContent] initState: chatId=${widget.chatId}");
     _messageController = TextEditingController();
-    _logic = ChatPageLogic(
-      ref: ref,
-      chatId: widget.chatId,
-      context: context,
-      onStateChange: () => setState(() {}),
-    );
 
     _scrollController.addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(animate: false);
     });
-  }
-
-  @override
-  void didUpdateWidget(covariant ChatPageContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    debugPrint("[ChatPageContent] didUpdateWidget: oldChatId=${oldWidget.chatId}, newChatId=${widget.chatId}");
-    if (oldWidget.chatId != widget.chatId) {
-      debugPrint("[ChatPageContent] chatId changed! Re-initializing logic.");
-      // chatId has changed, re-initialize the logic.
-      _logic = ChatPageLogic(
-        ref: ref,
-        chatId: widget.chatId,
-        context: context,
-        onStateChange: () => setState(() {}),
-      );
-      // Optionally, clear the text field when switching chats.
-      _messageController.clear();
-    }
   }
 
   void _scrollListener() {
@@ -115,8 +92,11 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
   Widget build(BuildContext context) {
     final chatId = widget.chatId;
     debugPrint("[ChatPageContent] build: chatId=$chatId");
+
     final chatAsync = ref.watch(currentChatProvider(chatId));
     final chatState = ref.watch(chatStateNotifierProvider(chatId));
+    final pageState = ref.watch(chatPageNotifierProvider(chatId));
+    final pageNotifier = ref.read(chatPageNotifierProvider(chatId).notifier);
 
     ref.listen<int?>(activeChatIdProvider, (previous, next) {
       if (next != null && next == widget.chatId) {
@@ -167,13 +147,31 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
               backgroundColor: Colors.transparent,
               appBar: ChatAppBar(
                 chat: chat,
-                onSetCoverImage: () => _logic.pickAndSetCoverImageBase64(ImageSource.gallery),
-                onExportCoverImage: _logic.exportImage,
-                onRemoveCoverImage: _logic.removeCoverImage,
-                onForcePush: _logic.handleForcePush,
-                isPushing: _logic.isPushing,
-                onAddMessageAtEnd: _logic.addMessageAtEnd,
-                onBackButtonPressed: widget.onBackButtonPressed, // 传递回调
+                onSetCoverImage: () => pageNotifier.pickAndSetCoverImageBase64(ImageSource.gallery),
+                onExportCoverImage: () async {
+                  final path = await pageNotifier.exportImage();
+                  if (!mounted) return;
+                  if (path != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('封面已保存到: $path'), backgroundColor: Colors.green));
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已取消保存'), backgroundColor: Colors.orange));
+                  }
+                },
+                onRemoveCoverImage: pageNotifier.removeCoverImage,
+                onForcePush: () async {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('正在上传本地变更...'), duration: Duration(seconds: 2)));
+                  final success = await pageNotifier.handleForcePush();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ? '上传成功' : '上传失败或无需上传'), backgroundColor: success ? Colors.green : Colors.red));
+                },
+                isPushing: pageState.isPushing,
+                onAddMessageAtEnd: (role) async {
+                  final newMessage = await pageNotifier.addMessageAtEnd(role);
+                  if (newMessage != null) {
+                    _showEditMessageDialog(newMessage);
+                  }
+                },
+                onBackButtonPressed: widget.onBackButtonPressed,
               ),
               body: SafeArea(
                 child: Column(
@@ -189,38 +187,16 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                     if (chatState.isMessageListHalfHeight) const Spacer(),
                     Flexible(
                       flex: 1,
-                      child: chatState.isMessageListHalfHeight
-                          ? ShaderMask(
-                              shaderCallback: (Rect bounds) {
-                                return LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: const [Colors.transparent, Colors.black],
-                                  stops: const [0.0, 0.1],
-                                ).createShader(bounds);
-                              },
-                              blendMode: BlendMode.dstIn,
-                              child: MessageList(
-                                chatId: chatId,
-                                scrollController: _scrollController,
-                                xmlRules: chat.xmlRules,
-                                carriedOverXml: chatState.carriedOverXml,
-                                onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
-                                onSuggestionSelected: (suggestion) {
-                                  _messageController.text = suggestion;
-                                },
-                              ),
-                            )
-                          : MessageList(
-                              chatId: chatId,
-                              scrollController: _scrollController,
-                              xmlRules: chat.xmlRules,
-                              carriedOverXml: chatState.carriedOverXml,
-                              onMessageTap: (message, part, allMessages) => _logic.handleMessageTap(message, part, allMessages),
-                              onSuggestionSelected: (suggestion) {
-                                _messageController.text = suggestion;
-                              },
-                            ),
+                      child: MessageList(
+                        chatId: chatId,
+                        scrollController: _scrollController,
+                        xmlRules: chat.xmlRules,
+                        carriedOverXml: chatState.carriedOverXml,
+                        onMessageTap: _handleMessageTap,
+                        onSuggestionSelected: (suggestion) {
+                          _messageController.text = suggestion;
+                        },
+                      ),
                     ),
                     if ((chatState.isLoading || chatState.isProcessingInBackground) && !chatState.isStreaming)
                       const Padding(
@@ -247,6 +223,346 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/list'))),
           body: Center(child: Text('无法加载聊天数据: $error'))),
+    );
+  }
+
+  void _handleMessageTap(Message message, MessagePart part, List<Message> allMessages) {
+    if (ref.read(chatStateNotifierProvider(widget.chatId)).isLoading) return;
+
+    final pageNotifier = ref.read(chatPageNotifierProvider(widget.chatId).notifier);
+    final isUser = message.role == MessageRole.user;
+    final messageIndex = allMessages.indexWhere((m) => m.id == message.id);
+    final isLastUserMessage = isUser &&
+        messageIndex >= 0 &&
+        (messageIndex == allMessages.length - 1 ||
+            (messageIndex == allMessages.length - 2 &&
+                allMessages.last.role == MessageRole.model));
+
+    showModalBottomSheet(
+      context: context,
+      builder: (modalContext) {
+        List<Widget> options = [];
+        final isTextOnly = part.type == MessagePartType.text;
+        
+        options.add(
+          ListTile(
+            leading: Icon(isTextOnly ? Icons.edit_outlined : Icons.upload_file_outlined),
+            title: Text(isTextOnly ? '编辑消息' : '重新上传'),
+            onTap: () {
+              Navigator.pop(modalContext);
+              if (isTextOnly) {
+                _showEditMessageDialog(message);
+              } else {
+                pageNotifier.replaceAttachment(message);
+              }
+            },
+          )
+        );
+
+        if (!isTextOnly) {
+          options.add(
+            ListTile(
+              leading: const Icon(Icons.save_alt_outlined),
+              title: const Text('另存为...'),
+              onTap: () async {
+                Navigator.pop(modalContext);
+                final path = await pageNotifier.saveAttachment(message);
+                if (!mounted) return;
+                if (path != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('附件已保存到: $path'), backgroundColor: Colors.green));
+                }
+                // Notifier will show its own message for cancellation or error
+              },
+            )
+          );
+        }
+
+        options.add(
+          ListTile(
+            leading: const Icon(Icons.fork_right_outlined),
+            title: const Text('从此消息分叉对话'),
+            onTap: () {
+              Navigator.pop(modalContext);
+              pageNotifier.forkChatFromMessage(message);
+            },
+          )
+        );
+
+        if (isLastUserMessage) {
+          options.add(
+            ListTile(
+              leading: const Icon(Icons.refresh_outlined),
+              title: const Text('重新生成回复'),
+              onTap: () {
+                Navigator.pop(modalContext);
+                pageNotifier.regenerateResponse(message);
+              },
+            )
+          );
+        }
+
+        options.addAll(_buildInsertMessageOptions(modalContext, messageIndex));
+
+        options.add(
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: Colors.red.shade400),
+            title: Text('删除消息', style: TextStyle(color: Colors.red.shade400)),
+            onTap: () async {
+              Navigator.pop(modalContext);
+              final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('确认删除'),
+                      content: const Text('确定删除这条消息吗？'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(false),
+                            child: const Text('取消')),
+                        TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(true),
+                            child: Text('删除', style: TextStyle(color: Colors.red.shade700))),
+                      ],
+                    ),
+                  ) ?? false;
+
+              if (confirm) {
+                pageNotifier.deleteMessagePart(message, part);
+              }
+            },
+          )
+        );
+
+        return SafeArea(
+          child: Wrap(children: options),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildInsertMessageOptions(BuildContext modalContext, int messageIndex) {
+    final pageNotifier = ref.read(chatPageNotifierProvider(widget.chatId).notifier);
+
+    void insertAndEdit(int index, MessageRole role) {
+      Navigator.pop(modalContext);
+      pageNotifier.insertMessageAndEdit(
+        index: index,
+        role: role,
+        onMessageCreated: (newMessage) {
+          _showEditMessageDialog(newMessage);
+        },
+      );
+    }
+
+    return [
+      const Divider(),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_top_outlined),
+        title: const Text('在此之前插入用户消息'),
+        onTap: () => insertAndEdit(messageIndex, MessageRole.user),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_top_outlined),
+        title: const Text('在此之前插入模型消息'),
+        onTap: () => insertAndEdit(messageIndex, MessageRole.model),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_bottom_outlined),
+        title: const Text('在此之后插入用户消息'),
+        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.user),
+      ),
+      ListTile(
+        leading: const Icon(Icons.vertical_align_bottom_outlined),
+        title: const Text('在此之后插入模型消息'),
+        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.model),
+      ),
+    ];
+  }
+
+  void _showEditMessageDialog(Message message) {
+    final chat = ref.read(currentChatProvider(widget.chatId)).value;
+    if (chat == null) return;
+
+    final textController = TextEditingController(text: message.rawText);
+    final xmlController = TextEditingController();
+
+    final bool useSecondaryXml = chat.enableSecondaryXml;
+    if (message.role == MessageRole.model) {
+      xmlController.text = useSecondaryXml
+          ? (message.secondaryXmlContent ?? '')
+          : (message.originalXmlContent ?? '');
+    } else {
+      xmlController.text = message.originalXmlContent ?? '';
+    }
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool isFullScreen = false;
+        TextEditingController? activeController;
+        String fullScreenTitle = '';
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            if (isFullScreen && activeController != null) {
+              return Dialog(
+                insetPadding: EdgeInsets.zero,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: Text(fullScreenTitle),
+                    leading: IconButton(
+                      icon: const Icon(Icons.close),
+                      tooltip: '关闭',
+                      onPressed: () => setDialogState(() => isFullScreen = false),
+                    ),
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.check),
+                        tooltip: '完成',
+                        onPressed: () => setDialogState(() => isFullScreen = false),
+                      ),
+                    ],
+                  ),
+                  body: TextField(
+                    controller: activeController,
+                    autofocus: true,
+                    maxLines: null,
+                    expands: true,
+                    style: const TextStyle(fontSize: 16),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            void openFullScreenEditor(TextEditingController controller, String title) {
+              setDialogState(() {
+                isFullScreen = true;
+                activeController = controller;
+                fullScreenTitle = title;
+              });
+            }
+
+            return AlertDialog(
+              title: Text(message.role == MessageRole.user ? '编辑消息' : '编辑模型回复'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: textController,
+                      autofocus: true,
+                      maxLines: 5,
+                      minLines: 1,
+                      decoration: InputDecoration(
+                        hintText: '用户可见的纯文本内容...',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.fullscreen),
+                          tooltip: '全屏编辑',
+                          onPressed: () => openFullScreenEditor(textController, '编辑消息内容'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('XML内容:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: xmlController,
+                      maxLines: 5,
+                      minLines: 1,
+                      decoration: InputDecoration(
+                        hintText: '用于逻辑处理的XML标签...',
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.fullscreen),
+                          tooltip: '全屏编辑',
+                          onPressed: () => openFullScreenEditor(xmlController, '编辑XML内容'),
+                        ),
+                      ),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+                    final newModelsTextFromInput = textController.text;
+                    final newXmlFromInput = xmlController.text;
+
+                    if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
+                      notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
+                      return;
+                    }
+
+                    final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                    newParts.add(MessagePart.text(newModelsTextFromInput));
+
+                    final finalCombinedXml = newXmlFromInput.isNotEmpty ? newXmlFromInput : null;
+
+                    Message updatedMessage;
+                    if (message.role == MessageRole.model && useSecondaryXml) {
+                      updatedMessage = message.copyWith(
+                        parts: newParts,
+                        secondaryXmlContent: finalCombinedXml,
+                        clearSecondaryXml: finalCombinedXml == null,
+                      );
+                    } else {
+                      updatedMessage = message.copyWith(
+                        parts: newParts,
+                        originalXmlContent: finalCombinedXml,
+                        clearOriginalXml: finalCombinedXml == null,
+                      );
+                    }
+                    
+                    Navigator.pop(dialogContext);
+                    await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+                  },
+                  child: const Text('保存'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+                    final newModelsTextFromInput = textController.text;
+                    final newXmlFromInput = xmlController.text;
+
+                    final processResult = XmlProcessor.processPostStream(newModelsTextFromInput, chat.xmlRules);
+                    final finalCleanModelsText = processResult.modelsText;
+                    final newlyExtractedXml = processResult.extractedXml;
+
+                    final List<String> xmlParts = [];
+                    if (newXmlFromInput.isNotEmpty) xmlParts.add(newXmlFromInput);
+                    if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) xmlParts.add(newlyExtractedXml);
+                    final finalCombinedXml = xmlParts.isEmpty ? null : xmlParts.join('\n');
+
+                    final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                    newParts.add(MessagePart.text(finalCleanModelsText));
+
+                    Message updatedMessage;
+                    if (message.role == MessageRole.model && useSecondaryXml) {
+                      updatedMessage = message.copyWith(parts: newParts, secondaryXmlContent: finalCombinedXml, clearSecondaryXml: finalCombinedXml == null);
+                    } else {
+                      updatedMessage = message.copyWith(parts: newParts, originalXmlContent: finalCombinedXml, clearOriginalXml: finalCombinedXml == null);
+                    }
+                    
+                    Navigator.pop(dialogContext);
+                    await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+                  },
+                  child: const Text('保存并应用'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

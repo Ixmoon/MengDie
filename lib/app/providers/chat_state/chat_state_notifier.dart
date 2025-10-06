@@ -8,7 +8,8 @@ import '../../../domain/models/models.dart';
 import '../../../data/llmapi/llm_service.dart';
 import '../../tools/context_xml_service.dart';
 import '../api_key_provider.dart';
-import '../repository_providers.dart'; 
+import '../repository_providers.dart';
+import '../../repositories/message_repository.dart';
 import 'mixins/ui_state_manager.dart';
 import 'mixins/message_operations.dart';
 import 'mixins/generation_logic.dart';
@@ -120,6 +121,58 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
         stopUpdateTimer(); // from UiStateManager
         topMessageTimer?.cancel(); // from UiStateManager
         super.dispose();
+    }
+
+    /// 更新用于调试界面的上下文信息，同时处理轮次和Token模式。
+    Future<void> updateContextDebugInfo() async {
+      if (!mounted) return;
+      final chat = ref.read(currentChatProvider(chatId)).value;
+      if (chat == null) {
+        state = state.copyWith(clearContextDebugInfo: true);
+        return;
+      }
+
+      try {
+        final contextXmlService = ref.read(contextXmlServiceProvider);
+        final messageRepo = ref.read(messageRepositoryProvider);
+        final llmService = ref.read(llmServiceProvider);
+        final allMessages = await messageRepo.getMessagesForChat(chatId);
+
+        final Message messageForContextCheck = allMessages.isNotEmpty
+            ? allMessages.last
+            : Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("")]);
+
+        final contextInfo = await contextXmlService.buildApiRequestContext(
+          chatId: chatId,
+          currentUserMessage: messageForContextCheck,
+        );
+
+        int? currentTokens;
+        // 如果是Token模式，则计算当前窗口的Token数量
+        if (chat.contextConfig.mode == ContextManagementMode.tokens) {
+          final apiConfig = getEffectiveApiConfig();
+          currentTokens = await llmService.countTokens(
+            llmContext: contextInfo.contextParts,
+            apiConfig: apiConfig,
+          );
+        }
+
+        if (mounted) {
+          state = state.copyWith(
+            keptMessageCount: contextInfo.keptMessages.length,
+            totalMessageCount: allMessages.length,
+            contextTurnLimit: chat.contextConfig.maxTurns * 2,
+            keptTokenCount: currentTokens,
+            contextTokenLimit: chat.contextConfig.maxContextTokens,
+            contextManagementMode: chat.contextConfig.mode,
+          );
+        }
+      } catch (e) {
+        debugPrint("ChatStateNotifier($chatId): Error updating context debug info: $e");
+        if (mounted) {
+          state = state.copyWith(clearContextDebugInfo: true);
+        }
+      }
     }
 
   /// 统一的聊天衍生操作入口，由UI层调用。
