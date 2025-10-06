@@ -43,7 +43,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
 
             if (isMessageInSummarizedScope) {
               await chatRepo.saveChat(chat.copyWith(contextSummary: null));
-              debugPrint("ChatStateNotifier($chatId): 因被删除的消息在摘要范围内，已清除上下文摘要。");
+              showTopMessage("被删除的消息在摘要范围内，已清除上下文摘要。");
             } else {
               debugPrint("ChatStateNotifier($chatId): 被删除的消息不在摘要范围内，保留上下文摘要。");
             }

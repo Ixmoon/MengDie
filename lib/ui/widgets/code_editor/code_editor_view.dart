@@ -196,6 +196,7 @@ class CodeEditorViewState extends State<CodeEditorView> {
         _currentMatchIndex = 0;
         final match = _searchResults[0];
         _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+        _codeFieldFocusNode.requestFocus();
       }
     });
   }
@@ -206,6 +207,7 @@ class CodeEditorViewState extends State<CodeEditorView> {
       _currentMatchIndex = (_currentMatchIndex + 1) % _searchResults.length;
       final match = _searchResults[_currentMatchIndex];
       _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+      _codeFieldFocusNode.requestFocus();
     });
   }
 
@@ -215,6 +217,7 @@ class CodeEditorViewState extends State<CodeEditorView> {
       _currentMatchIndex = (_currentMatchIndex - 1 + _searchResults.length) % _searchResults.length;
       final match = _searchResults[_currentMatchIndex];
       _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+      _codeFieldFocusNode.requestFocus();
     });
   }
 

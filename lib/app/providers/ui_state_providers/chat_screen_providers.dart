@@ -41,9 +41,11 @@ final chatScreenDataProvider =
         );
       }
 
-      // Once we have the chat data, we watch the data stream for its sibling chats.
-      final siblingChatsAsync = ref.watch(chatListProvider(
-          (parentFolderId: chat.parentFolderId, mode: ChatListMode.normal)));
+      // Once we have the chat data, we determine the correct mode (normal chat or template)
+      // and then watch the data stream for its sibling chats.
+      final mode = chat.isTemplate ? ChatListMode.templateManagement : ChatListMode.normal;
+      final siblingChatsAsync = ref.watch(
+          chatListProvider((parentFolderId: chat.parentFolderId, mode: mode)));
 
       // Reactively handle the states of the sibling chats stream.
       return siblingChatsAsync.when(

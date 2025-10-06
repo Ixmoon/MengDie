@@ -279,22 +279,4 @@ class ChatRepository {
     return newChatId;
   }
 
-  /// 找回并修复因旧版 bug 导致被错误归类到文件夹中的模板。
-  /// 返回被修复的模板数量。
-  Future<int> recoverLostTemplates() async {
-    debugPrint("ChatRepository: 正在执行丢失模板恢复检查...");
-    final lostTemplates = await _chatDao.findLostTemplates();
-    if (lostTemplates.isEmpty) {
-      debugPrint("ChatRepository: 未发现丢失的模板。");
-      return 0;
-    }
-
-    final idsToRecover = lostTemplates.map((c) => c.id).toList();
-    debugPrint("ChatRepository: 发现 ${idsToRecover.length} 个丢失的模板，正在将其移至根目录...");
-    
-    await _chatDao.moveChatsToNewParent(idsToRecover, null);
-    
-    debugPrint("ChatRepository: 模板恢复完成。");
-    return idsToRecover.length;
-  }
 }

@@ -11,6 +11,7 @@ import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import '../../app/providers/repository_providers.dart';
 import '../../app/tools/xml_processor.dart';
+import '../widgets/widget_utils.dart';
 
 class ChatPageLogic {
   final Ref ref;
@@ -155,199 +156,168 @@ class ChatPageLogic {
     showDialog(
       context: context,
       builder: (dialogContext) {
-        bool isFullScreen = false;
-        TextEditingController? activeController;
-        String fullScreenTitle = '';
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            if (isFullScreen && activeController != null) {
-              return Dialog(
-                insetPadding: EdgeInsets.zero,
-                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-                child: Scaffold(
-                  appBar: AppBar(
-                    title: Text(fullScreenTitle),
-                    leading: IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: '关闭',
-                      onPressed: () => setDialogState(() => isFullScreen = false),
-                    ),
-                    actions: [
-                      IconButton(
-                        icon: const Icon(Icons.check),
-                        tooltip: '完成',
-                        onPressed: () => setDialogState(() => isFullScreen = false),
-                      ),
-                    ],
-                  ),
-                  body: TextField(
-                    controller: activeController,
-                    autofocus: true,
-                    maxLines: null,
-                    expands: true,
-                    style: const TextStyle(fontSize: 16),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
-                    ),
-                  ),
-                ),
-              );
-            }
-
-            void openFullScreenEditor(TextEditingController controller, String title) {
-              setDialogState(() {
-                isFullScreen = true;
-                activeController = controller;
-                fullScreenTitle = title;
-              });
-            }
-
-            // Unified dialog content for both user and model roles
-            final dialogContent = SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    message.role == MessageRole.model ? '模型消息:' : '用户消息:',
-                    style: const TextStyle(fontWeight: FontWeight.bold)
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: textController,
-                    autofocus: true,
-                    maxLines: 5,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: '用户可见的纯文本内容...',
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.all(12),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.fullscreen),
-                        tooltip: '全屏编辑',
-                        onPressed: () => openFullScreenEditor(textController, '编辑消息内容'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('XML内容:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: xmlController,
-                    maxLines: 5,
-                    minLines: 1,
-                    decoration: InputDecoration(
-                      hintText: '用于逻辑处理的XML标签...',
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.all(12),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.fullscreen),
-                        tooltip: '全屏编辑',
-                        onPressed: () => openFullScreenEditor(xmlController, '编辑XML内容'),
-                      ),
-                    ),
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  ),
-                ],
+        // Unified dialog content for both user and model roles
+        final dialogContent = SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message.role == MessageRole.model ? '模型消息:' : '用户消息:',
+                style: const TextStyle(fontWeight: FontWeight.bold)
               ),
-            );
-
-            return AlertDialog(
-              title: Text(message.role == MessageRole.user ? '编辑你的消息' : '编辑模型回复'),
-              content: dialogContent,
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('取消'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: textController,
+                autofocus: true,
+                maxLines: 5,
+                minLines: 1,
+                decoration: InputDecoration(
+                  hintText: '用户可见的纯文本内容...',
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.all(12),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.fullscreen),
+                    tooltip: '全屏编辑',
+                    onPressed: () async {
+                      final newText = await showFullScreenTextEditor(
+                        context,
+                        initialText: textController.text,
+                        title: '编辑消息内容',
+                        initialLanguage: 'markdown',
+                      );
+                      if (newText != null) {
+                        textController.text = newText;
+                      }
+                    },
+                  ),
                 ),
-                TextButton(
-                  onPressed: () async {
-                    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-                    final newModelsTextFromInput = textController.text;
-                    final newXmlFromInput = xmlController.text;
-
-                    if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
-                      notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
-                      return;
-                    }
-
-                    final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
-                    newParts.add(MessagePart.text(newModelsTextFromInput));
-
-                    final finalCombinedXml = newXmlFromInput.isNotEmpty ? newXmlFromInput : null;
-
-                    Message updatedMessage;
-                    if (message.role == MessageRole.model && useSecondaryXml) {
-                      updatedMessage = message.copyWith(
-                        parts: newParts,
-                        secondaryXmlContent: finalCombinedXml,
-                        clearSecondaryXml: finalCombinedXml == null,
+              ),
+              const SizedBox(height: 16),
+              const Text('XML内容:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: xmlController,
+                maxLines: 5,
+                minLines: 1,
+                decoration: InputDecoration(
+                  hintText: '用于逻辑处理的XML标签...',
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.all(12),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.fullscreen),
+                    tooltip: '全屏编辑',
+                    onPressed: () async {
+                      final newText = await showFullScreenTextEditor(
+                        context,
+                        initialText: xmlController.text,
+                        title: '编辑XML内容',
+                        initialLanguage: 'xml',
                       );
-                    } else {
-                      updatedMessage = message.copyWith(
-                        parts: newParts,
-                        originalXmlContent: finalCombinedXml,
-                        clearOriginalXml: finalCombinedXml == null,
-                      );
-                    }
-                    
-                    Navigator.pop(dialogContext);
-                    await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
-                  },
-                  child: const Text('保存'),
+                      if (newText != null) {
+                        xmlController.text = newText;
+                      }
+                    },
+                  ),
                 ),
-                TextButton(
-                  onPressed: () async {
-                    final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-                    final newModelsTextFromInput = textController.text;
-                    final newXmlFromInput = xmlController.text;
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              ),
+            ],
+          ),
+        );
 
-                    if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
-                      notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
-                      return;
-                    }
+        return AlertDialog(
+          title: Text(message.role == MessageRole.user ? '编辑你的消息' : '编辑模型回复'),
+          content: dialogContent,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+                final newModelsTextFromInput = textController.text;
+                final newXmlFromInput = xmlController.text;
 
-                    final processResult = XmlProcessor.processPostStream(newModelsTextFromInput, chat.xmlRules);
-                    final finalCleanModelsText = processResult.modelsText;
-                    final newlyExtractedXml = processResult.extractedXml;
+                if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
+                  notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
+                  return;
+                }
 
-                    final List<String> xmlParts = [];
-                    if (newXmlFromInput.isNotEmpty) {
-                      xmlParts.add(newXmlFromInput);
-                    }
-                    if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) {
-                      xmlParts.add(newlyExtractedXml);
-                    }
-                    final finalCombinedXml = xmlParts.isEmpty ? null : xmlParts.join('\n');
+                final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                newParts.add(MessagePart.text(newModelsTextFromInput));
 
-                    final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
-                    newParts.add(MessagePart.text(finalCleanModelsText));
+                final finalCombinedXml = newXmlFromInput.isNotEmpty ? newXmlFromInput : null;
 
-                    Message updatedMessage;
-                    if (message.role == MessageRole.model && useSecondaryXml) {
-                      updatedMessage = message.copyWith(
-                        parts: newParts,
-                        secondaryXmlContent: finalCombinedXml,
-                        clearSecondaryXml: finalCombinedXml == null,
-                      );
-                    } else {
-                      updatedMessage = message.copyWith(
-                        parts: newParts,
-                        originalXmlContent: finalCombinedXml,
-                        clearOriginalXml: finalCombinedXml == null,
-                      );
-                    }
-                    
-                    Navigator.pop(dialogContext);
-                    await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
-                  },
-                  child: const Text('保存并应用'),
-                ),
-              ],
-            );
-          },
+                Message updatedMessage;
+                if (message.role == MessageRole.model && useSecondaryXml) {
+                  updatedMessage = message.copyWith(
+                    parts: newParts,
+                    secondaryXmlContent: finalCombinedXml,
+                    clearSecondaryXml: finalCombinedXml == null,
+                  );
+                } else {
+                  updatedMessage = message.copyWith(
+                    parts: newParts,
+                    originalXmlContent: finalCombinedXml,
+                    clearOriginalXml: finalCombinedXml == null,
+                  );
+                }
+                
+                Navigator.pop(dialogContext);
+                await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+              },
+              child: const Text('保存'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+                final newModelsTextFromInput = textController.text;
+                final newXmlFromInput = xmlController.text;
+
+                if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
+                  notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
+                  return;
+                }
+
+                final processResult = XmlProcessor.processPostStream(newModelsTextFromInput, chat.xmlRules);
+                final finalCleanModelsText = processResult.modelsText;
+                final newlyExtractedXml = processResult.extractedXml;
+
+                final List<String> xmlParts = [];
+                if (newXmlFromInput.isNotEmpty) {
+                  xmlParts.add(newXmlFromInput);
+                }
+                if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) {
+                  xmlParts.add(newlyExtractedXml);
+                }
+                final finalCombinedXml = xmlParts.isEmpty ? null : xmlParts.join('\n');
+
+                final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                newParts.add(MessagePart.text(finalCleanModelsText));
+
+                Message updatedMessage;
+                if (message.role == MessageRole.model && useSecondaryXml) {
+                  updatedMessage = message.copyWith(
+                    parts: newParts,
+                    secondaryXmlContent: finalCombinedXml,
+                    clearSecondaryXml: finalCombinedXml == null,
+                  );
+                } else {
+                  updatedMessage = message.copyWith(
+                    parts: newParts,
+                    originalXmlContent: finalCombinedXml,
+                    clearOriginalXml: finalCombinedXml == null,
+                  );
+                }
+                
+                Navigator.pop(dialogContext);
+                await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+              },
+              child: const Text('保存并应用'),
+            ),
+          ],
         );
       },
     );
