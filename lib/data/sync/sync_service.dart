@@ -732,4 +732,35 @@ class SyncService {
       debugPrint('Error during remote orphan message cleanup: ${e.toString()}\n${s.toString()}');
     }
   }
+  /// Fetches a single user from the remote database by their username.
+  ///
+  /// This is useful for multi-device login, where a user might exist remotely
+  /// but not on the local device yet.
+  Future<DriftUser?> fetchRemoteUserByUsername(String username) async {
+    final syncSettings = _providerContainer.read(syncSettingsProvider);
+    if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
+      debugPrint("Remote sync is disabled. Cannot fetch remote user.");
+      return null;
+    }
+
+    Connection? remoteConnection;
+    try {
+      remoteConnection = await _remoteConnectionFactory();
+      final result = await remoteConnection.execute(
+        Sql.named('SELECT * FROM users WHERE username = @username'),
+        parameters: {'username': username},
+      );
+
+      if (result.isNotEmpty) {
+        final userMap = result.first.toColumnMap();
+        return DriftUser.fromJson(userMap);
+      }
+      return null;
+    } catch (e, s) {
+      debugPrint('Failed to fetch remote user by username: $e\n$s');
+      return null;
+    } finally {
+      await remoteConnection?.close();
+    }
+  }
 }

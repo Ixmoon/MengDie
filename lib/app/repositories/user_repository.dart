@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../data/database/app_database.dart';
 import '../../data/database/daos/user_dao.dart';
 import '../../data/mappers/user_mapper.dart';
 import '../../domain/models/user.dart';
 import '../providers/auth_providers.dart';
+import '../../data/sync/sync_service.dart';
 
 /// 用户仓库
 ///
@@ -35,8 +37,23 @@ class UserRepository {
   /// [password] 密码。
   /// 如果凭证有效，返回 [User] 对象，否则返回 null。
   Future<User?> authenticate(String username, String password) async {
-    final driftUser = await _userDao.getUserByUsername(username);
+    var driftUser = await _userDao.getUserByUsername(username);
+
+    // If user doesn't exist locally, try fetching from remote
     if (driftUser == null) {
+      debugPrint("User '$username' not found locally. Trying to fetch from remote...");
+      final remoteUser = await SyncService.instance.fetchRemoteUserByUsername(username);
+      if (remoteUser != null) {
+        debugPrint("User '$username' found remotely. Saving to local database.");
+        // Insert the user into the local DB. Use insertOrReplace to be safe.
+        await _userDao.db.into(_userDao.db.users).insert(remoteUser.toCompanion(true), mode: InsertMode.insertOrReplace);
+        // Re-fetch from local DB to ensure we have a consistent object
+        driftUser = await _userDao.getUserByUsername(username);
+      }
+    }
+
+    if (driftUser == null) {
+      // User does not exist locally or remotely
       return null;
     }
 
@@ -45,6 +62,7 @@ class UserRepository {
       return UserMapper.fromDrift(driftUser);
     }
 
+    // User exists, but password was incorrect
     return null;
   }
   
@@ -100,11 +118,10 @@ class UserRepository {
     final guestDriftUser = await _userDao.getUserById(0);
     if (guestDriftUser != null) {
       return UserMapper.fromDrift(guestDriftUser);
-    } else {
-      // 如果ID为0的用户不存在，则创建一个
-      // 注意：密码字段为空字符串，因为游客不需要登录
-      return await createUser('guest_user_placeholder', '', id: 0);
-    }
+    } 
+    // 如果ID为0的用户不存在，则创建一个
+    // 注意：密码字段为空字符串，因为游客不需要登录
+    return await createUser('guest_user_placeholder', '', id: 0);
   }
 
   /// 将一个聊天ID添加给指定用户

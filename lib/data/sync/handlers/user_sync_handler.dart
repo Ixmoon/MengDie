@@ -14,7 +14,10 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
 
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
-    final rows = await (db.selectOnly(db.users)..addColumns([db.users.uuid, db.users.createdAt, db.users.updatedAt])).get();
+    final rows = await (db.selectOnly(db.users)
+          ..where(db.users.id.isNotValue(0))
+          ..addColumns([db.users.uuid, db.users.createdAt, db.users.updatedAt]))
+        .get();
     return rows.map((row) => SyncMeta(
       id: row.read(db.users.uuid)!,
       createdAt: row.read(db.users.createdAt)!,
@@ -38,7 +41,10 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   @override
   Future<void> push(List<dynamic> ids) async {
     if (ids.isEmpty) return;
-    final usersToPush = await (db.select(db.users)..where((t) => t.uuid.isIn(ids.cast<String>()))).get();
+    final usersToPush = await (db.select(db.users)
+          ..where((t) => t.uuid.isIn(ids.cast<String>()))
+          ..where((t) => t.id.isNotValue(0)))
+        .get();
     if (usersToPush.isEmpty) return;
 
     await _batchPushUsers(remoteConnection!, usersToPush);
@@ -48,7 +54,10 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   Future<void> pull(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM users WHERE uuid = ANY(@ids)'), parameters: {'ids': ids});
-    final usersToPull = rows.map((r) => DriftUser.fromJson(r.toColumnMap())).toList();
+    final usersToPull = rows
+        .map((r) => DriftUser.fromJson(r.toColumnMap()))
+        .where((user) => user.id != 0)
+        .toList();
     if (usersToPull.isEmpty) return;
 
     await db.batch((batch) {

@@ -74,6 +74,8 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
     // 监听全局设置和同步设置的外部变化
     final globalSettings = ref.watch(globalSettingsProvider);
     final syncSettings = ref.watch(syncSettingsProvider);
+    final authState = ref.watch(authProvider);
+    final isGuest = authState.isGuestMode;
 
     // 如果外部状态发生变化（例如，通过其他方式同步），则更新本地状态
     // 我们只在 _isDirty 为 false 时执行此操作，以避免覆盖用户的当前输入
@@ -190,13 +192,15 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
                 ),
                 const Divider(height: 30),
 
-                Text('数据同步', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 10),
-                _SyncSettingsWidget(
-                  settings: _localSyncSettings,
-                  onChanged: _updateLocalSyncSettings,
-                ),
-                const Divider(height: 30),
+                if (!isGuest) ...[
+                  Text('数据同步', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 10),
+                  _SyncSettingsWidget(
+                    settings: _localSyncSettings,
+                    onChanged: _updateLocalSyncSettings,
+                  ),
+                  const Divider(height: 30),
+                ],
 
                Text('自动化', style: Theme.of(context).textTheme.titleLarge),
                const SizedBox(height: 10),

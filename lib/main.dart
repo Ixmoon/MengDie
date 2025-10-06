@@ -40,16 +40,6 @@ void main() async {
 	await container.read(themeModeProvider.notifier).init();
 	await container.read(syncSettingsProvider.notifier).init();
 
-	// --- 一次性数据恢复 ---
-	final prefs = await SharedPreferences.getInstance();
-	if (prefs.getBool('v1_templates_recovered') != true) {
-		final recoveredCount = await container.read(chatRepositoryProvider).recoverLostTemplates();
-		if (recoveredCount > 0) {
-			debugPrint('成功恢复 $recoveredCount 个丢失的模板。');
-		}
-		await prefs.setBool('v1_templates_recovered', true);
-	}
-
 	// 初始化 SyncService
 	final db = container.read(appDatabaseProvider);
 	SyncService.initialize(

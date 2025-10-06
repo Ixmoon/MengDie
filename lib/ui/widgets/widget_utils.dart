@@ -52,38 +52,92 @@ class _FullScreenTextEditorDialogState extends State<_FullScreenTextEditorDialog
 
   CodeEditorViewState? get editorState => _editorKey.currentState;
 
+  Future<void> _onClosePressed() async {
+    if (!mounted) return;
+
+    final hasChanges = editorState?.currentText != widget.initialText;
+
+    if (hasChanges) {
+      final result = await showDialog<bool?>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('保存更改?'),
+          content: const Text('您想在退出前保存您的更改吗?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false), // Don't save
+              child: const Text('不保存'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(null), // Cancel
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true), // Save
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+
+      if (result == true) {
+        // Save and pop
+        if (mounted) Navigator.of(context).pop(editorState!.currentText);
+      } else if (result == false) {
+        // Don't save and pop
+        if (mounted) Navigator.of(context).pop();
+      }
+      // If result is null (cancel), do nothing.
+    } else {
+      // No changes, just pop
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       insetPadding: EdgeInsets.zero,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: Scaffold(
-        backgroundColor: editorThemes[editorState?.currentTheme ?? 'monokai-sublime']?['root']?.backgroundColor,
-        appBar: AppBar(
-          title: Text(widget.title),
-          leading: IconButton(
-            icon: const Icon(Icons.close),
-            tooltip: '关闭',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          actions: [
-            // --- Language Selector ---
-            DropdownSelector<String>(
-              icon: Icons.code,
-              value: editorState?.currentLanguage ?? widget.initialLanguage,
-              values: editorLanguages.keys,
-              onChanged: (lang) {
-                editorState?.changeLanguage(lang!, onLanguageChanged: () {
-                  setState(() {}); // Rebuild the dialog to update the language dropdown
-                });
-              },
+      child: PopScope(
+        canPop: false,
+        onPopInvoked: (didPop) {
+          if (didPop) return;
+          _onClosePressed();
+        },
+        child: Scaffold(
+          backgroundColor: editorThemes[editorState?.currentTheme ?? 'monokai-sublime']?['root']?.backgroundColor,
+          appBar: AppBar(
+            title: null, // 1. Remove title
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: '关闭',
+              onPressed: _onClosePressed, // 2. Add confirmation on exit
             ),
-            const SizedBox(width: 8),
+            actions: [
+              // --- Language Selector ---
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.code),
+                tooltip: '切换语言',
+                onSelected: (lang) {
+                  editorState?.changeLanguage(lang, onLanguageChanged: () {
+                    setState(() {});
+                  });
+                },
+                itemBuilder: (context) => editorLanguages.keys
+                    .map((lang) => CheckedPopupMenuItem<String>(
+                          value: lang,
+                          checked: editorState?.currentLanguage == lang,
+                          child: Text(lang),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(width: 8),
 
-            // --- Restore Default ---
-            if (widget.defaultValue != null)
-              IconButton(
-                icon: const Icon(Icons.restore),
+              // --- Restore Default ---
+              if (widget.defaultValue != null)
+                IconButton(
+                  icon: const Icon(Icons.restore),
                 tooltip: '恢复默认值',
                 onPressed: () {
                   editorState?.resetText(widget.defaultValue!);
@@ -189,7 +243,7 @@ class _FullScreenTextEditorDialogState extends State<_FullScreenTextEditorDialog
           initialText: widget.initialText,
           initialLanguage: widget.initialLanguage,
         ),
-      ),
+      )),
     );
   }
 }
