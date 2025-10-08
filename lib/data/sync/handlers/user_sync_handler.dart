@@ -15,7 +15,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
     final rows = await (db.selectOnly(db.users)
-          ..where(db.users.id.isNotValue(0))
+          ..where(db.users.id.isNotValue(0)) // Always exclude guest user
           ..addColumns([db.users.uuid, db.users.createdAt, db.users.updatedAt]))
         .get();
     return rows.map((row) => SyncMeta(

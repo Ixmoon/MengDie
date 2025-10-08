@@ -7,14 +7,26 @@ import 'base_sync_handler.dart';
 import '../../database/type_converters.dart';
 
 class ChatSyncHandler extends BaseSyncHandler<ChatData> {
-  ChatSyncHandler(super.db, super.remoteConnection);
+  final int userId;
+  ChatSyncHandler(super.db, super.remoteConnection, this.userId);
 
   @override
   String get entityType => 'chats';
 
+  Future<List<int>> _getChatIdsForCurrentUser() async {
+    if (userId == 0) return [];
+    final user = await (db.select(db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
+    return user?.chatIds ?? [];
+  }
+
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
-    final rows = await (db.selectOnly(db.chats)..addColumns([db.chats.id, db.chats.createdAt, db.chats.updatedAt])).get();
+    final chatIds = await _getChatIdsForCurrentUser();
+    if (chatIds.isEmpty) return [];
+
+    final query = db.selectOnly(db.chats)..where(db.chats.id.isIn(chatIds));
+    final rows = await (query..addColumns([db.chats.id, db.chats.createdAt, db.chats.updatedAt])).get();
+    
     return rows.map((row) => SyncMeta(
       id: row.read(db.chats.id)!,
       createdAt: row.read(db.chats.createdAt)!,
@@ -24,22 +36,17 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
 
   @override
   Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
-    Result rows;
-    if (localIds != null) {
-      // Optimization for conflict resolution: only fetch remote metas for corresponding local IDs.
-      if (localIds.isEmpty) {
-        return [];
-      }
-      rows = await remoteConnection!.execute(
-        Sql.named('SELECT id, created_at, updated_at FROM chats WHERE id = ANY(@ids)'),
-        parameters: {'ids': localIds},
-      );
-    } else {
-      // Fetch all remote metas when no specific IDs are provided (for initial merge-sync).
-      rows = await remoteConnection!.execute(
-        Sql.named('SELECT id, created_at, updated_at FROM chats'),
-      );
-    }
+    final chatIds = await _getChatIdsForCurrentUser();
+    if (chatIds.isEmpty) return [];
+
+    // Determine the final set of IDs to query remotely
+    final idsToQuery = localIds?.cast<int>().where((id) => chatIds.contains(id)).toList() ?? chatIds;
+    if (idsToQuery.isEmpty) return [];
+
+    final rows = await remoteConnection!.execute(
+      Sql.named('SELECT id, created_at, updated_at FROM chats WHERE id = ANY(@ids)'),
+      parameters: {'ids': idsToQuery},
+    );
 
     return rows.map((row) => SyncMeta(
       id: row[0] as int,

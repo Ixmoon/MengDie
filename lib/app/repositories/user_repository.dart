@@ -37,23 +37,11 @@ class UserRepository {
   /// [password] 密码。
   /// 如果凭证有效，返回 [User] 对象，否则返回 null。
   Future<User?> authenticate(String username, String password) async {
-    var driftUser = await _userDao.getUserByUsername(username);
-
-    // If user doesn't exist locally, try fetching from remote
-    if (driftUser == null) {
-      debugPrint("User '$username' not found locally. Trying to fetch from remote...");
-      final remoteUser = await SyncService.instance.fetchRemoteUserByUsername(username);
-      if (remoteUser != null) {
-        debugPrint("User '$username' found remotely. Saving to local database.");
-        // Insert the user into the local DB. Use insertOrReplace to be safe.
-        await _userDao.db.into(_userDao.db.users).insert(remoteUser.toCompanion(true), mode: InsertMode.insertOrReplace);
-        // Re-fetch from local DB to ensure we have a consistent object
-        driftUser = await _userDao.getUserByUsername(username);
-      }
-    }
+    final driftUser = await _userDao.getUserByUsername(username);
 
     if (driftUser == null) {
-      // User does not exist locally or remotely
+      // User does not exist locally. With the new sync model, we don't fetch single users.
+      // The user must exist in the local DB via a full sync to be able to log in.
       return null;
     }
 

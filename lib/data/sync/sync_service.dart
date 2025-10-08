@@ -137,8 +137,8 @@ class SyncService {
     // Handlers are needed for the resolution logic
     final userId = SettingsService.instance.currentUserId;
     final apiConfigHandler = ApiConfigSyncHandler(_db, remoteConnection, userId);
-    final chatHandler = ChatSyncHandler(_db, remoteConnection);
-    final messageHandler = MessageSyncHandler(_db, remoteConnection);
+    final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
+    final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
     final userHandler = UserSyncHandler(_db, remoteConnection);
 
     // Resolve conflicts in dependency order, but only on the conflicting subset of data.
@@ -205,8 +205,8 @@ class SyncService {
       debugPrint('Syncing data for userId: $userId');
 
       final apiConfigHandler = ApiConfigSyncHandler(_db, remoteConnection, userId);
-      final chatHandler = ChatSyncHandler(_db, remoteConnection);
-      final messageHandler = MessageSyncHandler(_db, remoteConnection);
+      final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
+      final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
       final userHandler = UserSyncHandler(_db, remoteConnection);
 
       debugPrint("Fetching local and remote metadata...");
@@ -314,8 +314,8 @@ class SyncService {
 
     debugPrint("Initializing in-memory snapshot cache...");
     final tempApiConfigHandler = ApiConfigSyncHandler(_db, null, SettingsService.instance.currentUserId);
-    final tempChatHandler = ChatSyncHandler(_db, null);
-    final tempMessageHandler = MessageSyncHandler(_db, null);
+    final tempChatHandler = ChatSyncHandler(_db, null, SettingsService.instance.currentUserId);
+    final tempMessageHandler = MessageSyncHandler(_db, null, SettingsService.instance.currentUserId);
     final tempUserHandler = UserSyncHandler(_db, null);
 
     _snapshotCache = {
@@ -333,8 +333,8 @@ class SyncService {
   }) async {
     debugPrint("Updating in-memory snapshot cache...");
     final tempApiConfigHandler = ApiConfigSyncHandler(_db, null, SettingsService.instance.currentUserId);
-    final tempChatHandler = ChatSyncHandler(_db, null);
-    final tempMessageHandler = MessageSyncHandler(_db, null);
+    final tempChatHandler = ChatSyncHandler(_db, null, SettingsService.instance.currentUserId);
+    final tempMessageHandler = MessageSyncHandler(_db, null, SettingsService.instance.currentUserId);
     final tempUserHandler = UserSyncHandler(_db, null);
 
     final Map<String, DateTime> apiConfigSnapshotData;
@@ -437,8 +437,8 @@ class SyncService {
       debugPrint('Performing initial merge-sync for userId: $userId');
 
       final apiConfigHandler = ApiConfigSyncHandler(_db, remoteConnection, userId);
-      final chatHandler = ChatSyncHandler(_db, remoteConnection);
-      final messageHandler = MessageSyncHandler(_db, remoteConnection);
+      final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
+      final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
       final userHandler = UserSyncHandler(_db, remoteConnection);
 
       debugPrint("Fetching local and remote metadata for merge...");
@@ -535,8 +535,8 @@ class SyncService {
   Future<bool> _performDifferentialPush() async {
     debugPrint("Starting differential push of local changes...");
     final tempApiConfigHandler = ApiConfigSyncHandler(_db, null, SettingsService.instance.currentUserId);
-    final tempChatHandler = ChatSyncHandler(_db, null);
-    final tempMessageHandler = MessageSyncHandler(_db, null);
+    final tempChatHandler = ChatSyncHandler(_db, null, SettingsService.instance.currentUserId);
+    final tempMessageHandler = MessageSyncHandler(_db, null, SettingsService.instance.currentUserId);
     final tempUserHandler = UserSyncHandler(_db, null);
     
     try {
@@ -586,8 +586,8 @@ class SyncService {
         remoteConnection = await _remoteConnectionFactory();
         final userId = SettingsService.instance.currentUserId;
         final apiConfigHandler = ApiConfigSyncHandler(_db, remoteConnection, userId);
-        final chatHandler = ChatSyncHandler(_db, remoteConnection);
-        final messageHandler = MessageSyncHandler(_db, remoteConnection);
+        final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
+        final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
         final userHandler = UserSyncHandler(_db, remoteConnection);
 
         // Step 3: Resolve conflicts for NEW items before pushing
@@ -732,33 +732,50 @@ class SyncService {
       debugPrint('Error during remote orphan message cleanup: ${e.toString()}\n${s.toString()}');
     }
   }
-  /// Fetches a single user from the remote database by their username.
+
+  /// Synchronizes only the user data from the remote server.
   ///
-  /// This is useful for multi-device login, where a user might exist remotely
-  /// but not on the local device yet.
-  Future<DriftUser?> fetchRemoteUserByUsername(String username) async {
+  /// This method is designed to be called from the login screen on a new device,
+  /// where only user information is needed to populate the login form. It does
+  /// not sync chats, messages, or API configs to prevent data inconsistency
+  /// before a user is properly authenticated.
+  Future<void> syncAllUsers() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
-      debugPrint("Remote sync is disabled. Cannot fetch remote user.");
-      return null;
+      debugPrint("Remote sync is disabled. Cannot sync users.");
+      return;
     }
+    debugPrint("Starting user-only synchronization...");
 
     Connection? remoteConnection;
     try {
       remoteConnection = await _remoteConnectionFactory();
-      final result = await remoteConnection.execute(
-        Sql.named('SELECT * FROM users WHERE username = @username'),
-        parameters: {'username': username},
-      );
+      final userHandler = UserSyncHandler(_db, remoteConnection);
 
-      if (result.isNotEmpty) {
-        final userMap = result.first.toColumnMap();
-        return DriftUser.fromJson(userMap);
+      // 1. Fetch metadata
+      final localMetas = await userHandler.getLocalMetas();
+      final remoteMetas = await userHandler.getRemoteMetas();
+
+      // 2. Compute actions (only pull/create locally)
+      final actions = _computeSyncActions(localMetas: localMetas, remoteMetas: remoteMetas);
+      final userIdsToPull = {...actions.toPull, ...actions.toCreateLocally}.toList();
+
+      if (userIdsToPull.isEmpty) {
+        debugPrint("No new or updated users to pull.");
+        return;
       }
-      return null;
+      
+      debugPrint("Pulling ${userIdsToPull.length} user(s)...");
+      
+      // 3. Execute pull
+      await userHandler.pull(userIdsToPull);
+
+      debugPrint("User-only synchronization finished.");
+
     } catch (e, s) {
-      debugPrint('Failed to fetch remote user by username: $e\n$s');
-      return null;
+      debugPrint('User-only synchronization failed: ${e.toString()}\n${s.toString()}');
+      // Re-throw to allow the UI to catch and display the error
+      rethrow;
     } finally {
       await remoteConnection?.close();
     }

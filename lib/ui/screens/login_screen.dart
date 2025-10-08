@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/providers/auth_providers.dart';
+import '../../app/providers/settings_providers.dart';
 import '../../data/sync/sync_service.dart';
 
 /// 登录屏幕
@@ -92,6 +93,77 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
    }
   }
 
+  Future<void> _syncUsers() async {
+    // Read the current sync settings
+    final syncSettings = ref.read(syncSettingsProvider);
+    String connectionString = syncSettings.connectionString;
+
+    // If the connection string is empty, prompt the user
+    if (connectionString.isEmpty) {
+      final newConnectionString = await _showConnectionStringDialog();
+      if (newConnectionString == null || newConnectionString.isEmpty) {
+        return; // User cancelled
+      }
+      connectionString = newConnectionString;
+      // Update and persist the new settings
+      ref.read(syncSettingsProvider.notifier).updateSettings(
+        syncSettings.copyWith(connectionString: connectionString, isEnabled: true)
+      );
+      // Give a moment for the provider to update before sync service reads it
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await SyncService.instance.syncAllUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('用户数据同步完成')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('同步失败: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<String?> _showConnectionStringDialog() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('输入数据库连接字符串'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'postgresql://user:password@host:port/dbname',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop(controller.text);
+              },
+              child: const Text('保存并同步'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,6 +209,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       TextButton(
                         onPressed: _enterGuestMode,
                         child: const Text('以游客身份继续'),
+                      ),
+                      const SizedBox(height: 24),
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        icon: const Icon(Icons.sync),
+                        label: const Text('同步远程用户数据'),
+                        onPressed: _syncUsers,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.secondary,
+                        ),
                       ),
                     ],
                   ),

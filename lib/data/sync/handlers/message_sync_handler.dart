@@ -7,17 +7,28 @@ import 'base_sync_handler.dart';
 import '../../database/type_converters.dart';
 
 class MessageSyncHandler extends BaseSyncHandler<MessageData> {
-  MessageSyncHandler(super.db, super.remoteConnection);
+  final int userId;
+  MessageSyncHandler(super.db, super.remoteConnection, this.userId);
 
   @override
   String get entityType => 'messages';
 
+  Future<List<int>> _getChatIdsForCurrentUser() async {
+    if (userId == 0) return [];
+    final user = await (db.select(db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
+    return user?.chatIds ?? [];
+  }
+
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
-    final rows = await (db.selectOnly(db.messages)..addColumns([db.messages.id, db.messages.timestamp, db.messages.updatedAt])).get();
+    final chatIds = await _getChatIdsForCurrentUser();
+    if (chatIds.isEmpty) return [];
+
+    final query = db.selectOnly(db.messages)..where(db.messages.chatId.isIn(chatIds));
+    final rows = await (query..addColumns([db.messages.id, db.messages.timestamp, db.messages.updatedAt])).get();
+    
     return rows.map((row) => SyncMeta(
       id: row.read(db.messages.id)!,
-      // For messages, timestamp is the creation time.
       createdAt: row.read(db.messages.timestamp)!,
       updatedAt: row.read(db.messages.updatedAt) ?? row.read(db.messages.timestamp)!
     )).toList();
@@ -25,24 +36,34 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
 
   @override
   Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
-    Result rows;
+    final chatIds = await _getChatIdsForCurrentUser();
+    if (chatIds.isEmpty) return [];
+
+    // We need to fetch messages that belong to the user's chats.
+    // The `localIds` (which are message IDs) is not sufficient alone.
+    // We must ensure we only fetch messages from chats owned by the current user.
+    
+    String whereClause;
+    Map<String, dynamic> parameters;
+
     if (localIds != null && localIds.isNotEmpty) {
-      // Optimization for conflict resolution: only fetch remote metas for corresponding local IDs.
-      rows = await remoteConnection!.execute(
-        Sql.named('SELECT id, "timestamp", updated_at FROM messages WHERE id = ANY(@ids)'),
-        parameters: {'ids': localIds},
-      );
+      // If specific message IDs are provided, filter by both message IDs and user's chat IDs.
+      whereClause = 'WHERE id = ANY(@ids) AND chat_id = ANY(@chat_ids)';
+      parameters = {'ids': localIds, 'chat_ids': chatIds};
     } else {
-      // Fetch all remote metas when no specific IDs are provided.
-      rows = await remoteConnection!.execute(
-        Sql.named('SELECT id, "timestamp", updated_at FROM messages'),
-      );
+      // If no specific message IDs, fetch all messages for the user's chats.
+      whereClause = 'WHERE chat_id = ANY(@chat_ids)';
+      parameters = {'chat_ids': chatIds};
     }
+
+    final rows = await remoteConnection!.execute(
+      Sql.named('SELECT id, "timestamp", updated_at FROM messages $whereClause'),
+      parameters: parameters,
+    );
     
     return rows.map((row) {
       final id = row[0] as int;
       final createdAt = row[1] as DateTime;
-      // Handle potential nulls from the database if the column was added recently
       final updatedAt = row[2] is DateTime ? row[2] as DateTime : createdAt;
       return SyncMeta(
         id: id,
