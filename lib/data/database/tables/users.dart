@@ -18,7 +18,7 @@ class Users extends Table {
   DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
 
   /// 记录最后更新时间的时间戳。
-  DateTimeColumn get updatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(() => DateTime.now())();
 
   /// 用户名，必须是唯一的。
   TextColumn get username => text().unique()();

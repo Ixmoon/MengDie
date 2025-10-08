@@ -10,22 +10,26 @@ class ContextConfig {
   final ContextManagementMode mode;
   final int maxTurns;
   final int? maxContextTokens;
+  final int? predictedTurnTokens; // New field for proactive summarization trigger
 
   const ContextConfig({
     this.mode = ContextManagementMode.turns,
     this.maxTurns = 10,
     this.maxContextTokens,
+    this.predictedTurnTokens = 2048, // Default to a reasonable value
   });
 
   ContextConfig copyWith({
     ContextManagementMode? mode,
     int? maxTurns,
     int? maxContextTokens,
+    int? predictedTurnTokens,
   }) {
     return ContextConfig(
       mode: mode ?? this.mode,
       maxTurns: maxTurns ?? this.maxTurns,
       maxContextTokens: maxContextTokens ?? this.maxContextTokens,
+      predictedTurnTokens: predictedTurnTokens ?? this.predictedTurnTokens,
     );
   }
 

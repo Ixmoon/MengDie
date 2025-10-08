@@ -31,6 +31,18 @@ import 'package:collection/collection.dart'; // For lastWhereOrNull
 import '../providers/repository_providers.dart';
 import '../providers/chat_state_providers.dart';
 
+class ContextPredictionResult {
+  final bool willExceed;
+  final List<Message> keptMessages;
+  final List<Message> droppedMessages;
+
+  ContextPredictionResult({
+    required this.willExceed,
+    required this.keptMessages,
+    required this.droppedMessages,
+  });
+}
+
 class ApiRequestContext {
   final List<LlmContent> contextParts;
   final String? carriedOverXml;
@@ -372,6 +384,54 @@ Future<ApiRequestContext> buildApiRequestContext({
   final List<Message> limitedHistoryForPrompt = historyResult.kept;
   final List<Message> droppedMessages = historyResult.dropped;
 
+  // Final check: Pre-emptively calculate if the current user message will cause
+  // the context to exceed the budget. If so, drop the oldest messages from the
+  // kept history and add them to the dropped list. This ensures the trigger
+  // logic in `executePreprocessing` fires at the correct time (when the budget
+  // is full), not one turn later.
+  switch (chat.contextConfig.mode) {
+    case ContextManagementMode.turns:
+      final turnLimit = (chat.contextConfig.maxTurns - fixedTurns) * 2;
+      // The +1 represents the incoming user message.
+      if (limitedHistoryForPrompt.length + 1 > turnLimit && limitedHistoryForPrompt.isNotEmpty) {
+        final oldestKeptMessage = limitedHistoryForPrompt.removeAt(0);
+        droppedMessages.insert(0, oldestKeptMessage);
+      }
+      break;
+    case ContextManagementMode.tokens:
+      // For token mode, we must perform a more expensive check.
+      final tokensForCurrentUserMessage = await llmService.countTokens(llmContext: [LlmContent.fromMessage(currentUserMessage)], apiConfig: apiConfig);
+
+      // We must recalculate the total tokens of the kept history to see if adding the new message fits.
+      final tokenFutures = limitedHistoryForPrompt.map((msg) =>
+        llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
+      );
+      final historyTokenCounts = await Future.wait(tokenFutures);
+      final currentHistoryTokens = historyTokenCounts.sum;
+
+      if (currentHistoryTokens + tokensForCurrentUserMessage > historyTokenBudget) {
+        int excessTokens = (currentHistoryTokens + tokensForCurrentUserMessage) - historyTokenBudget;
+        int tokensAccountedForDrop = 0;
+        int messagesToDropCount = 0;
+
+        // Iterate from oldest to newest, accumulating tokens to drop.
+        for (final tokenCount in historyTokenCounts) {
+          tokensAccountedForDrop += tokenCount;
+          messagesToDropCount++;
+          if (tokensAccountedForDrop >= excessTokens) {
+            break;
+          }
+        }
+
+        if (messagesToDropCount > 0) {
+          final messagesToDrop = limitedHistoryForPrompt.sublist(0, messagesToDropCount);
+          droppedMessages.insertAll(0, messagesToDrop);
+          limitedHistoryForPrompt.removeRange(0, messagesToDropCount);
+        }
+      }
+      break;
+  }
+
   // --- 4. Assemble the final context ---
   final List<LlmContent> finalContextParts = List.from(fixedContextParts);
   final bool summaryExists = chat.contextSummary != null && chat.contextSummary!.trim().isNotEmpty;
@@ -403,19 +463,18 @@ Future<ApiRequestContext> buildApiRequestContext({
       }
 
       // Add text parts, stripping ignored XML
-      for (final part in message.parts) {
-        if (part.type == MessagePartType.text && part.text != null) {
+      // 抽象统一转换
+      final allParts = LlmContent.toLlmParts(message.parts);
+      for (final part in allParts) {
+        if (part is LlmTextPart) {
           final filteredText = (message.id == messageIdToPreserveXml)
-              ? part.text!
-              : XmlProcessor.stripIgnoredXmlContent(part.text!, chat.xmlRules);
+              ? part.text
+              : XmlProcessor.stripIgnoredXmlContent(part.text, chat.xmlRules);
           if (filteredText.isNotEmpty) {
             modelParts.add(LlmTextPart(filteredText));
           }
         } else {
-          final llmPart = LlmContent.fromMessage(Message(chatId: chatId, role: MessageRole.model, parts: [part])).parts.firstOrNull;
-          if (llmPart != null) {
-            modelParts.add(llmPart);
-          }
+          modelParts.add(part);
         }
       }
       
@@ -438,26 +497,25 @@ Future<ApiRequestContext> buildApiRequestContext({
 
       // 1. 对于倒数第二条用户消息：附加合并后的XML（如果存在）
       if (isPreviousUserMessage && mergedXmlForInjection != null && mergedXmlForInjection.isNotEmpty) {
-        final userParts = LlmContent.fromMessage(message).parts.toList();
+        final userParts = LlmContent.toLlmParts(message.parts);
         userParts.add(LlmTextPart('\n$mergedXmlForInjection'));
         finalContextParts.add(LlmContent("user", userParts, messageId: message.id));
       
       // 2. 对于最后一条用户消息：应用覆盖并附加其自身的原始XML
       } else if (isLastUserMessage) {
         final List<LlmPart> combinedUserParts = [];
-        
         // 添加当前用户消息文本（或覆盖文本）
         final userText = lastMessageOverride ?? message.rawText;
         if (userText.isNotEmpty) {
           combinedUserParts.add(LlmTextPart(userText));
         }
-        
+        // 抽象统一转换
+        combinedUserParts.addAll(LlmContent.toLlmParts(message.parts.where((p) => p.type != MessagePartType.text).toList()));
         // 添加当前用户消息自身的原始XML
         final originalUserXml = chat.enableSecondaryXml ? message.secondaryXmlContent : message.originalXmlContent;
         if (originalUserXml != null && originalUserXml.isNotEmpty) {
           combinedUserParts.add(LlmTextPart(originalUserXml));
         }
-
         if (combinedUserParts.isNotEmpty) {
           finalContextParts.add(LlmContent("user", combinedUserParts, messageId: message.id));
         }
@@ -493,6 +551,7 @@ Future<ApiRequestContext> buildApiRequestContext({
     keptMessages: limitedHistoryForPrompt,
   );
 }
+
 
 /// A final processing step to merge consecutive LlmContent parts with the same role.
 /// This ensures the final context sent to the API adheres to the alternating user/model format.
@@ -548,5 +607,54 @@ List<LlmContent> _mergeConsecutiveMessages(List<LlmContent> originalParts) {
   mergedParts.add(accumulator);
 
   return mergedParts;
+}
+
+/// Predicts future context usage to proactively trigger summarization.
+Future<ContextPredictionResult> predictContextUsage({required int chatId}) async {
+  final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
+  final config = chat.contextConfig;
+
+  // Use a placeholder message for prediction.
+  final placeholderMessage = Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("prediction")]);
+
+  // Build the context as if a new message arrived.
+  final contextResult = await buildApiRequestContext(
+    chatId: chatId,
+    currentUserMessage: placeholderMessage,
+  );
+
+  bool willExceed = false;
+  switch (config.mode) {
+    case ContextManagementMode.turns:
+      // For turns, if any message was dropped by the pre-emptive check in buildApiRequestContext,
+      // it means we are at capacity and the next turn will exceed.
+      if (contextResult.droppedMessages.isNotEmpty) {
+        willExceed = true;
+      }
+      break;
+    case ContextManagementMode.tokens:
+      // For tokens, we check if the current kept context + predicted tokens exceeds the budget.
+      final llmService = _ref.read(llmServiceProvider);
+      final apiConfig = _ref.read(chatStateNotifierProvider(chatId).notifier).getEffectiveApiConfig();
+      
+      final tokenFutures = contextResult.keptMessages.map((msg) =>
+        llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
+      );
+      final historyTokenCounts = await Future.wait(tokenFutures);
+      final currentHistoryTokens = historyTokenCounts.sum;
+      
+      final predictedTokens = config.predictedTurnTokens ?? 2048;
+
+      if (currentHistoryTokens + predictedTokens > (config.maxContextTokens ?? 256000)) {
+        willExceed = true;
+      }
+      break;
+  }
+
+  return ContextPredictionResult(
+    willExceed: willExceed,
+    keptMessages: contextResult.keptMessages,
+    droppedMessages: contextResult.droppedMessages,
+  );
 }
 }

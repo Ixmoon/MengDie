@@ -41,7 +41,9 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
       'updated_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _coverImageBase64Meta =
       const VerificationMeta('coverImageBase64');
   @override
@@ -239,8 +241,6 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
     }
     if (data.containsKey('cover_image_base64')) {
       context.handle(
@@ -1039,7 +1039,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.title = const Value.absent(),
     this.systemPrompt = const Value.absent(),
     this.createdAt = const Value.absent(),
-    required DateTime updatedAt,
+    this.updatedAt = const Value.absent(),
     this.coverImageBase64 = const Value.absent(),
     this.backgroundImagePath = const Value.absent(),
     this.orderIndex = const Value.absent(),
@@ -1061,8 +1061,7 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     this.helpMeReplyPrompt = const Value.absent(),
     this.helpMeReplyApiConfigId = const Value.absent(),
     this.helpMeReplyTriggerMode = const Value.absent(),
-  })  : updatedAt = Value(updatedAt),
-        contextConfig = Value(contextConfig),
+  })  : contextConfig = Value(contextConfig),
         xmlRules = Value(xmlRules);
   static Insertable<ChatData> custom({
     Expression<int>? id,
@@ -1360,13 +1359,17 @@ class $MessagesTable extends Messages
   @override
   late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
       'timestamp', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-      'updated_at', aliasedName, true,
-      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _originalXmlContentMeta =
       const VerificationMeta('originalXmlContent');
   @override
@@ -1418,8 +1421,6 @@ class $MessagesTable extends Messages
     if (data.containsKey('timestamp')) {
       context.handle(_timestampMeta,
           timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta));
-    } else if (isInserting) {
-      context.missing(_timestampMeta);
     }
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
@@ -1457,7 +1458,7 @@ class $MessagesTable extends Messages
       timestamp: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}timestamp'])!,
       updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
       originalXmlContent: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}original_xml_content']),
       secondaryXmlContent: attachedDatabase.typeMapping.read(
@@ -1480,7 +1481,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
   final String rawText;
   final MessageRole role;
   final DateTime timestamp;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
   final String? originalXmlContent;
   final String? secondaryXmlContent;
   const MessageData(
@@ -1489,7 +1490,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       required this.rawText,
       required this.role,
       required this.timestamp,
-      this.updatedAt,
+      required this.updatedAt,
       this.originalXmlContent,
       this.secondaryXmlContent});
   @override
@@ -1502,9 +1503,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       map['role'] = Variable<String>($MessagesTable.$converterrole.toSql(role));
     }
     map['timestamp'] = Variable<DateTime>(timestamp);
-    if (!nullToAbsent || updatedAt != null) {
-      map['updated_at'] = Variable<DateTime>(updatedAt);
-    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || originalXmlContent != null) {
       map['original_xml_content'] = Variable<String>(originalXmlContent);
     }
@@ -1521,9 +1520,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       rawText: Value(rawText),
       role: Value(role),
       timestamp: Value(timestamp),
-      updatedAt: updatedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(updatedAt),
+      updatedAt: Value(updatedAt),
       originalXmlContent: originalXmlContent == null && nullToAbsent
           ? const Value.absent()
           : Value(originalXmlContent),
@@ -1542,7 +1539,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       rawText: serializer.fromJson<String>(json['rawText']),
       role: serializer.fromJson<MessageRole>(json['role']),
       timestamp: serializer.fromJson<DateTime>(json['timestamp']),
-      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       originalXmlContent:
           serializer.fromJson<String?>(json['originalXmlContent']),
       secondaryXmlContent:
@@ -1558,7 +1555,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
       'rawText': serializer.toJson<String>(rawText),
       'role': serializer.toJson<MessageRole>(role),
       'timestamp': serializer.toJson<DateTime>(timestamp),
-      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'originalXmlContent': serializer.toJson<String?>(originalXmlContent),
       'secondaryXmlContent': serializer.toJson<String?>(secondaryXmlContent),
     };
@@ -1570,7 +1567,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
           String? rawText,
           MessageRole? role,
           DateTime? timestamp,
-          Value<DateTime?> updatedAt = const Value.absent(),
+          DateTime? updatedAt,
           Value<String?> originalXmlContent = const Value.absent(),
           Value<String?> secondaryXmlContent = const Value.absent()}) =>
       MessageData(
@@ -1579,7 +1576,7 @@ class MessageData extends DataClass implements Insertable<MessageData> {
         rawText: rawText ?? this.rawText,
         role: role ?? this.role,
         timestamp: timestamp ?? this.timestamp,
-        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+        updatedAt: updatedAt ?? this.updatedAt,
         originalXmlContent: originalXmlContent.present
             ? originalXmlContent.value
             : this.originalXmlContent,
@@ -1642,7 +1639,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   final Value<String> rawText;
   final Value<MessageRole> role;
   final Value<DateTime> timestamp;
-  final Value<DateTime?> updatedAt;
+  final Value<DateTime> updatedAt;
   final Value<String?> originalXmlContent;
   final Value<String?> secondaryXmlContent;
   const MessagesCompanion({
@@ -1660,14 +1657,13 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     required int chatId,
     required String rawText,
     required MessageRole role,
-    required DateTime timestamp,
+    this.timestamp = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.originalXmlContent = const Value.absent(),
     this.secondaryXmlContent = const Value.absent(),
   })  : chatId = Value(chatId),
         rawText = Value(rawText),
-        role = Value(role),
-        timestamp = Value(timestamp);
+        role = Value(role);
   static Insertable<MessageData> custom({
     Expression<int>? id,
     Expression<int>? chatId,
@@ -1698,7 +1694,7 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       Value<String>? rawText,
       Value<MessageRole>? role,
       Value<DateTime>? timestamp,
-      Value<DateTime?>? updatedAt,
+      Value<DateTime>? updatedAt,
       Value<String?>? originalXmlContent,
       Value<String?>? secondaryXmlContent}) {
     return MessagesCompanion(
@@ -1919,7 +1915,9 @@ class $ApiConfigsTable extends ApiConfigs
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
       'updated_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   @override
   List<GeneratedColumn> get $columns => [
         userId,
@@ -2059,8 +2057,6 @@ class $ApiConfigsTable extends ApiConfigs
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
     }
     return context;
   }
@@ -2643,12 +2639,11 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     this.toolConfig = const Value.absent(),
     this.useDefaultSafetySettings = const Value.absent(),
     this.createdAt = const Value.absent(),
-    required DateTime updatedAt,
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : name = Value(name),
         apiType = Value(apiType),
-        model = Value(model),
-        updatedAt = Value(updatedAt);
+        model = Value(model);
   static Insertable<ApiConfig> custom({
     Expression<int>? userId,
     Expression<String>? id,
@@ -2912,7 +2907,9 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
   @override
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
       'updated_at', aliasedName, false,
-      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      clientDefault: () => DateTime.now());
   static const VerificationMeta _usernameMeta =
       const VerificationMeta('username');
   @override
@@ -3022,8 +3019,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
-    } else if (isInserting) {
-      context.missing(_updatedAtMeta);
     }
     if (data.containsKey('username')) {
       context.handle(_usernameMeta,
@@ -3489,7 +3484,7 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
     this.id = const Value.absent(),
     this.uuid = const Value.absent(),
     this.createdAt = const Value.absent(),
-    required DateTime updatedAt,
+    this.updatedAt = const Value.absent(),
     required String username,
     required String passwordHash,
     this.chatIds = const Value.absent(),
@@ -3500,8 +3495,7 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
     this.resumePrompt = const Value.absent(),
     this.resumeApiConfigId = const Value.absent(),
     this.geminiApiKeys = const Value.absent(),
-  })  : updatedAt = Value(updatedAt),
-        username = Value(username),
+  })  : username = Value(username),
         passwordHash = Value(passwordHash);
   static Insertable<DriftUser> custom({
     Expression<int>? id,
@@ -3687,7 +3681,7 @@ typedef $$ChatsTableCreateCompanionBuilder = ChatsCompanion Function({
   Value<String?> title,
   Value<String?> systemPrompt,
   Value<DateTime> createdAt,
-  required DateTime updatedAt,
+  Value<DateTime> updatedAt,
   Value<String?> coverImageBase64,
   Value<String?> backgroundImagePath,
   Value<int?> orderIndex,
@@ -4189,7 +4183,7 @@ class $$ChatsTableTableManager extends RootTableManager<
             Value<String?> title = const Value.absent(),
             Value<String?> systemPrompt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
-            required DateTime updatedAt,
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<String?> coverImageBase64 = const Value.absent(),
             Value<String?> backgroundImagePath = const Value.absent(),
             Value<int?> orderIndex = const Value.absent(),
@@ -4288,8 +4282,8 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required int chatId,
   required String rawText,
   required MessageRole role,
-  required DateTime timestamp,
-  Value<DateTime?> updatedAt,
+  Value<DateTime> timestamp,
+  Value<DateTime> updatedAt,
   Value<String?> originalXmlContent,
   Value<String?> secondaryXmlContent,
 });
@@ -4299,7 +4293,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String> rawText,
   Value<MessageRole> role,
   Value<DateTime> timestamp,
-  Value<DateTime?> updatedAt,
+  Value<DateTime> updatedAt,
   Value<String?> originalXmlContent,
   Value<String?> secondaryXmlContent,
 });
@@ -4510,7 +4504,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String> rawText = const Value.absent(),
             Value<MessageRole> role = const Value.absent(),
             Value<DateTime> timestamp = const Value.absent(),
-            Value<DateTime?> updatedAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
             Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
@@ -4529,8 +4523,8 @@ class $$MessagesTableTableManager extends RootTableManager<
             required int chatId,
             required String rawText,
             required MessageRole role,
-            required DateTime timestamp,
-            Value<DateTime?> updatedAt = const Value.absent(),
+            Value<DateTime> timestamp = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<String?> originalXmlContent = const Value.absent(),
             Value<String?> secondaryXmlContent = const Value.absent(),
           }) =>
@@ -4620,7 +4614,7 @@ typedef $$ApiConfigsTableCreateCompanionBuilder = ApiConfigsCompanion Function({
   Value<String?> toolConfig,
   Value<bool> useDefaultSafetySettings,
   Value<DateTime> createdAt,
-  required DateTime updatedAt,
+  Value<DateTime> updatedAt,
   Value<int> rowid,
 });
 typedef $$ApiConfigsTableUpdateCompanionBuilder = ApiConfigsCompanion Function({
@@ -5009,7 +5003,7 @@ class $$ApiConfigsTableTableManager extends RootTableManager<
             Value<String?> toolConfig = const Value.absent(),
             Value<bool> useDefaultSafetySettings = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
-            required DateTime updatedAt,
+            Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ApiConfigsCompanion.insert(
@@ -5061,7 +5055,7 @@ typedef $$UsersTableCreateCompanionBuilder = UsersCompanion Function({
   Value<int> id,
   Value<String> uuid,
   Value<DateTime> createdAt,
-  required DateTime updatedAt,
+  Value<DateTime> updatedAt,
   required String username,
   required String passwordHash,
   Value<List<int>?> chatIds,
@@ -5320,7 +5314,7 @@ class $$UsersTableTableManager extends RootTableManager<
             Value<int> id = const Value.absent(),
             Value<String> uuid = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
-            required DateTime updatedAt,
+            Value<DateTime> updatedAt = const Value.absent(),
             required String username,
             required String passwordHash,
             Value<List<int>?> chatIds = const Value.absent(),

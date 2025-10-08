@@ -157,6 +157,38 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return;
     }
 
+    // --- 前台门卫：在发送前进行精确的上下文检查和阻塞式总结 ---
+    try {
+      // 1. 如果后台正在总结，等待它完成
+      if (state.isSummarizing) {
+        debugPrint("sendMessage ($chatId): Waiting for background summarization to complete...");
+        showTopMessage("正在等待后台总结完成...", duration: const Duration(seconds: 120));
+        while (state.isSummarizing && mounted) {
+          await Future.delayed(const Duration(milliseconds: 200));
+        }
+        showTopMessage("后台总结已完成。", backgroundColor: Colors.green);
+      }
+
+      // 2. 进行一次精确的、同步的发送前检查
+      final contextXmlService = ref.read(contextXmlServiceProvider);
+      final predictionResult = await contextXmlService.predictContextUsage(chatId: chatId);
+
+      // 3. 如果预测仍然会超限，触发一次阻塞式总结
+      if (predictionResult.willExceed) {
+        debugPrint("sendMessage ($chatId): Gatekeeper check failed. Forcing synchronous summarization...");
+        showTopMessage("上下文已满，正在强制同步总结...", duration: const Duration(seconds: 120));
+        // 直接调用并等待后台任务中的总结逻辑完成
+        await (this as dynamic).executePreprocessing(chat);
+        showTopMessage("强制总结已完成。", backgroundColor: Colors.green);
+      }
+    } catch (e) {
+      debugPrint("sendMessage ($chatId): Error during gatekeeper check: $e");
+      showTopMessage("发送前检查出错: $e", backgroundColor: Colors.red);
+      state = state.copyWith(isLoading: false); // Release lock on error
+      return;
+    }
+    // --- 前台门卫检查结束 ---
+
     // Determine the message to send for context, and the list of messages to save
     Message messageForContext;
     List<Message> messagesToSave = [];

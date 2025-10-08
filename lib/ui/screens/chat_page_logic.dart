@@ -55,7 +55,7 @@ class ChatPageLogic {
               if (isTextOnly) {
                 showEditMessageDialog(message);
               } else {
-                replaceAttachment(message);
+                replaceAttachment(message, part);
               }
             },
           )
@@ -323,7 +323,7 @@ class ChatPageLogic {
     );
   }
 
-  Future<void> replaceAttachment(Message messageToReplace) async {
+  Future<void> replaceAttachment(Message messageToReplace, MessagePart partToReplace) async {
     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -351,7 +351,12 @@ class ChatPageLogic {
           );
         }
         
-        await notifier.editMessage(messageToReplace.id, newParts: [newPart]);
+        final newParts = messageToReplace.parts.map((p) {
+          // Using reference equality, assuming the tapped part is passed correctly.
+          return p == partToReplace ? newPart : p;
+        }).toList();
+
+        await notifier.editMessage(messageToReplace.id, newParts: newParts);
       }
     } catch (e) {
       debugPrint("Error replacing attachment: $e");

@@ -21,6 +21,7 @@ class ChatScreenState {
   final List<List<String>>? helpMeReplySuggestions; // Changed to a list of lists for pagination
   final int helpMeReplyPageIndex; // To track the current page of suggestions
   final bool isProcessingInBackground; // New state for background tasks
+  final bool isSummarizing; // New state to indicate a summarization task is running.
   final bool isGeneratingSuggestions; // New state specifically for the "Help Me Reply" feature
   final bool isCancelled; // Flag to indicate if the current generation has been cancelled.
   final Message? streamingMessage; // Holds the message being streamed, for UI display only
@@ -53,6 +54,7 @@ class ChatScreenState {
     this.helpMeReplySuggestions,
     this.helpMeReplyPageIndex = 0,
     this.isProcessingInBackground = false, // Default to false
+    this.isSummarizing = false,
     this.isGeneratingSuggestions = false,
     this.isCancelled = false,
     this.streamingMessage,
@@ -91,6 +93,7 @@ class ChatScreenState {
     bool clearHelpMeReplySuggestions = false,
     int? helpMeReplyPageIndex,
     bool? isProcessingInBackground,
+    bool? isSummarizing,
     bool? isGeneratingSuggestions,
     bool? isCancelled,
     Message? streamingMessage,
@@ -125,6 +128,7 @@ class ChatScreenState {
       helpMeReplySuggestions: clearHelpMeReplySuggestions ? null : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
       helpMeReplyPageIndex: clearHelpMeReplySuggestions ? 0 : (helpMeReplyPageIndex ?? this.helpMeReplyPageIndex),
       isProcessingInBackground: isProcessingInBackground ?? this.isProcessingInBackground,
+      isSummarizing: isSummarizing ?? this.isSummarizing,
       isGeneratingSuggestions: isGeneratingSuggestions ?? this.isGeneratingSuggestions,
       isCancelled: isCancelled ?? this.isCancelled,
       streamingMessage: clearStreamingMessage ? null : streamingMessage ?? this.streamingMessage,

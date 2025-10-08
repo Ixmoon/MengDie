@@ -73,13 +73,16 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM chats WHERE id = ANY(@ids)'), parameters: {'ids': chatIds});
     final chatsToPull = rows.map((r) {
         final map = r.toColumnMap();
+        final now = DateTime.now();
+        final created = map['created_at'] ?? now;
+        final updated = map['updated_at'] ?? created;
         return ChatData(
           id: map['id'],
           title: map['title'],
           systemPrompt: map['system_prompt'],
-          createdAt: map['created_at'] ?? DateTime.now(),
-          updatedAt: map['updated_at'] ?? DateTime.now(),
-          coverImageBase64: null, // coverImageBase64 is not synced.
+          createdAt: created,
+          updatedAt: updated,
+          coverImageBase64: null,
           backgroundImagePath: map['background_image_path'],
           orderIndex: map['order_index'],
           isFolder: map['is_folder'],

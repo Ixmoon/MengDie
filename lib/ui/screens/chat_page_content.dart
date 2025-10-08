@@ -254,7 +254,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
               if (isTextOnly) {
                 _showEditMessageDialog(message);
               } else {
-                pageNotifier.replaceAttachment(message);
+                pageNotifier.replaceAttachment(message, part);
               }
             },
           )

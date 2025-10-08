@@ -2,7 +2,7 @@
 // 这些结构旨在将核心业务逻辑与特定 LLM API (如 Gemini, OpenAI) 的实现细节解耦。
 
 import 'package:flutter/foundation.dart';
-
+import 'dart:convert';
 // 导入本地数据模型，例如用于数据转换的 Message 和 MessagePart
 import '../../domain/models/models.dart';
 
@@ -21,31 +21,58 @@ class LlmContent {
 
   /// 从本地的 Message 对象创建一个 LlmContent 实例。
   factory LlmContent.fromMessage(Message message) {
-    final parts = message.parts.map((part) {
+    final parts = LlmContent.toLlmParts(message.parts);
+    final roleString = message.role == MessageRole.user ? 'user' : 'model';
+    return LlmContent(roleString, parts, messageId: message.id);
+  }
+
+  /// 抽象统一转换：将 MessagePart 列表转换为 LlmPart 列表（支持 text/image/audio/generatedImage/file）
+  static List<LlmPart> toLlmParts(List<MessagePart> parts) {
+    return parts.map((part) {
       switch (part.type) {
         case MessagePartType.text:
-          return LlmTextPart(part.text!);
+          return part.text != null ? LlmTextPart(part.text!) : null;
         case MessagePartType.image:
-          return LlmDataPart(part.mimeType!, part.base64Data!);
-        case MessagePartType.audio:
-          return LlmAudioPart(part.mimeType!, part.base64Data!);
-        case MessagePartType.file:
-           // 假设未来 MessagePart 会包含 fileUri
-           // if (part.fileUri != null) {
-           //   return LlmFilePart(part.mimeType!, part.fileUri!);
-           // }
-           return null; // 当前暂时忽略
+          return (part.mimeType != null && part.base64Data != null)
+            ? LlmDataPart(part.mimeType!, part.base64Data!)
+            : null;
         case MessagePartType.generatedImage:
-          // 将生成的图片作为多模态上下文的一部分发送给 LLM。
-          // 这与处理用户上传的图片（MessagePartType.image）行为一致。
-          return LlmDataPart(part.mimeType!, part.base64Data!);
+          return (part.mimeType != null && part.base64Data != null)
+            ? LlmDataPart(part.mimeType!, part.base64Data!)
+            : null;
+        case MessagePartType.audio:
+          return (part.mimeType != null && part.base64Data != null)
+            ? LlmAudioPart(part.mimeType!, part.base64Data!)
+            : null;
+        case MessagePartType.file:
+          // PDF: 直接作为视觉内容传递
+          if (part.mimeType == 'application/pdf') {
+            if (part.base64Data != null) {
+              // 直接用 base64 传递 PDF 内容
+              return LlmDataPart(part.mimeType!, part.base64Data!);
+            }
+            return null;
+          }
+          // 其他文件类型：尝试解析 base64Data 为纯文本
+          if (part.base64Data != null && part.base64Data!.isNotEmpty) {
+            try {
+              final decoded = utf8.decode(base64.decode(part.base64Data!));
+              if (decoded.isNotEmpty) {
+                return LlmTextPart(decoded);
+              }
+            } catch (e) {
+              // 解码失败则跳过
+              return null;
+            }
+          }
+          // 兜底：如果 text 字段有内容则用 text
+          if (part.text != null && part.text!.isNotEmpty) {
+            return LlmTextPart(part.text!);
+          }
+          // 解析失败则跳过
+          return null;
       }
-    }).whereType<LlmPart>().toList(); // 使用 whereType 过滤掉 null
-
-    // 将本地的 MessageRole 转换为 API 期望的字符串角色 ("user" 或 "model")
-    final roleString = message.role == MessageRole.user ? 'user' : 'model';
-    
-    return LlmContent(roleString, parts, messageId: message.id);
+    }).whereType<LlmPart>().toList();
   }
 }
 

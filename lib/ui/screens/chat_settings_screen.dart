@@ -626,12 +626,29 @@ class _ContextManagementSettings extends ConsumerWidget {
             onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10))),
           ),
         if (contextConfig.mode == ContextManagementMode.tokens)
-          TextFormField(
-            key: ValueKey('maxTokens_${chat.id}'),
-            initialValue: contextConfig.maxContextTokens?.toString() ?? '',
-            decoration: const InputDecoration(labelText: '最大 Tokens (可选)', hintText: '留空则不限制', border: OutlineInputBorder()),
-            keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxContextTokens: int.tryParse(value)))),
+          Column(
+            children: [
+              TextFormField(
+                key: ValueKey('maxTokens_${chat.id}'),
+                initialValue: contextConfig.maxContextTokens?.toString() ?? '',
+                decoration: const InputDecoration(labelText: '最大 Tokens (可选)', hintText: '留空则不限制', border: OutlineInputBorder()),
+                keyboardType: TextInputType.number,
+                onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxContextTokens: int.tryParse(value)))),
+              ),
+              const SizedBox(height: 15),
+              TextFormField(
+                key: ValueKey('predictedTokens_${chat.id}'),
+                initialValue: contextConfig.predictedTurnTokens?.toString() ?? '2048',
+                decoration: const InputDecoration(
+                  labelText: '预测回合 Tokens',
+                  hintText: '用于后台总结的预测值',
+                  border: OutlineInputBorder(),
+                  helperText: '后台任务会用此值预测未来消耗，以提前触发总结。',
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(predictedTurnTokens: int.tryParse(value) ?? 2048))),
+              ),
+            ],
           ),
       ],
     );

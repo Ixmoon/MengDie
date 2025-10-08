@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:postgres/postgres.dart';
 
 import '../../database/app_database.dart';
@@ -55,7 +56,27 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     if (ids.isEmpty) return;
     final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM users WHERE uuid = ANY(@ids)'), parameters: {'ids': ids});
     final usersToPull = rows
-        .map((r) => DriftUser.fromJson(r.toColumnMap()))
+        .map((r) {
+          final map = r.toColumnMap();
+          // Key conversion from snake_case to camelCase for fromJson
+          final camelCaseMap = {
+            'id': map['id'],
+            'uuid': map['uuid'],
+            'createdAt': map['created_at'],
+            'updatedAt': map['updated_at'],
+            'username': map['username'],
+            'passwordHash': map['password_hash'],
+            'chatIds': const IntListConverter().fromSql(map['chat_ids']),
+            'enableAutoTitleGeneration': map['enable_auto_title_generation'],
+            'titleGenerationPrompt': map['title_generation_prompt'],
+            'titleGenerationApiConfigId': map['title_generation_api_config_id'],
+            'enableResume': map['enable_resume'],
+            'resumePrompt': map['resume_prompt'],
+            'resumeApiConfigId': map['resume_api_config_id'],
+            'geminiApiKeys': const StringListConverter().fromSql(map['gemini_api_keys']),
+          };
+          return DriftUser.fromJson(camelCaseMap);
+        })
         .where((user) => user.id != 0)
         .toList();
     if (usersToPull.isEmpty) return;

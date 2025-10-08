@@ -181,6 +181,7 @@ class ChatRepository {
   }
 
   /// 从一个现有聊天创建新聊天（作为模板），可以指定父文件夹。
+  /// 从一个模板新建聊天，原模板保留，新聊天归属指定文件夹（默认与模板一致），不会影响原模板显示
   Future<int> createChatFromTemplate(int templateChatId, {int? parentFolderId}) async {
     debugPrint("ChatRepository: 从模板 ID: $templateChatId 创建新聊天到文件夹 ID: $parentFolderId...");
     final templateChat = await getChat(templateChatId);
@@ -190,47 +191,43 @@ class ChatRepository {
 
     final now = DateTime.now();
 
-    // 使用 copyWith 创建一个新实例，并重置关键字段
     final newChat = templateChat.copyWith(
-      id: 0, // 关键：重置ID以创建新记录
-      title: templateChat.title ?? "无标题", // 使用模板的原始标题
-      createdAt: now, // 关键：设置为当前时间
-      updatedAt: now, // 关键：设置为当前时间
-      parentFolderId: parentFolderId, // 关键：设置新的父文件夹ID
-      orderIndex: null, // 确保新聊天置顶
-      backgroundImagePath: null, // 关键：从模板创建的聊天不是模板
+      id: 0,
+      title: templateChat.title ?? "无标题",
+      createdAt: now,
+      updatedAt: now,
+      parentFolderId: parentFolderId ?? templateChat.parentFolderId, // 默认与模板一致
+      orderIndex: null,
+      backgroundImagePath: null, // 新聊天不是模板
+      isFolder: false,
     );
 
-    // saveChat 将自动处理用户绑定
     return await saveChat(newChat);
   }
 
-  /// 统一的聊天衍生方法，用于处理分叉、克隆和模板创建。
-  ///
+  /// 统一的聊天衍生方法，用于分叉、克隆和模板创建。原聊天保留，新聊天/模板归属可指定文件夹，不影响原聊天显示。
   /// [sourceChatId] 原始聊天的 ID。
-  /// [upToMessageId]
-  ///   - `null`: 复制所有消息 (用于导出等场景)。
-  ///   - `0`: 不复制任何消息 (用于克隆、另存为模板)。
-  ///   - `> 0`: 复制到指定消息ID为止 (用于分叉)。
-  /// [asTemplate] 如果为 true, 新聊天将被标记为模板。
+  /// [upToMessageId] 复制消息范围。
+  /// [asTemplate] 是否另存为模板。
+  /// [targetFolderId] 新聊天/模板归属文件夹，默认与原聊天一致。
   Future<int> duplicateChat(
     int sourceChatId, {
     int? upToMessageId,
     bool asTemplate = false,
-    bool shouldClearSummary = true, // 新增参数，默认为 true 以保持旧行为的安全性
+    bool shouldClearSummary = true,
+    int? targetFolderId, // 新增参数
   }) async {
-    debugPrint("ChatRepository: duplicateChat from $sourceChatId, upToMessageId: $upToMessageId, asTemplate: $asTemplate");
+    debugPrint("ChatRepository: duplicateChat from $sourceChatId, upToMessageId: $upToMessageId, asTemplate: $asTemplate, targetFolderId: $targetFolderId");
 
     final originalChat = await getChat(sourceChatId);
     if (originalChat == null) {
-      throw Exception('找到ID为 $sourceChatId 的原始聊天');
+      throw Exception('找不到ID为 $sourceChatId 的原始聊天');
     }
 
     final now = DateTime.now();
     String newTitle;
     final baseTitle = originalChat.title ?? "无标题";
 
-    // 仅在非模板操作时增加标题序号
     if (!asTemplate) {
       final RegExp titleRegex = RegExp(r'^(.*)-(\d+)$');
       final Match? match = titleRegex.firstMatch(baseTitle);
@@ -253,25 +250,22 @@ class ChatRepository {
       title: Value(newTitle),
       createdAt: Value(now),
       updatedAt: Value(now),
-      // 核心修改：根据 shouldClearSummary 的值来决定是否保留或清除总结。
       contextSummary: shouldClearSummary ? const Value(null) : Value(originalChat.contextSummary),
       lastSummarizedMessageId: shouldClearSummary ? const Value(null) : Value(originalChat.lastSummarizedMessageId),
       orderIndex: const Value(null),
-      // 关键修复：如果是另存为模板，则强制将其放入根目录，忽略原始文件夹。
-      parentFolderId: asTemplate ? const Value(null) : Value(originalChat.parentFolderId),
+      parentFolderId: Value(targetFolderId ?? originalChat.parentFolderId), // 默认与原聊天一致
       backgroundImagePath: asTemplate ? const Value('/template/chat') : const Value(null),
+      isFolder: const Value(false),
     );
 
     int newChatId;
     if (upToMessageId == 0) {
-      // 不复制任何消息：直接保存新的 Chat 对象
       newChatId = await _chatDao.saveChat(newChatCompanion);
     } else {
-      // 复制部分或全部消息
       newChatId = await _chatDao.forkOrCloneChat(
         newChatCompanion,
         sourceChatId,
-        upToMessageId: upToMessageId, // null 表示全部复制
+        upToMessageId: upToMessageId,
       );
     }
 

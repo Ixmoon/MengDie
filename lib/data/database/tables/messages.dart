@@ -12,8 +12,8 @@ class Messages extends Table {
   
   TextColumn get rawText => text().named('raw_text')(); // Mapped from DTO, stores parts as JSON
   TextColumn get role => text().map(const MessageRoleConverter())();
-  DateTimeColumn get timestamp => dateTime()();
-  DateTimeColumn get updatedAt => dateTime().nullable()();
+  DateTimeColumn get timestamp => dateTime().clientDefault(() => DateTime.now())();
+  DateTimeColumn get updatedAt => dateTime().clientDefault(() => DateTime.now())();
 
   // Stores the original XML content if it was overwritten by post-processing
   TextColumn get originalXmlContent => text().nullable()();

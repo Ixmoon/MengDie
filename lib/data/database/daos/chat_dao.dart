@@ -27,12 +27,19 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
   }
 
   Future<int> saveChat(ChatsCompanion chat) {
-    final companionWithTime = chat.copyWith(updatedAt: Value(DateTime.now()));
+    final now = DateTime.now();
+    final companionWithTime = chat.copyWith(
+      createdAt: chat.createdAt.present ? chat.createdAt : Value(now),
+      updatedAt: chat.updatedAt.present ? chat.updatedAt : Value(now),
+    );
     return into(chats).insert(companionWithTime, mode: InsertMode.insertOrReplace);
   }
 
   Future<void> updateChat(ChatsCompanion chat) {
-    final companionWithTime = chat.copyWith(updatedAt: Value(DateTime.now()));
+    final now = DateTime.now();
+    final companionWithTime = chat.copyWith(
+      updatedAt: chat.updatedAt.present ? chat.updatedAt : Value(now),
+    );
     return (update(chats)..where((t) => t.id.equals(chat.id.value))).write(companionWithTime);
   }
 
@@ -170,18 +177,14 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
   Future<int> importChat(Chat chat, AppDatabase attachedDb, {int? parentFolderId}) async {
     final now = DateTime.now();
 
-    // The manual mapping to Drift models is no longer needed.
-    // We pass the domain models directly to the companion, and Drift's TypeConverters
-    // will handle the conversion to a JSON string for the database.
-
     final chatCompanion = ChatsCompanion.insert(
       title: Value(chat.title),
       systemPrompt: Value(chat.systemPrompt),
       isFolder: Value(chat.isFolder),
       contextConfig: chat.contextConfig,
       xmlRules: chat.xmlRules,
-      createdAt: Value(chat.createdAt),
-      updatedAt: chat.updatedAt,
+      createdAt: Value(chat.createdAt ?? now),
+      updatedAt: Value(chat.updatedAt ?? now),
       apiConfigId: Value(chat.apiConfigId),
       parentFolderId: Value(parentFolderId),
       orderIndex: Value(chat.orderIndex),
@@ -207,13 +210,14 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
       final List<MessagesCompanion> messageCompanions = [];
       for (final message in chat.messages) {
         final rawText = jsonEncode(message.parts.map((p) => p.toJson()).toList());
+        final msgNow = message.timestamp ?? now;
         messageCompanions.add(
           MessagesCompanion.insert(
             chatId: newChatId,
             rawText: rawText,
             role: message.role,
-            timestamp: message.timestamp, // Use timestamp from the imported message
-            updatedAt: Value(message.updatedAt ?? now),
+            timestamp: Value(msgNow),
+            updatedAt: Value(message.updatedAt ?? msgNow),
           )
         );
       }

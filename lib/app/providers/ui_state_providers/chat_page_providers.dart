@@ -159,7 +159,7 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     }
   }
 
-  Future<void> replaceAttachment(Message messageToReplace) async {
+  Future<void> replaceAttachment(Message messageToReplace, MessagePart partToReplace) async {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -187,7 +187,11 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
           );
         }
         
-        await notifier.editMessage(messageToReplace.id, newParts: [newPart]);
+        final newParts = messageToReplace.parts.map((p) {
+          return p == partToReplace ? newPart : p;
+        }).toList();
+
+        await notifier.editMessage(messageToReplace.id, newParts: newParts);
       }
     } catch (e) {
       debugPrint("Error replacing attachment: $e");

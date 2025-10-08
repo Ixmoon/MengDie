@@ -91,13 +91,14 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM messages WHERE id = ANY(@ids)'), parameters: {'ids': messageIds});
     final messagesToPull = rows.map((row) {
       final map = row.toColumnMap();
+      final now = DateTime.now().toUtc();
       return MessageData(
         id: map['id'],
         chatId: map['chat_id'],
         rawText: map['raw_text'],
         role: const MessageRoleConverter().fromSql(map['role']),
-        timestamp: map['timestamp'],
-        updatedAt: map['updated_at'],
+        timestamp: map['timestamp'] ?? now,
+        updatedAt: map['updated_at'] ?? map['timestamp'] ?? now,
         originalXmlContent: map['original_xml_content'],
         secondaryXmlContent: map['secondary_xml_content'],
       );

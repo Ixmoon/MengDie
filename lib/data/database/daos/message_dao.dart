@@ -63,20 +63,30 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
 
   /// Saves a new message or updates an existing one, ensuring `updatedAt` is handled correctly.
   Future<int> saveOrUpdateMessage(MessagesCompanion message) {
-    if (message.id.present && message.id.value > 0) {
-      // If an ID is present and valid, it's an update.
-      debugPrint("Updating message with id: ${message.id.value}");
-      return _updateWithTimestamp(message.id.value, message);
+    final now = DateTime.now().toUtc();
+    final companionWithTime = message.copyWith(
+      timestamp: message.timestamp.present ? message.timestamp : Value(now),
+      updatedAt: message.updatedAt.present ? message.updatedAt : Value(now),
+      id: message.id.present ? message.id : const Value.absent(),
+    );
+    if (companionWithTime.id.present && companionWithTime.id.value > 0) {
+      debugPrint("Updating message with id: ${companionWithTime.id.value}");
+      return _updateWithTimestamp(companionWithTime.id.value, companionWithTime);
     } else {
-      // Otherwise, it's a new message.
       debugPrint("Inserting new message");
-      return into(messages).insert(message.copyWith(id: const Value.absent()));
+      return into(messages).insert(companionWithTime);
     }
   }
 
   Future<void> saveMessages(List<MessagesCompanion> messageEntries) {
+    final now = DateTime.now().toUtc();
+    final safeEntries = messageEntries.map((msg) => msg.copyWith(
+      timestamp: msg.timestamp.present ? msg.timestamp : Value(now),
+      updatedAt: msg.updatedAt.present ? msg.updatedAt : Value(now),
+      id: msg.id.present ? msg.id : const Value.absent(),
+    )).toList();
     return batch((batch) {
-      batch.insertAll(messages, messageEntries);
+      batch.insertAll(messages, safeEntries);
     });
   }
 
@@ -96,20 +106,15 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
       DateTime newTimestamp;
 
       if (allMessagesForChat.isEmpty || index >= allMessagesForChat.length) {
-        // Insert at the end
         newTimestamp = DateTime.now().toUtc();
       } else if (index <= 0) {
-        // Insert at the beginning
         final firstTimestamp = allMessagesForChat.first.timestamp;
         newTimestamp = firstTimestamp.subtract(const Duration(milliseconds: 1));
       } else {
-        // Insert in the middle
         final prevTimestamp = allMessagesForChat[index - 1].timestamp;
         final nextTimestamp = allMessagesForChat[index].timestamp;
         final middleMillis = (prevTimestamp.millisecondsSinceEpoch + nextTimestamp.millisecondsSinceEpoch) ~/ 2;
         newTimestamp = DateTime.fromMillisecondsSinceEpoch(middleMillis, isUtc: true);
-        
-        // Ensure timestamp is unique, though extremely unlikely to collide.
         if (newTimestamp.isAtSameMomentAs(prevTimestamp) || newTimestamp.isAtSameMomentAs(nextTimestamp)) {
           newTimestamp = nextTimestamp.subtract(const Duration(milliseconds: 1));
         }
@@ -117,7 +122,8 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
 
       final companionWithTimestamp = newMessage.copyWith(
         timestamp: Value(newTimestamp),
-        id: const Value.absent(), // Ensure it's an insert
+        updatedAt: newMessage.updatedAt.present ? newMessage.updatedAt : Value(newTimestamp),
+        id: const Value.absent(),
       );
 
       return await into(messages).insert(companionWithTimestamp);
