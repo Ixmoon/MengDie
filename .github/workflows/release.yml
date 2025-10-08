@@ -93,6 +93,8 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     needs: [build-android, build-windows] # 依赖前两个任务
+    permissions:
+      contents: write # 授予 GITHUB_TOKEN 写权限以创建 Release
     steps:
       - name: Download Android APK
         uses: actions/download-artifact@v4
