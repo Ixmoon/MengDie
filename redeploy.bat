@@ -3,25 +3,23 @@ chcp 65001 > nul
 setlocal enabledelayedexpansion
 
 REM ============================================================================
-REM            Flutter App One-Click Deployment Script
+REM            Flutter App One-Click Deployment Script (Final Version)
 REM ============================================================================
 REM
 REM  此脚本会自动执行以下操作:
 REM  1. 检查 gh-cli 是否已登录。
 REM  2. 检查签名密钥文件是否存在。
-REM  3. 更新 GitHub Secrets:
-REM     - `KEYSTORE_BASE64`:     签名密钥库 (JKS)，Base64 编码。
-REM     - `KEY_ALIAS`:           密钥别名。
-REM     - `KEY_PASSWORD`:        密钥密码。
-REM     - `STORE_PASSWORD`:      密钥库密码。
-REM  4. 提示输入版本号和更新日志。
-REM  5. 触发 'release.yml' 工作流来构建和发布应用。
+REM  3. 使用 PowerShell 生成纯净的 Base64 编码。
+REM  4. 更新 GitHub Secrets。
+REM  5. 提示输入版本号和更新日志。
+REM  6. 触发 'release.yml' 工作流来构建和发布应用。
 REM
 REM ============================================================================
 
-REM --- 配置变量 (如果需要，可在此处修改) ---
+REM --- 配置变量 ---
 SET KEYSTORE_FILE=keystore.jks
 SET WORKFLOW_FILE=release.yml
+SET TARGET_BRANCH=beta
 
 REM --- 1. 检查 gh-cli 登录状态 ---
 echo 正在检查 GitHub CLI 登录状态...
@@ -48,8 +46,8 @@ REM --- 3. 更新机密信息 ---
 echo  [96m--- 准备更新 GitHub Secrets --- [0m
 echo.
 
-echo 正在对 '%KEYSTORE_FILE%' 进行 Base64 编码...
-certutil -encode -f "%KEYSTORE_FILE%" keystore.b64 > nul
+echo 正在使用 PowerShell 对 '%KEYSTORE_FILE%' 进行纯净的 Base64 编码...
+powershell -Command "[convert]::ToBase64String([IO.File]::ReadAllBytes('%KEYSTORE_FILE%'))" > keystore.b64
 echo 编码完成。
 echo.
 
@@ -97,8 +95,8 @@ set /p VERSION="请输入版本号 (例如: 1.0.1): "
 set /p CHANGELOG="请输入此版本的更新日志: "
 echo.
 
-echo 正在触发 '%WORKFLOW_FILE%'...
-gh workflow run %WORKFLOW_FILE% --ref main -f version=%VERSION% -f changelog="%CHANGELOG%"
+echo 正在从 '%TARGET_BRANCH%' 分支触发 '%WORKFLOW_FILE%'...
+gh workflow run %WORKFLOW_FILE% --ref %TARGET_BRANCH% -f version=%VERSION% -f changelog="%CHANGELOG%"
 if %errorlevel% neq 0 (
     echo  [91m错误: 触发工作流失败。 [0m
     goto :end
