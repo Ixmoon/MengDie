@@ -46,6 +46,7 @@ dependencies:
   web_socket_channel: ^3.0.3
   flutter_highlight: ^0.7.0
   flutter_code_editor: ^0.3.5
+  cupertino_icons: ^1.0.2 # Add cupertino_icons dependency
 
 
 dev_dependencies:
