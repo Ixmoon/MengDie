@@ -2,8 +2,6 @@
 
 name: Release Flutter App
 
-# 触发条件：
-# 1. workflow_dispatch: 允许手动从 Actions 页面或通过 API 触发
 on:
   workflow_dispatch:
     inputs:
@@ -17,33 +15,28 @@ on:
         default: '常规更新。'
 
 jobs:
-  build-and-release:
+  # --- Job 1: 构建 Android APK ---
+  build-android:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. 检出代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 设置 Java 环境
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. 设置 Flutter 环境
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      # 4. 获取 Flutter 依赖
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # 5. 解码签名密钥并创建 key.properties
-      - name: Decode Keystore and Create key.properties
+      - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -56,15 +49,69 @@ jobs:
           echo "storePassword=$STORE_PASSWORD" >> android/key.properties
           echo "$KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
 
-      # 6. 构建签名的 Release APK
-      - name: Build Release APK
-        run: flutter build apk --release
+      - name: Build Release APK (ARM64)
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
 
-      # 7. 创建 GitHub Release 并上传 APK
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/app/outputs/flutter-apk/app-release-arm64.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: build/app/outputs/flutter-apk/app-release-arm64.apk
+
+  # --- Job 2: 构建 Windows 安装包 ---
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      - name: Archive Windows Release
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release -DestinationPath build\windows\x64\runner\Release.zip
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: build/windows/x64/runner/Release.zip
+
+  # --- Job 3: 创建 Release 并上传所有产物 ---
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-android, build-windows] # 依赖前两个任务
+    steps:
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/android
+
+      - name: Download Windows Release
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: artifacts/windows
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
           name: Release v${{ github.event.inputs.version }}
           body: ${{ github.event.inputs.changelog }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            artifacts/android/app-release-arm64.apk
+            artifacts/windows/Release.zip
