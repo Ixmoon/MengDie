@@ -54,7 +54,8 @@ jobs:
           echo "keyAlias=$KEY_ALIAS" >> android/key.properties
           echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
           echo "storePassword=$STORE_PASSWORD" >> android/key.properties
-          echo $KEYSTORE_BASE64 | base64 --decode -i > android/upload-keystore.jks
+          echo "$KEYSTORE_BASE64" > keystore.b64
+          base64 --decode -i keystore.b64 > android/upload-keystore.jks
 
       # 6. 构建签名的 Release APK
       - name: Build Release APK
