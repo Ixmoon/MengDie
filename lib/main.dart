@@ -55,6 +55,10 @@ void main() async {
 	   debugPrint('Initial sync failed: $e');
 	 });
 
+	// 读取 ChatRepositoryProvider 以触发其构造函数中的清理逻辑。
+	// 这是一个“即发即忘”的操作，因为它在构造函数内部异步执行。
+	container.read(chatRepositoryProvider);
+
 
 	// 运行 Flutter 应用。
 	// 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，

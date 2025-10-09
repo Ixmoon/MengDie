@@ -8,10 +8,13 @@ part of 'context_config.dart';
 
 ContextConfig _$ContextConfigFromJson(Map<String, dynamic> json) =>
     ContextConfig(
-      mode: $enumDecodeNullable(_$ContextManagementModeEnumMap, json['mode']) ??
+      mode:
+          $enumDecodeNullable(_$ContextManagementModeEnumMap, json['mode']) ??
           ContextManagementMode.turns,
       maxTurns: (json['maxTurns'] as num?)?.toInt() ?? 10,
       maxContextTokens: (json['maxContextTokens'] as num?)?.toInt(),
+      predictedTurnTokens:
+          (json['predictedTurnTokens'] as num?)?.toInt() ?? 2048,
     );
 
 Map<String, dynamic> _$ContextConfigToJson(ContextConfig instance) =>
@@ -19,6 +22,7 @@ Map<String, dynamic> _$ContextConfigToJson(ContextConfig instance) =>
       'mode': _$ContextManagementModeEnumMap[instance.mode]!,
       'maxTurns': instance.maxTurns,
       'maxContextTokens': instance.maxContextTokens,
+      'predictedTurnTokens': instance.predictedTurnTokens,
     };
 
 const _$ContextManagementModeEnumMap = {

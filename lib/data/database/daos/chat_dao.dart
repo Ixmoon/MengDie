@@ -218,6 +218,8 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
             role: message.role,
             timestamp: Value(msgNow),
             updatedAt: Value(message.updatedAt ?? msgNow),
+            originalXmlContent: Value(message.originalXmlContent),
+            secondaryXmlContent: Value(message.secondaryXmlContent),
           )
         );
       }
@@ -283,5 +285,40 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     final query = select(chats)
       ..where((t) => t.backgroundImagePath.like('%/template%') & t.parentFolderId.isNotNull());
     return query.get();
+  }
+
+  /// 查找特定父文件夹下的同名模板文件夹。
+  Future<ChatData?> findTemplateFolder(String title, int? parentId) {
+    final query = select(chats)
+      ..where((t) => t.title.equals(title) &
+                     t.isFolder.equals(true) &
+                     t.backgroundImagePath.equals('/template/folder'));
+    if (parentId == null) {
+      query.where((t) => t.parentFolderId.isNull());
+    } else {
+      query.where((t) => t.parentFolderId.equals(parentId));
+    }
+    return query.getSingleOrNull();
+  }
+
+  /// 将所有 parentFolderId 指向不存在的文件夹的项目移动到根目录。
+  Future<int> cleanUpOrphanedItems() async {
+    final allFolderIds = await (select(chats)..where((t) => t.isFolder.equals(true))).map((c) => c.id).get();
+    final Set<int> folderIdSet = Set.from(allFolderIds);
+
+    final orphanedItems = await (select(chats)
+      ..where((t) => t.parentFolderId.isNotNull() & t.parentFolderId.isNotIn(folderIdSet)))
+      .get();
+
+    if (orphanedItems.isEmpty) {
+      return 0;
+    }
+
+    final List<int> idsToUpdate = orphanedItems.map((c) => c.id).toList();
+    
+    final updatedRowCount = await (update(chats)..where((t) => t.id.isIn(idsToUpdate)))
+        .write(const ChatsCompanion(parentFolderId: Value(null)));
+
+    return updatedRowCount;
   }
 }

@@ -71,10 +71,9 @@ mixin BackgroundTasks on UiStateManager {
             ? keptMessages.sublist(countToSummarize, (countToSummarize + 4 > keptMessages.length) ? keptMessages.length : countToSummarize + 4)
             : <Message>[];
 
-        debugPrint("ChatStateNotifier($chatId): Starting manual summarization for ${messagesToSummarize.length} messages from the current context window.");
 
         // 4. 生成新的总结块，并与任何已存在的总结合并
-        final newSummaryChunk = await _summarizeMessages(
+        final newSummaryChunk = await summarizeMessages(
           messagesToSummarize,
           chat.contextSummary, // 传入现有总结以进行合并
           followingMessages: followingMessages,
@@ -95,7 +94,6 @@ mixin BackgroundTasks on UiStateManager {
           throw Exception("总结过程返回了空内容。");
         }
       } catch (e) {
-        debugPrint("ChatStateNotifier($chatId): Error during manual summarization: $e");
         showTopMessage("手动总结出错: $e", backgroundColor: Colors.red);
       }
     }
@@ -151,15 +149,11 @@ mixin BackgroundTasks on UiStateManager {
               cancellationWatcher(),
             ]);
 
-            debugPrint("ChatStateNotifier($chatId): Async processing tasks completed.");
-            
           } on _BackgroundTaskCancelledException {
             // This is the expected outcome when the user cancels.
-            debugPrint("ChatStateNotifier($chatId): Async processing tasks cancelled by user.");
             // Do nothing here; the 'finally' block will handle all UI state cleanup.
           } catch (e) {
             if (!state.isCancelled) { // Only show error if not cancelled by user
-              debugPrint("ChatStateNotifier($chatId): Error during async processing tasks: $e");
               if (mounted) {
                 showTopMessage("后台处理任务出错: $e", backgroundColor: Colors.red.withAlpha(204));
               }
@@ -176,7 +170,6 @@ mixin BackgroundTasks on UiStateManager {
                 isStreamingMessageVisible: false,
               );
               stopUpdateTimer();
-              debugPrint("ChatStateNotifier($chatId): All processing finished. isLoading is now false.");
             }
           }
         } else {
@@ -220,8 +213,6 @@ mixin BackgroundTasks on UiStateManager {
         return;
       }
 
-      debugPrint("ChatStateNotifier($chatId): Starting secondary XML generation...");
-
       try {
         if (state.isCancelled) return;
         final apiConfig = getEffectiveApiConfig(specificConfigId: chat.secondaryXmlApiConfigId);
@@ -231,22 +222,17 @@ mixin BackgroundTasks on UiStateManager {
           actionType: SpecialActionType.secondaryXml,
           targetMessage: targetMessage,
         );
-        debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content START ==========");
-        debugPrint(generatedText);
-        debugPrint("ChatStateNotifier($chatId): ========== Secondary XML Raw Content END ==========");
 
         if (generatedText.isNotEmpty && mounted && !state.isCancelled) {
           final messageRepo = ref.read(messageRepositoryProvider);
           final updatedMessage = targetMessage.copyWith(secondaryXmlContent: generatedText);
           await messageRepo.saveMessage(updatedMessage);
-          debugPrint("ChatStateNotifier($chatId): Secondary XML generation successful. Message updated.");
         } else if (mounted && !state.isCancelled) {
-          debugPrint("ChatStateNotifier($chatId): Secondary XML generation resulted in empty content. Skipping update.");
+          // Secondary XML generation resulted in empty content. Skipping update.
         }
       } catch (e) {
         if (!state.isCancelled) {
-          debugPrint("ChatStateNotifier($chatId): Secondary XML generation failed: $e");
-          // Do not rethrow, as this is a background task and shouldn't block or show a major error.
+          // Secondary XML generation failed. Do not rethrow, as this is a background task and shouldn't block or show a major error.
         }
       }
     }
@@ -254,7 +240,6 @@ mixin BackgroundTasks on UiStateManager {
     /// Executes automatic summarization based on a predictive model.
     Future<void> executePreprocessing(Chat chat) async {
       if (state.isCancelled || state.isSummarizing) return;
-      debugPrint("ChatStateNotifier($chatId): Checking for proactive summarization trigger...");
 
       // Set summarizing state immediately and ensure it's cleared
       if (mounted) {
@@ -269,11 +254,8 @@ mixin BackgroundTasks on UiStateManager {
 
         // 2. If it won't exceed, we're done.
         if (!predictionResult.willExceed) {
-          debugPrint("ChatStateNotifier($chatId): Predicted context usage is within budget. No summarization needed.");
           return; // Exit the try block. Finally will still run.
         }
-
-        debugPrint("ChatStateNotifier($chatId): Predicted context usage will exceed 100%. Triggering summarization.");
 
         // 3. The messages in the current window are the combination of what was
         //    kept and what was just dropped by the prediction.
@@ -283,30 +265,33 @@ mixin BackgroundTasks on UiStateManager {
         ];
 
         if (currentWindowMessages.length < 3) {
-          debugPrint("ChatStateNotifier($chatId): Not enough messages in the window to summarize. Skipping.");
           return;
         }
 
-        // 4. Calculate which messages to summarize: the oldest 30% of the current window.
-        final countToSummarize = (currentWindowMessages.length * 0.3).ceil();
-        final messagesToSummarize = currentWindowMessages.sublist(0, countToSummarize);
+        // 4. Correctly calculate which messages to summarize.
+        // It should be ALL of the dropped messages PLUS the oldest 30% of the messages that were kept.
+        final countToSummarizeFromKept = (predictionResult.keptMessages.length * 0.3).ceil();
+        final messagesToSummarize = [
+          ...predictionResult.droppedMessages,
+          ...predictionResult.keptMessages.sublist(0, countToSummarizeFromKept),
+        ];
 
         if (messagesToSummarize.isEmpty) {
-          debugPrint("ChatStateNotifier($chatId): Calculation resulted in no messages to summarize. Skipping.");
           return;
         }
 
-        // 5. The "following messages" for context are the ones that will remain in the window.
-        final followingMessages = currentWindowMessages.length > countToSummarize
-            ? currentWindowMessages.sublist(countToSummarize, (countToSummarize + 4 > currentWindowMessages.length) ? currentWindowMessages.length : countToSummarize + 4)
-            : <Message>[];
+        // 5. The "following messages" for context are the ones that will REMAIN in the window,
+        // which are the kept messages minus the portion we are also summarizing.
+        final remainingKeptMessages = predictionResult.keptMessages.sublist(countToSummarizeFromKept);
+        final followingMessages = remainingKeptMessages.length > 4
+            ? remainingKeptMessages.sublist(0, 4)
+            : remainingKeptMessages;
 
-        debugPrint("ChatStateNotifier($chatId): Summarizing ${messagesToSummarize.length} messages to trim context.");
         if (state.isCancelled) return;
 
         // 6. Generate the new summary chunk, merging with any previous summary.
         final chatRepo = ref.read(chatRepositoryProvider);
-        final newSummaryChunk = await _summarizeMessages(
+        final newSummaryChunk = await summarizeMessages(
           messagesToSummarize,
           chat.contextSummary,
           followingMessages: followingMessages,
@@ -320,15 +305,13 @@ mixin BackgroundTasks on UiStateManager {
             contextSummary: newSummaryChunk,
             lastSummarizedMessageId: newBoundaryId,
           ));
-          debugPrint("ChatStateNotifier($chatId): Automatic summarization successful. New boundary ID: $newBoundaryId");
           updateContextDebugInfo();
         } else if (mounted) {
-          debugPrint("ChatStateNotifier($chatId): Automatic summarization resulted in an empty summary. Nothing to save.");
+          // Automatic summarization resulted in an empty summary. Nothing to save.
         }
 
       } catch (e) {
         if (!state.isCancelled) {
-          debugPrint("ChatStateNotifier($chatId): Error during automatic summarization: $e");
           showTopMessage("自动总结出错: $e", backgroundColor: Colors.red.withAlpha(204));
         }
       } finally {
@@ -339,7 +322,7 @@ mixin BackgroundTasks on UiStateManager {
     }
 
     /// A reusable helper to summarize a list of messages in parallel chunks.
-    Future<String> _summarizeMessages(List<Message> messages, String? existingSummary, {List<Message>? followingMessages}) async {
+    Future<String> summarizeMessages(List<Message> messages, String? existingSummary, {List<Message>? followingMessages}) async {
       if (state.isCancelled) return "";
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat == null) return "";
@@ -365,7 +348,6 @@ mixin BackgroundTasks on UiStateManager {
         final List<Message> nextRemaining = chunkingContext.droppedMessages;
 
         if (currentChunk.isEmpty) {
-          debugPrint("Warning: Chunking produced an empty chunk. Discarding remaining ${nextRemaining.length} messages.");
           break;
         }
         chunks.add(currentChunk);
@@ -373,34 +355,33 @@ mixin BackgroundTasks on UiStateManager {
       }
 
       if (chunks.isEmpty) {
-        debugPrint("ChatStateNotifier($chatId): Chunking resulted in no chunks to process.");
         return existingSummary ?? "";
       }
 
       // 2. Parallel Summarization with Correct Context Chaining
-      final reversedChunks = chunks.reversed.toList(); // Newest chunks first
+      // 'chunks' 列表现在是 [最新的块, ..., 最旧的块]
       final List<Future<String>> summaryFutures = [];
 
-      for (int i = 0; i < reversedChunks.length; i++) {
-        final chunk = reversedChunks[i];
+      // 遍历 chunks 列表 (从新到旧)
+      for (int i = 0; i < chunks.length; i++) {
+        final chunk = chunks[i]; // 当前块
 
-        // FIX 1: Associate existingSummary ONLY with the OLDEST chunk.
-        // The oldest chunk is the last one in the reversed list.
-        final summaryForThisChunk = (i == reversedChunks.length - 1) ? existingSummary : null;
+        // existingSummary 应该只与最旧的块合并。
+        // 最旧的块是 'chunks' 列表中的最后一个元素。
+        final summaryForThisChunk = (i == chunks.length - 1) ? existingSummary : null;
 
-        // FIX 2: Provide proper 'followingMessages' for EACH chunk to ensure continuity.
+        // 为每个块提供正确的 'followingMessages' 以确保连贯性。
         List<Message>? messagesForContext;
         if (i == 0) {
-          // This is the NEWEST chunk. Its context is the live conversation that follows.
+          // 这是最新的块。它的上下文是后续的实时对话。
           messagesForContext = followingMessages;
         } else {
-          // For any other chunk, its context is the NEXT chunk in chronological order,
-          // which is the PREVIOUS chunk in our reversed list.
-          final nextChunkInTime = reversedChunks[i - 1];
-          // Take the first 4 messages from that chunk as context.
-          messagesForContext = nextChunkInTime.length > 4
-              ? nextChunkInTime.sublist(0, 4)
-              : nextChunkInTime;
+          // 对于任何其他块，它的上下文是它前面一个块 (更年轻的块) 的开头几条消息。
+          // 例如，如果当前是 chunk_mid，它的上下文是 chunk_new 的开头。
+          final previousChunkInList = chunks[i - 1];
+          messagesForContext = previousChunkInList.length > 4
+              ? previousChunkInList.sublist(0, 4)
+              : previousChunkInList;
         }
         
         summaryFutures.add(_summarizeChunkWithRetry(
@@ -415,7 +396,9 @@ mixin BackgroundTasks on UiStateManager {
       if (state.isCancelled) return "";
 
       // 3. Aggregation
-      final finalSummary = summaryResults.where((s) => s.isNotEmpty).join('\n\n---\n\n');
+      // 'summaryResults' 列表的顺序与 'summaryFutures' 的添加顺序一致，即 [最新的总结, ..., 最旧的总结]。
+      // 我们需要将其反转为 [最旧的总结, ..., 最新的总结] 再进行拼接。
+      final finalSummary = summaryResults.reversed.where((s) => s.isNotEmpty).join('\n\n---\n\n');
       return finalSummary;
     }
 
@@ -472,13 +455,11 @@ mixin BackgroundTasks on UiStateManager {
 
           if (response.isSuccess && response.parts.isNotEmpty) {
             final summaryText = response.parts.map((p) => p.text ?? "").join("\n").trim();
-            debugPrint("ChatStateNotifier($chatId): Chunk summarization successful on attempt $attempt.");
             return summaryText; // Success
           } else {
             throw Exception("API Error: ${response.error ?? 'Empty response'}");
           }
         } catch (e) {
-          debugPrint("ChatStateNotifier($chatId): Chunk summarization attempt $attempt/$maxRetries failed: $e");
           if (attempt == maxRetries || state.isCancelled) {
             // If it's the last attempt or cancelled, rethrow to fail the Future.
             // The Future.wait will catch this, but we'll return an empty string
@@ -507,11 +488,8 @@ mixin BackgroundTasks on UiStateManager {
       final modelMessagesCount = allMessages.where((m) => m.role == MessageRole.model).length;
 
       if (modelMessagesCount != 1) {
-        debugPrint("ChatStateNotifier($chatId): Skipping auto title generation. Model messages count: $modelMessagesCount");
         return;
       }
-
-      debugPrint("ChatStateNotifier($chatId): Starting auto title generation...");
 
       try {
         if (state.isCancelled) return;
@@ -528,14 +506,12 @@ mixin BackgroundTasks on UiStateManager {
           final currentChat = await chatRepo.getChat(chatId);
           if (currentChat != null && mounted && !state.isCancelled) {
             await chatRepo.saveChat(currentChat.copyWith(title: newTitle));
-            debugPrint("ChatStateNotifier($chatId): Auto title generation successful. New title: $newTitle");
           }
         } else {
-          debugPrint("ChatStateNotifier($chatId): Auto title generation resulted in an empty title. Skipping update.");
+          // Auto title generation resulted in an empty title. Skipping update.
         }
       } catch (e) {
         if (!state.isCancelled) {
-          debugPrint("ChatStateNotifier($chatId): Error during auto title generation after retries: $e");
           // We rethrow the error so Future.wait in _runAsyncProcessingTasks can catch it
           // and show a generic background error message.
           rethrow;

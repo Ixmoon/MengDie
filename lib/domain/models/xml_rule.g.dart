@@ -7,17 +7,18 @@ part of 'xml_rule.dart';
 // **************************************************************************
 
 XmlRule _$XmlRuleFromJson(Map<String, dynamic> json) => XmlRule(
-      tagName: json['tagName'] as String?,
-      action: $enumDecodeNullable(_$XmlActionEnumMap, json['action']) ??
-          XmlAction.content,
-      ignoreInContext: json['ignoreInContext'] as bool? ?? false,
-    );
+  tagName: json['tagName'] as String?,
+  action:
+      $enumDecodeNullable(_$XmlActionEnumMap, json['action']) ??
+      XmlAction.content,
+  ignoreInContext: json['ignoreInContext'] as bool? ?? false,
+);
 
 Map<String, dynamic> _$XmlRuleToJson(XmlRule instance) => <String, dynamic>{
-      'tagName': instance.tagName,
-      'action': _$XmlActionEnumMap[instance.action]!,
-      'ignoreInContext': instance.ignoreInContext,
-    };
+  'tagName': instance.tagName,
+  'action': _$XmlActionEnumMap[instance.action]!,
+  'ignoreInContext': instance.ignoreInContext,
+};
 
 const _$XmlActionEnumMap = {
   XmlAction.save: 'save',

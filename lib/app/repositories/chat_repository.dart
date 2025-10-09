@@ -24,7 +24,10 @@ class ChatRepository {
   final ChatDao _chatDao;
   final UserDao _userDao;
 
-  ChatRepository(this._ref, this._db, this._chatDao, this._userDao);
+  ChatRepository(this._ref, this._db, this._chatDao, this._userDao) {
+    // 在仓库初始化时，异步执行一次清理操作
+    _cleanUpOrphanedChats();
+  }
 
   /// 检查当前用户登录状态，如果已登录，则将新创建的项目ID与其关联。
   Future<void> _bindItemToCurrentUser(int itemId) async {
@@ -215,13 +218,23 @@ class ChatRepository {
     int? upToMessageId,
     bool asTemplate = false,
     bool shouldClearSummary = true,
-    int? targetFolderId, // 新增参数
+    int? targetFolderId,
   }) async {
-    debugPrint("ChatRepository: duplicateChat from $sourceChatId, upToMessageId: $upToMessageId, asTemplate: $asTemplate, targetFolderId: $targetFolderId");
+    debugPrint("ChatRepository: duplicateChat from $sourceChatId, asTemplate: $asTemplate");
 
     final originalChat = await getChat(sourceChatId);
     if (originalChat == null) {
       throw Exception('找不到ID为 $sourceChatId 的原始聊天');
+    }
+
+    int? finalTargetFolderId = targetFolderId;
+    if (asTemplate) {
+      // 如果是创建模板，则需要递归创建模板文件夹结构
+      final Map<int, int> folderMap = {};
+      finalTargetFolderId = await _getOrCreateTemplateFolderPath(originalChat.parentFolderId, folderMap);
+    } else {
+      // 否则，使用指定的 targetFolderId 或原始的 parentFolderId
+      finalTargetFolderId ??= originalChat.parentFolderId;
     }
 
     final now = DateTime.now();
@@ -253,7 +266,7 @@ class ChatRepository {
       contextSummary: shouldClearSummary ? const Value(null) : Value(originalChat.contextSummary),
       lastSummarizedMessageId: shouldClearSummary ? const Value(null) : Value(originalChat.lastSummarizedMessageId),
       orderIndex: const Value(null),
-      parentFolderId: Value(targetFolderId ?? originalChat.parentFolderId), // 默认与原聊天一致
+      parentFolderId: Value(finalTargetFolderId),
       backgroundImagePath: asTemplate ? const Value('/template/chat') : const Value(null),
       isFolder: const Value(false),
     );
@@ -271,6 +284,53 @@ class ChatRepository {
 
     await _bindItemToCurrentUser(newChatId);
     return newChatId;
+  }
+
+  /// 递归地获取或创建模板文件夹路径，并返回最内层模板文件夹的ID。
+  Future<int?> _getOrCreateTemplateFolderPath(int? originalParentId, Map<int, int> folderMap) async {
+    if (originalParentId == null) {
+      return null; // 到达根目录
+    }
+    if (folderMap.containsKey(originalParentId)) {
+      return folderMap[originalParentId]; // 已处理过
+    }
+
+    final originalParentFolder = await getChat(originalParentId);
+    if (originalParentFolder == null || !originalParentFolder.isFolder) {
+      return null; // 父文件夹无效
+    }
+
+    // 递归处理上一级文件夹
+    final templateGrandparentId = await _getOrCreateTemplateFolderPath(originalParentFolder.parentFolderId, folderMap);
+
+    // 查找当前文件夹对应的模板文件夹
+    final existingTemplateFolder = await _chatDao.findTemplateFolder(originalParentFolder.title!, templateGrandparentId);
+
+    if (existingTemplateFolder != null) {
+      folderMap[originalParentId] = existingTemplateFolder.id;
+      return existingTemplateFolder.id;
+    } else {
+      // 创建新的模板文件夹
+      final newTemplateFolderId = await addFolder(
+        title: originalParentFolder.title!,
+        isTemplate: true,
+        parentFolderId: templateGrandparentId,
+      );
+      folderMap[originalParentId] = newTemplateFolderId;
+      return newTemplateFolderId;
+    }
+  }
+
+  /// 清理孤儿聊天（其 parentFolderId 指向一个不存在的文件夹）。
+  Future<void> _cleanUpOrphanedChats() async {
+    try {
+      final count = await _chatDao.cleanUpOrphanedItems();
+      if (count > 0) {
+        debugPrint("ChatRepository: 清理了 $count 个孤儿项目，已将它们移动到根目录。");
+      }
+    } catch (e) {
+      debugPrint("ChatRepository: 清理孤儿项目时出错: $e");
+    }
   }
 
 }
