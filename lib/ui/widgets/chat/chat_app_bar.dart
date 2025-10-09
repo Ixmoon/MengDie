@@ -193,11 +193,11 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 }
                 break;
               case 'exportAsTemplate':
-                // 统一调用 ChatStateNotifier 的方法
-                await notifier.duplicateChat(upToMessageId: 0, asTemplate: true);
+                // 关键修复：upToMessageId: null 表示复制所有消息
+                await notifier.duplicateChat(upToMessageId: null, asTemplate: true);
                 break;
               case 'exportAsChat':
-                // 统一调用 ChatStateNotifier 的方法
+                // 用户反馈：克隆聊天应该不包含消息，所以 upToMessageId: 0
                 await notifier.duplicateChat(upToMessageId: 0, asTemplate: false);
                 break;
               case 'add_user_message':

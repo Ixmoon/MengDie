@@ -108,7 +108,8 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
     if (!mounted) return;
     try {
       final repo = ref.read(chatRepositoryProvider);
-      await repo.duplicateChat(chatId, upToMessageId: 0, asTemplate: true);
+      // 关键修复：upToMessageId: null 表示复制所有消息
+      await repo.duplicateChat(chatId, upToMessageId: null, asTemplate: true);
       if (!mounted) return;
       showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
       ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
@@ -123,6 +124,7 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
     if (!mounted) return null;
     try {
       final repo = ref.read(chatRepositoryProvider);
+      // 用户反馈：克隆聊天应该不包含消息，所以 upToMessageId: 0
       final newChatId = await repo.duplicateChat(chatId, upToMessageId: 0, asTemplate: false);
       if (!mounted) return null;
       showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);

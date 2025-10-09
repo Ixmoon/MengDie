@@ -187,25 +187,17 @@ class ChatRepository {
   /// 从一个模板新建聊天，原模板保留，新聊天归属指定文件夹（默认与模板一致），不会影响原模板显示
   Future<int> createChatFromTemplate(int templateChatId, {int? parentFolderId}) async {
     debugPrint("ChatRepository: 从模板 ID: $templateChatId 创建新聊天到文件夹 ID: $parentFolderId...");
-    final templateChat = await getChat(templateChatId);
-    if (templateChat == null) {
-      throw Exception('找不到ID为 $templateChatId 的模板聊天');
-    }
-
-    final now = DateTime.now();
-
-    final newChat = templateChat.copyWith(
-      id: 0,
-      title: templateChat.title ?? "无标题",
-      createdAt: now,
-      updatedAt: now,
-      parentFolderId: parentFolderId ?? templateChat.parentFolderId, // 默认与模板一致
-      orderIndex: null,
-      backgroundImagePath: null, // 新聊天不是模板
-      isFolder: false,
+    // 关键修复：直接调用 duplicateChat 来完整复制聊天及其所有消息
+    // upToMessageId: null 表示复制所有消息
+    // asTemplate: false 表示这是一个普通聊天，而不是新模板
+    // shouldClearSummary: false 保留摘要，因为这是基于模板创建的
+    return await duplicateChat(
+      templateChatId,
+      upToMessageId: null,
+      asTemplate: false,
+      shouldClearSummary: false,
+      targetFolderId: parentFolderId,
     );
-
-    return await saveChat(newChat);
   }
 
   /// 统一的聊天衍生方法，用于分叉、克隆和模板创建。原聊天保留，新聊天/模板归属可指定文件夹，不影响原聊天显示。

@@ -700,16 +700,22 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           }
           break;
         case ChatListMode.templateSelection:
-          // 从模板创建新聊天
-          final repo = ref.read(chatRepositoryProvider);
-          // 关键修复：将 fromFolderId 传递给创建方法
-          final newChatId = await repo.createChatFromTemplate(chat.id, parentFolderId: widget.fromFolderId);
-          if (context.mounted) {
-            ref.read(activeChatIdProvider.notifier).state = newChatId;
-            // 关键修复：创建后重置 currentFolderIdProvider，确保返回时回到正确的聊天列表层级
-            ref.read(currentFolderIdProvider.notifier).state = widget.fromFolderId;
-            if (!mounted) return;
-            context.go('/chat'); // 直接进入新创建的聊天
+          // 修正：区分文件夹和模板的点击行为
+          if (chat.isFolder) {
+            // 如果是模板文件夹，则进入
+            ref.read(currentFolderIdProvider.notifier).state = chat.id;
+          } else {
+            // 如果是模板，则从模板创建新聊天
+            final repo = ref.read(chatRepositoryProvider);
+            // 关键修复：将 fromFolderId 传递给创建方法
+            final newChatId = await repo.createChatFromTemplate(chat.id, parentFolderId: widget.fromFolderId);
+            if (context.mounted) {
+              ref.read(activeChatIdProvider.notifier).state = newChatId;
+              // 关键修复：创建后重置 currentFolderIdProvider，确保返回时回到正确的聊天列表层级
+              ref.read(currentFolderIdProvider.notifier).state = widget.fromFolderId;
+              if (!mounted) return;
+              context.go('/chat'); // 直接进入新创建的聊天
+            }
           }
           break;
         case ChatListMode.templateManagement:
