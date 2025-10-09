@@ -364,13 +364,13 @@ class GeminiChatPayload extends HttpRequestPayload {
       body['system_instruction'] = systemInstruction;
     }
     
-    // Add tool_config if present
+    // Add tool_config if present, and assign it to the 'tools' key
     if (apiConfig.toolConfig != null && apiConfig.toolConfig!.isNotEmpty) {
       try {
         final toolConfigJson = jsonDecode(apiConfig.toolConfig!);
-        body['tool_config'] = toolConfigJson;
+        body['tools'] = toolConfigJson; // Corrected from 'tool_config' to 'tools'
       } catch (e) {
-        debugPrint("Error decoding tool_config JSON: $e");
+        debugPrint("Error decoding toolConfig to build API tools: $e");
       }
     }
     
