@@ -36,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
   // the transaction() method directly to ensure a proper transaction context.
 
   @override
-  int get schemaVersion => 5; // Bumped version to 5 for chats.lastSummarizedMessageId
+  int get schemaVersion => 6; // Bumped version to 6 for microsecond timestamp precision
 
   @override
   MigrationStrategy get migration {
@@ -44,28 +44,60 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (m) => m.createAll(),
       onUpgrade: (m, from, to) async {
         if (from < 2) {
-          // This logic is for users migrating from version 1.
           await m.addColumn(apiConfigs, apiConfigs.thinkingBudget);
           await m.addColumn(apiConfigs, apiConfigs.toolConfig);
           await m.addColumn(apiConfigs, apiConfigs.toolChoice);
           await m.addColumn(apiConfigs, apiConfigs.useDefaultSafetySettings);
-          // Set a default value for existing rows.
           await customStatement('UPDATE api_configs SET use_default_safety_settings = TRUE WHERE use_default_safety_settings IS NULL');
         }
         if (from < 3) {
-          // This logic is for users who were on version 2 with the faulty migration.
-          // It ensures that any NULL values from the previous migration are fixed.
           await customStatement('UPDATE api_configs SET use_default_safety_settings = TRUE WHERE use_default_safety_settings IS NULL');
         }
         if (from < 4) {
-          // Add the updatedAt column as nullable first, to support older SQLite versions.
           await m.addColumn(messages, messages.updatedAt);
-          // Then, backfill existing rows with the value from the timestamp column.
           await customStatement('UPDATE messages SET updated_at = timestamp WHERE updated_at IS NULL');
         }
         if (from < 5) {
-          // Add the lastSummarizedMessageId column to the chats table.
           await m.addColumn(chats, chats.lastSummarizedMessageId);
+        }
+        if (from < 6) {
+          // Migration for microsecond precision timestamps for all tables.
+          
+          // Step 1: Ensure there are no NULL values in `updated_at` columns before altering them.
+          await customStatement('UPDATE messages SET updated_at = "timestamp" WHERE updated_at IS NULL');
+          await customStatement('UPDATE chats SET updated_at = created_at WHERE updated_at IS NULL');
+          await customStatement('UPDATE api_configs SET updated_at = created_at WHERE updated_at IS NULL');
+          await customStatement('UPDATE users SET updated_at = created_at WHERE updated_at IS NULL');
+
+          // Step 2: Use alterTable with an expression to convert from seconds to microseconds.
+          await m.alterTable(TableMigration(
+            messages,
+            columnTransformer: {
+              messages.timestamp: messages.timestamp * const Constant(1000000),
+              messages.updatedAt: messages.updatedAt * const Constant(1000000),
+            },
+          ));
+          await m.alterTable(TableMigration(
+            chats,
+            columnTransformer: {
+              chats.createdAt: chats.createdAt * const Constant(1000000),
+              chats.updatedAt: chats.updatedAt * const Constant(1000000),
+            },
+          ));
+          await m.alterTable(TableMigration(
+            apiConfigs,
+            columnTransformer: {
+              apiConfigs.createdAt: apiConfigs.createdAt * const Constant(1000000),
+              apiConfigs.updatedAt: apiConfigs.updatedAt * const Constant(1000000),
+            },
+          ));
+          await m.alterTable(TableMigration(
+            users,
+            columnTransformer: {
+              users.createdAt: users.createdAt * const Constant(1000000),
+              users.updatedAt: users.updatedAt * const Constant(1000000),
+            },
+          ));
         }
       },
     );

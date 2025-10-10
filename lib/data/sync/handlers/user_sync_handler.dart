@@ -20,8 +20,8 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
         .get();
     return rows.map((row) => SyncMeta(
       id: row.read(db.users.uuid)!,
-      createdAt: row.read(db.users.createdAt)!,
-      updatedAt: row.read(db.users.updatedAt)!
+      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.users.createdAt)!),
+      updatedAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.users.updatedAt)!)
     )).toList();
   }
 

@@ -39,8 +39,8 @@ class ApiConfigs extends Table {
   BoolColumn get useDefaultSafetySettings => boolean().withDefault(const Constant(true))();
 
   // --- 时间戳 ---
-  DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
-  DateTimeColumn get updatedAt => dateTime().clientDefault(() => DateTime.now())();
+  IntColumn get createdAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get updatedAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -7,8 +7,8 @@ class Chats extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get title => text().nullable()();
   TextColumn get systemPrompt => text().nullable()();
-  DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
-  DateTimeColumn get updatedAt => dateTime().clientDefault(() => DateTime.now())();
+  IntColumn get createdAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get updatedAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
   TextColumn get coverImageBase64 => text().nullable()(); // 新增：用于存储封面图片的 Base64 字符串
   TextColumn get backgroundImagePath => text().nullable()();
 

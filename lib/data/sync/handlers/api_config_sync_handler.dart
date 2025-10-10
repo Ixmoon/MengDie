@@ -22,8 +22,8 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     final rows = await (db.selectOnly(db.apiConfigs)..addColumns([db.apiConfigs.id, db.apiConfigs.createdAt, db.apiConfigs.updatedAt])).get();
     return rows.map((row) => SyncMeta(
       id: row.read(db.apiConfigs.id)!,
-      createdAt: row.read(db.apiConfigs.createdAt)!,
-      updatedAt: row.read(db.apiConfigs.updatedAt)!
+      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.apiConfigs.createdAt)!),
+      updatedAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.apiConfigs.updatedAt)!)
     )).toList();
   }
 

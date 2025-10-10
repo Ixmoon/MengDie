@@ -15,10 +15,10 @@ class Users extends Table {
   TextColumn get uuid => text().clientDefault(() => const Uuid().v4())();
 
   /// 记录创建时间的时间戳。
-  DateTimeColumn get createdAt => dateTime().clientDefault(() => DateTime.now())();
+  IntColumn get createdAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   /// 记录最后更新时间的时间戳。
-  DateTimeColumn get updatedAt => dateTime().clientDefault(() => DateTime.now())();
+  IntColumn get updatedAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   /// 用户名，必须是唯一的。
   TextColumn get username => text().unique()();

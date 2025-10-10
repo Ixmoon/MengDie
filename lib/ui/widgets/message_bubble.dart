@@ -600,6 +600,9 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Print the timestamp to verify its precision.
+    debugPrint('Message ID: ${message.id}, Timestamp: ${message.timestamp}');
+    
     bool isUser = message.role == MessageRole.user;
     var alignment = isUser
         ? (isHalfWidth ? Alignment.topRight : Alignment.centerRight)

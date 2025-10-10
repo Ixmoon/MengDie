@@ -29,8 +29,10 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     
     return rows.map((row) => SyncMeta(
       id: row.read(db.messages.id)!,
-      createdAt: row.read(db.messages.timestamp)!,
-      updatedAt: row.read(db.messages.updatedAt) ?? row.read(db.messages.timestamp)!
+      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.timestamp)!),
+      updatedAt: row.read(db.messages.updatedAt) != null
+          ? const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.updatedAt)!)
+          : const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.timestamp)!)
     )).toList();
   }
 

@@ -29,8 +29,8 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     
     return rows.map((row) => SyncMeta(
       id: row.read(db.chats.id)!,
-      createdAt: row.read(db.chats.createdAt)!,
-      updatedAt: row.read(db.chats.updatedAt)!
+      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.chats.createdAt)!),
+      updatedAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.chats.updatedAt)!)
     )).toList();
   }
 

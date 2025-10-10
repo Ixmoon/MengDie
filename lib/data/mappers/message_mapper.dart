@@ -26,6 +26,7 @@ class MessageMapper {
       parts: parts,
       role: data.role,
       timestamp: data.timestamp,
+      updatedAt: data.updatedAt,
       originalXmlContent: data.originalXmlContent,
       secondaryXmlContent: data.secondaryXmlContent,
     );
@@ -40,6 +41,7 @@ class MessageMapper {
       rawText: Value(rawText),
       role: Value(message.role),
       timestamp: Value(message.timestamp),
+      updatedAt: Value(message.updatedAt ?? message.timestamp),
       originalXmlContent: Value(message.originalXmlContent),
       secondaryXmlContent: Value(message.secondaryXmlContent),
     );

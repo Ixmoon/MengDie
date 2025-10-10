@@ -41,30 +41,26 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
   @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ChatsTable.$convertercreatedAt);
   @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ChatsTable.$converterupdatedAt);
   static const VerificationMeta _coverImageBase64Meta = const VerificationMeta(
     'coverImageBase64',
   );
@@ -363,18 +359,6 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         ),
       );
     }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    }
     if (data.containsKey('cover_image_base64')) {
       context.handle(
         _coverImageBase64Meta,
@@ -552,14 +536,18 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
         DriftSqlType.string,
         data['${effectivePrefix}system_prompt'],
       ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      createdAt: $ChatsTable.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      updatedAt: $ChatsTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
       coverImageBase64: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}cover_image_base64'],
@@ -659,6 +647,10 @@ class $ChatsTable extends Chats with TableInfo<$ChatsTable, ChatData> {
     return $ChatsTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<DateTime, int> $convertercreatedAt =
+      const MicrosecondDateTimeConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const MicrosecondDateTimeConverter();
   static TypeConverter<ContextConfig, String> $convertercontextConfig =
       const ContextConfigConverter();
   static TypeConverter<List<XmlRule>, String> $converterxmlRules =
@@ -732,8 +724,16 @@ class ChatData extends DataClass implements Insertable<ChatData> {
     if (!nullToAbsent || systemPrompt != null) {
       map['system_prompt'] = Variable<String>(systemPrompt);
     }
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    {
+      map['created_at'] = Variable<int>(
+        $ChatsTable.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $ChatsTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
     if (!nullToAbsent || coverImageBase64 != null) {
       map['cover_image_base64'] = Variable<String>(coverImageBase64);
     }
@@ -1329,8 +1329,8 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
     Expression<int>? id,
     Expression<String>? title,
     Expression<String>? systemPrompt,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
     Expression<String>? coverImageBase64,
     Expression<String>? backgroundImagePath,
     Expression<int>? orderIndex,
@@ -1469,10 +1469,14 @@ class ChatsCompanion extends UpdateCompanion<ChatData> {
       map['system_prompt'] = Variable<String>(systemPrompt.value);
     }
     if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
+      map['created_at'] = Variable<int>(
+        $ChatsTable.$convertercreatedAt.toSql(createdAt.value),
+      );
     }
     if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+      map['updated_at'] = Variable<int>(
+        $ChatsTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
     }
     if (coverImageBase64.present) {
       map['cover_image_base64'] = Variable<String>(coverImageBase64.value);
@@ -1643,30 +1647,26 @@ class $MessagesTable extends Messages
         type: DriftSqlType.string,
         requiredDuringInsert: true,
       ).withConverter<MessageRole>($MessagesTable.$converterrole);
-  static const VerificationMeta _timestampMeta = const VerificationMeta(
-    'timestamp',
-  );
   @override
-  late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
-    'timestamp',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> timestamp =
+      GeneratedColumn<int>(
+        'timestamp',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($MessagesTable.$convertertimestamp);
   @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($MessagesTable.$converterupdatedAt);
   static const VerificationMeta _originalXmlContentMeta =
       const VerificationMeta('originalXmlContent');
   @override
@@ -1731,18 +1731,6 @@ class $MessagesTable extends Messages
     } else if (isInserting) {
       context.missing(_rawTextMeta);
     }
-    if (data.containsKey('timestamp')) {
-      context.handle(
-        _timestampMeta,
-        timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta),
-      );
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    }
     if (data.containsKey('original_xml_content')) {
       context.handle(
         _originalXmlContentMeta,
@@ -1788,14 +1776,18 @@ class $MessagesTable extends Messages
           data['${effectivePrefix}role'],
         )!,
       ),
-      timestamp: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}timestamp'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      timestamp: $MessagesTable.$convertertimestamp.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}timestamp'],
+        )!,
+      ),
+      updatedAt: $MessagesTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
       originalXmlContent: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}original_xml_content'],
@@ -1814,6 +1806,10 @@ class $MessagesTable extends Messages
 
   static TypeConverter<MessageRole, String> $converterrole =
       const MessageRoleConverter();
+  static TypeConverter<DateTime, int> $convertertimestamp =
+      const MicrosecondDateTimeConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const MicrosecondDateTimeConverter();
 }
 
 class MessageData extends DataClass implements Insertable<MessageData> {
@@ -1844,8 +1840,16 @@ class MessageData extends DataClass implements Insertable<MessageData> {
     {
       map['role'] = Variable<String>($MessagesTable.$converterrole.toSql(role));
     }
-    map['timestamp'] = Variable<DateTime>(timestamp);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    {
+      map['timestamp'] = Variable<int>(
+        $MessagesTable.$convertertimestamp.toSql(timestamp),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $MessagesTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
     if (!nullToAbsent || originalXmlContent != null) {
       map['original_xml_content'] = Variable<String>(originalXmlContent);
     }
@@ -2023,8 +2027,8 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
     Expression<int>? chatId,
     Expression<String>? rawText,
     Expression<String>? role,
-    Expression<DateTime>? timestamp,
-    Expression<DateTime>? updatedAt,
+    Expression<int>? timestamp,
+    Expression<int>? updatedAt,
     Expression<String>? originalXmlContent,
     Expression<String>? secondaryXmlContent,
   }) {
@@ -2082,10 +2086,14 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
       );
     }
     if (timestamp.present) {
-      map['timestamp'] = Variable<DateTime>(timestamp.value);
+      map['timestamp'] = Variable<int>(
+        $MessagesTable.$convertertimestamp.toSql(timestamp.value),
+      );
     }
     if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+      map['updated_at'] = Variable<int>(
+        $MessagesTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
     }
     if (originalXmlContent.present) {
       map['original_xml_content'] = Variable<String>(originalXmlContent.value);
@@ -2350,30 +2358,26 @@ class $ApiConfigsTable extends ApiConfigs
         ),
         defaultValue: const Constant(true),
       );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
   @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ApiConfigsTable.$convertercreatedAt);
   @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ApiConfigsTable.$converterupdatedAt);
   @override
   List<GeneratedColumn> get $columns => [
     userId,
@@ -2545,18 +2549,6 @@ class $ApiConfigsTable extends ApiConfigs
         ),
       );
     }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    }
     return context;
   }
 
@@ -2656,14 +2648,18 @@ class $ApiConfigsTable extends ApiConfigs
         DriftSqlType.bool,
         data['${effectivePrefix}use_default_safety_settings'],
       )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      createdAt: $ApiConfigsTable.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      updatedAt: $ApiConfigsTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
     );
   }
 
@@ -2680,6 +2676,10 @@ class $ApiConfigsTable extends ApiConfigs
       NullAwareTypeConverter.wrap($converterstopSequences);
   static TypeConverter<OpenAIReasoningEffort?, String?>
   $converterreasoningEffort = const OpenAIReasoningEffortConverter();
+  static TypeConverter<DateTime, int> $convertercreatedAt =
+      const MicrosecondDateTimeConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const MicrosecondDateTimeConverter();
 }
 
 class ApiConfig extends DataClass implements Insertable<ApiConfig> {
@@ -2797,8 +2797,16 @@ class ApiConfig extends DataClass implements Insertable<ApiConfig> {
     map['use_default_safety_settings'] = Variable<bool>(
       useDefaultSafetySettings,
     );
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    {
+      map['created_at'] = Variable<int>(
+        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
     return map;
   }
 
@@ -3235,8 +3243,8 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
     Expression<int>? thinkingBudget,
     Expression<String>? toolConfig,
     Expression<bool>? useDefaultSafetySettings,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -3405,10 +3413,14 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
       );
     }
     if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
+      map['created_at'] = Variable<int>(
+        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt.value),
+      );
     }
     if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+      map['updated_at'] = Variable<int>(
+        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
     }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
@@ -3476,30 +3488,26 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
     requiredDuringInsert: false,
     clientDefault: () => const Uuid().v4(),
   );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
   @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
-  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
-    'updatedAt',
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($UsersTable.$convertercreatedAt);
   @override
-  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    clientDefault: () => DateTime.now(),
-  );
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($UsersTable.$converterupdatedAt);
   static const VerificationMeta _usernameMeta = const VerificationMeta(
     'username',
   );
@@ -3652,18 +3660,6 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
         uuid.isAcceptableOrUnknown(data['uuid']!, _uuidMeta),
       );
     }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('updated_at')) {
-      context.handle(
-        _updatedAtMeta,
-        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
-      );
-    }
     if (data.containsKey('username')) {
       context.handle(
         _usernameMeta,
@@ -3754,14 +3750,18 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
         DriftSqlType.string,
         data['${effectivePrefix}uuid'],
       )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      createdAt: $UsersTable.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      updatedAt: $UsersTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
       username: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}username'],
@@ -3814,6 +3814,10 @@ class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
     return $UsersTable(attachedDatabase, alias);
   }
 
+  static TypeConverter<DateTime, int> $convertercreatedAt =
+      const MicrosecondDateTimeConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const MicrosecondDateTimeConverter();
   static TypeConverter<List<int>, String> $converterchatIds =
       const IntListConverter();
   static TypeConverter<List<int>?, String?> $converterchatIdsn =
@@ -3888,8 +3892,16 @@ class DriftUser extends DataClass implements Insertable<DriftUser> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['uuid'] = Variable<String>(uuid);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['updated_at'] = Variable<DateTime>(updatedAt);
+    {
+      map['created_at'] = Variable<int>(
+        $UsersTable.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $UsersTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
     map['username'] = Variable<String>(username);
     map['password_hash'] = Variable<String>(passwordHash);
     if (!nullToAbsent || chatIds != null) {
@@ -4206,8 +4218,8 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   static Insertable<DriftUser> custom({
     Expression<int>? id,
     Expression<String>? uuid,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? updatedAt,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
     Expression<String>? username,
     Expression<String>? passwordHash,
     Expression<String>? chatIds,
@@ -4287,10 +4299,14 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
       map['uuid'] = Variable<String>(uuid.value);
     }
     if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
+      map['created_at'] = Variable<int>(
+        $UsersTable.$convertercreatedAt.toSql(createdAt.value),
+      );
     }
     if (updatedAt.present) {
-      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+      map['updated_at'] = Variable<int>(
+        $UsersTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
     }
     if (username.present) {
       map['username'] = Variable<String>(username.value);
@@ -4495,15 +4511,17 @@ class $$ChatsTableFilterComposer extends Composer<_$AppDatabase, $ChatsTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
+      $composableBuilder(
+        column: $table.createdAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnFilters<String> get coverImageBase64 => $composableBuilder(
     column: $table.coverImageBase64,
@@ -4667,12 +4685,12 @@ class $$ChatsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+  ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -4803,10 +4821,10 @@ class $$ChatsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<DateTime> get createdAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get updatedAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<String> get coverImageBase64 => $composableBuilder(
@@ -5199,15 +5217,17 @@ class $$MessagesTableFilterComposer
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
-  ColumnFilters<DateTime> get timestamp => $composableBuilder(
-    column: $table.timestamp,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get timestamp =>
+      $composableBuilder(
+        column: $table.timestamp,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnFilters<String> get originalXmlContent => $composableBuilder(
     column: $table.originalXmlContent,
@@ -5267,12 +5287,12 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get timestamp => $composableBuilder(
+  ColumnOrderings<int> get timestamp => $composableBuilder(
     column: $table.timestamp,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -5329,10 +5349,10 @@ class $$MessagesTableAnnotationComposer
   GeneratedColumnWithTypeConverter<MessageRole, String> get role =>
       $composableBuilder(column: $table.role, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get timestamp =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get timestamp =>
       $composableBuilder(column: $table.timestamp, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get updatedAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<String> get originalXmlContent => $composableBuilder(
@@ -5678,15 +5698,17 @@ class $$ApiConfigsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
+      $composableBuilder(
+        column: $table.createdAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 }
 
 class $$ApiConfigsTableOrderingComposer
@@ -5803,12 +5825,12 @@ class $$ApiConfigsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+  ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -5912,10 +5934,10 @@ class $$ApiConfigsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<DateTime> get createdAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get updatedAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
 
@@ -6129,15 +6151,17 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
+      $composableBuilder(
+        column: $table.createdAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
-  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 
   ColumnFilters<String> get username => $composableBuilder(
     column: $table.username,
@@ -6211,12 +6235,12 @@ class $$UsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+  ColumnOrderings<int> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
@@ -6287,10 +6311,10 @@ class $$UsersTableAnnotationComposer
   GeneratedColumn<String> get uuid =>
       $composableBuilder(column: $table.uuid, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get createdAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  GeneratedColumn<DateTime> get updatedAt =>
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<String> get username =>

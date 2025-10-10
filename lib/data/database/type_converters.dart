@@ -191,3 +191,18 @@ class IntListConverter extends TypeConverter<List<int>, String> {
     return json.encode(value);
   }
 }
+
+/// Stores [DateTime] objects in the database as an integer (microseconds since epoch).
+class MicrosecondDateTimeConverter extends TypeConverter<DateTime, int> {
+  const MicrosecondDateTimeConverter();
+
+  @override
+  DateTime fromSql(int fromDb) {
+    return DateTime.fromMicrosecondsSinceEpoch(fromDb, isUtc: true);
+  }
+
+  @override
+  int toSql(DateTime value) {
+    return value.toUtc().microsecondsSinceEpoch;
+  }
+}
