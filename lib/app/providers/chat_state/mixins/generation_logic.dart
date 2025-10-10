@@ -39,6 +39,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     // --- Methods moved from ChatStateNotifier ---
 
     Future<void> regenerateResponse(Message userMessage) async {
+      debugPrint("ChatStateNotifier($chatId): regenerateResponse - User message ID: ${userMessage.id}, Timestamp: ${userMessage.timestamp}");
       if (!mounted) return;
   
       final allMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
@@ -53,14 +54,16 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   
       if (!isLastUserMsg) {
         showTopMessage('只能为最后的用户消息重新生成回复', backgroundColor: Colors.orange);
+        debugPrint("ChatStateNotifier($chatId): regenerateResponse - Cannot regenerate, not last user message.");
         return;
       }
       if (state.isLoading) {
-        debugPrint("重新生成取消：已在加载中。");
+        debugPrint("ChatStateNotifier($chatId): regenerateResponse - 重新生成取消：已在加载中。");
         return;
       }
   
       await cancelGeneration(); // 确保之前的任何生成都已停止
+      debugPrint("ChatStateNotifier($chatId): regenerateResponse - Previous generation cancelled.");
   
       // 2. 删除之前的模型回复
       try {
@@ -74,6 +77,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           }
         }
         if (messagesToDelete.isNotEmpty) {
+          debugPrint("ChatStateNotifier($chatId): regenerateResponse - Deleting model messages: $messagesToDelete");
           for (final msgId in messagesToDelete) {
             await messageRepo.deleteMessage(msgId);
           }
@@ -82,6 +86,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         }
       } catch (e) {
           showTopMessage('删除旧回复失败: $e', backgroundColor: Colors.red);
+          debugPrint("ChatStateNotifier($chatId): regenerateResponse - Error deleting old replies: $e");
           return;
       }
   
@@ -91,9 +96,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       clearHelpMeReplySuggestions(); // Clear suggestions before regenerating
       
       if (state.isImageGenerationMode) {
+        debugPrint("ChatStateNotifier($chatId): regenerateResponse - Generating image for user message ID: ${userMessage.id}");
         // 调用图片生成逻辑
         await (this as dynamic).generateImage(userMessage);
       } else {
+        debugPrint("ChatStateNotifier($chatId): regenerateResponse - Sending message for text regeneration for user message ID: ${userMessage.id}");
         // 调用文本生成逻辑
         await sendMessage(userMessage: userMessage, isRegeneration: true, requestThoughts: true);
       }
@@ -332,16 +339,24 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       }
       initialRawText = combinedBuffer.toString();
     } else {
-      // This is a new message. Do not save to DB. Create a temporary in-memory message.
-      // Use a unique negative ID for the key to avoid conflicts with real DB IDs.
-      targetMessageId = -DateTime.now().millisecondsSinceEpoch;
-      baseMessage = Message(
-        id: targetMessageId, // Assign temporary negative ID
+      // This is a new message. Save a placeholder to the DB first to get a real ID.
+      final placeholderMessage = Message(
         chatId: chatId,
         role: MessageRole.model,
-        parts: [MessagePart.text("...")], // Start with a placeholder text
+        parts: [MessagePart.text("...")], // Start with a placeholder
       );
-      debugPrint("ChatStateNotifier($chatId): Created temporary streaming message with ID: $targetMessageId.");
+      targetMessageId = await messageRepo.saveMessage(placeholderMessage);
+      // Fetch the message we just saved to ensure we have the full object with timestamp etc.
+      final savedMsg = await messageRepo.getMessageById(targetMessageId);
+      if (savedMsg == null) {
+        showTopMessage('无法创建占位消息', backgroundColor: Colors.red);
+        state = state.copyWith(isLoading: false);
+        stopUpdateTimer();
+        return;
+      }
+      baseMessage = savedMsg;
+      initialRawText = baseMessage.rawText; // It will be "..."
+      debugPrint("ChatStateNotifier($chatId): Created placeholder streaming message with REAL ID: $targetMessageId.");
     }
  
     // The streaming message is now stored in the state, not the DB.
@@ -362,12 +377,10 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
            case LlmStreamChunkType.text:
              // --- Live Update Logic (State only) ---
              final accumulatedNewText = chunk.accumulatedText;
-             final combinedRawText = initialRawText + accumulatedNewText;
              
              // Update the message object in the state, not the database.
              final messageToUpdate = (state.streamingMessage ?? baseMessage).copyWith(
-               id: targetMessageId,
-               parts: [MessagePart.text(combinedRawText)]
+               parts: [MessagePart.text(accumulatedNewText)]
              );
 
              if (mounted) {
