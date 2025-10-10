@@ -70,7 +70,6 @@ mixin BackgroundTasks on UiStateManager {
             ? keptMessages.sublist(countToSummarize, (countToSummarize + 4 > keptMessages.length) ? keptMessages.length : countToSummarize + 4)
             : <Message>[];
 
-
         // 4. 生成新的总结块，并与任何已存在的总结合并
         final newSummaryChunk = await summarizeMessages(
           messagesToSummarize,
