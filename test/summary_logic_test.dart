@@ -202,7 +202,8 @@ void main() {
 }
 
 class TestBackgroundTasksMixin extends StateNotifier<ChatScreenState> with UiStateManager, BackgroundTasks {
-  Future<void> executePreprocessing(Chat chat) {
+  @override
+  Future<Chat?> executePreprocessing(Chat chat) {
     return super.executePreprocessing(chat);
   }
 

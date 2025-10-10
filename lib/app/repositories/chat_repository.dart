@@ -51,7 +51,7 @@ class ChatRepository {
   }
 
   Future<int> saveChat(Chat chat) async {
-
+    debugPrint("[ChatRepository.saveChat] Saving chat ${chat.id}. contextSummary hash=${chat.contextSummary.hashCode}, summary content: ${chat.contextSummary}");
     final companion = ChatMapper.toCompanion(chat, forInsert: chat.id == 0);
     final newId = await _chatDao.saveChat(companion);
     // 如果是新增操作 (id=0)，则自动绑定到当前用户

@@ -158,7 +158,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       state = state.copyWith(isCancelled: false);
     }
     
-    final chat = ref.read(currentChatProvider(chatId)).value;
+    Chat? chat = ref.read(currentChatProvider(chatId)).value;
     if (chat == null) {
       showTopMessage('无法发送消息：聊天数据未加载。', backgroundColor: Colors.red);
       return;
@@ -185,8 +185,20 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         debugPrint("sendMessage ($chatId): Gatekeeper check failed. Forcing synchronous summarization...");
         showTopMessage("上下文已满，正在强制同步总结...", duration: const Duration(seconds: 120));
         // 直接调用并等待后台任务中的总结逻辑完成
-        await (this as dynamic).executePreprocessing(chat);
+        debugPrint("[sendMessage] Before executePreprocessing: chat.contextSummary hash=${chat.contextSummary.hashCode}");
+        final updatedChat = await (this as dynamic).executePreprocessing(chat);
         showTopMessage("强制总结已完成。", backgroundColor: Colors.green);
+        
+        // 关键修复：使用 executePreprocessing 返回的更新后的 chat 对象
+        if (updatedChat != null) {
+          chat = updatedChat;
+        }
+        
+        if (chat == null) {
+          showTopMessage('无法发送消息：总结后聊天数据丢失。', backgroundColor: Colors.red);
+          return;
+        }
+        debugPrint("[sendMessage] After executePreprocessing: chat.contextSummary hash=${chat.contextSummary.hashCode}");
       }
     } catch (e) {
       debugPrint("sendMessage ($chatId): Error during gatekeeper check: $e");
@@ -243,6 +255,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         final messageRepo = ref.read(messageRepositoryProvider);
         await messageRepo.saveMessages(messagesToSave); // Batch save
         final chatRepo = ref.read(chatRepositoryProvider);
+        debugPrint("[sendMessage] Before saving user message: chat.contextSummary hash=${chat.contextSummary.hashCode}");
         await chatRepo.saveChat(chat.copyWith(updatedAt: DateTime.now()));
         debugPrint("用户发送的 ${messagesToSave.length} 条原子消息已保存。");
       } catch (e) {
@@ -339,24 +352,17 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       }
       initialRawText = combinedBuffer.toString();
     } else {
-      // This is a new message. Save a placeholder to the DB first to get a real ID.
-      final placeholderMessage = Message(
+      // This is a new message. Create a temporary message with ID 0.
+      // The actual database save will happen in _finalizeStreamedMessage.
+      baseMessage = Message(
         chatId: chatId,
         role: MessageRole.model,
         parts: [MessagePart.text("...")], // Start with a placeholder
+        id: 0, // Temporary ID, indicates it's not yet saved to DB
       );
-      targetMessageId = await messageRepo.saveMessage(placeholderMessage);
-      // Fetch the message we just saved to ensure we have the full object with timestamp etc.
-      final savedMsg = await messageRepo.getMessageById(targetMessageId);
-      if (savedMsg == null) {
-        showTopMessage('无法创建占位消息', backgroundColor: Colors.red);
-        state = state.copyWith(isLoading: false);
-        stopUpdateTimer();
-        return;
-      }
-      baseMessage = savedMsg;
+      targetMessageId = 0; // Indicate no real ID yet
       initialRawText = baseMessage.rawText; // It will be "..."
-      debugPrint("ChatStateNotifier($chatId): Created placeholder streaming message with REAL ID: $targetMessageId.");
+      debugPrint("ChatStateNotifier($chatId): Created temporary streaming message with ID 0. Will save in finalization.");
     }
  
     // The streaming message is now stored in the state, not the DB.
@@ -627,28 +633,26 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
         // Save the fully processed message to the database.
         final savedId = await messageRepo.saveMessage(processedMessage);
-        final savedMessage = await messageRepo.getMessageById(savedId);
+        // FIX: Instead of re-fetching (which can fail due to race conditions),
+        // manually construct the final message object with the new ID.
+        final finalMessage = processedMessage.copyWith(id: savedId);
 
-        if (savedMessage != null) {
-          // "Promote" the temporary message to a persistent one in the state.
-          if (mounted) {
-            state = state.copyWith(streamingMessage: savedMessage);
-          }
+        // "Promote" the temporary message to a persistent one in the state.
+        if (mounted) {
+          state = state.copyWith(streamingMessage: finalMessage);
+        }
 
-          // Run post-save tasks ONLY if the stream completed successfully.
-          if (!wasCancelled && !hasError) {
-            debugPrint("Running async post-save processing for newly saved message ID $savedId...");
-            await runAsyncProcessingTasks(savedMessage);
-            debugPrint("Async post-save processing for message ID $savedId finished.");
-            // 只有在流正常成功结束后才显示“已完成”。
-            // 如果是因为错误、取消或已知的“中断原因”而结束，则不显示此消息，
-            // 以免覆盖掉之前已经显示的更具体的信息。
-            if (mounted && !state.isCancelled && !hasError) {
-              showTopMessage("已完成", backgroundColor: Colors.green);
-            }
-          } else {
-            debugPrint("Async post-save processing for message ID $savedId skipped due to cancellation or error.");
+        // Run post-save tasks ONLY if the stream completed successfully.
+        if (!wasCancelled && !hasError) {
+          await runAsyncProcessingTasks(finalMessage);
+          // 只有在流正常成功结束后才显示“已完成”。
+          // 如果是因为错误、取消或已知的“中断原因”而结束，则不显示此消息，
+          // 以免覆盖掉之前已经显示的更具体的信息。
+          if (mounted && !state.isCancelled && !hasError) {
+            showTopMessage("已完成", backgroundColor: Colors.green);
           }
+        } else {
+          debugPrint("Async post-save processing for message ID ${finalMessage.id} skipped due to cancellation or error.");
         }
       } else {
         debugPrint("Skipping message save/processing: chat not available.");

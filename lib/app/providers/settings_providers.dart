@@ -194,3 +194,32 @@ class GlobalSettingsActions {
     }
   }
 }
+
+
+// --- 全局总结比例设置 (设备级) ---
+
+const String _summaryRatioKey = 'summary_ratio';
+
+class SummaryRatioNotifier extends StateNotifier<double> {
+  late final SharedPreferences? _prefs;
+
+  SummaryRatioNotifier() : super(0.7); // Default to 70%
+
+  Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+    state = _prefs?.getDouble(_summaryRatioKey) ?? 0.7;
+  }
+
+  Future<void> setRatio(double newRatio) async {
+    // Clamp the value between 0.1 and 1.0 to ensure it's always valid.
+    final clampedRatio = newRatio.clamp(0.1, 1.0);
+    if (state != clampedRatio) {
+      state = clampedRatio;
+      await _prefs?.setDouble(_summaryRatioKey, clampedRatio);
+    }
+  }
+}
+
+final summaryRatioProvider = StateNotifierProvider<SummaryRatioNotifier, double>((ref) {
+  return SummaryRatioNotifier();
+});

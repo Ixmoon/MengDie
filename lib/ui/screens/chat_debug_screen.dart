@@ -11,6 +11,7 @@ import '../widgets/app_card.dart';
 import '../widgets/widget_utils.dart'; // 导入新的公用函数
 import '../../app/providers/repository_providers.dart';
 import '../../app/repositories/message_repository.dart';
+import '../../app/providers/settings_providers.dart'; // Import settings providers
 // 此文件包含用于调试聊天上下文和合成 XML 的屏幕界面。
 // XML 和上下文构建的核心逻辑已移至 ContextXmlService。
 
@@ -29,15 +30,21 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
 
   // For editable context summary
   late final TextEditingController _contextSummaryController;
+  late final TextEditingController _summaryRatioController;
   bool _isSummaryDirty = false;
 
   @override
   void initState() {
     super.initState();
     _contextSummaryController = TextEditingController();
+    _summaryRatioController = TextEditingController();
     _contextSummaryController.addListener(_onSummaryChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        // Initialize the controller with the provider's value
+        final initialRatio = ref.read(summaryRatioProvider);
+        _summaryRatioController.text = (initialRatio * 100).toStringAsFixed(0);
         _loadDebugContext();
       }
     });
@@ -47,6 +54,7 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
   void dispose() {
     _contextSummaryController.removeListener(_onSummaryChanged);
     _contextSummaryController.dispose();
+    _summaryRatioController.dispose();
     super.dispose();
   }
 
@@ -287,6 +295,16 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('手动总结设置', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  _buildManualSummarySlider(),
+                ],
+              ),
+            ),
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text('计算出的合成 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   Container(
@@ -464,5 +482,62 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         }).toList(),
       );
     }
+  }
+
+  Widget _buildManualSummarySlider() {
+    final ratio = ref.watch(summaryRatioProvider);
+    final ratioNotifier = ref.read(summaryRatioProvider.notifier);
+
+    // Update text controller only if the widget value is different
+    // to avoid cycles and allow user input.
+    final controllerValue = (ratio * 100).toStringAsFixed(0);
+    if (_summaryRatioController.text != controllerValue) {
+      _summaryRatioController.text = controllerValue;
+    }
+
+    return Column(
+      children: [
+        Text(
+          '保留最近 ${(ratio * 100).toStringAsFixed(0)}% 的上下文',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Slider(
+                value: ratio,
+                min: 0.1,
+                max: 1.0,
+                divisions: 90,
+                label: '${(ratio * 100).toStringAsFixed(0)}%',
+                onChanged: (value) {
+                  ratioNotifier.setRatio(value);
+                },
+              ),
+            ),
+            SizedBox(
+              width: 60,
+              child: TextFormField(
+                controller: _summaryRatioController,
+                textAlign: TextAlign.center,
+                decoration: const InputDecoration(
+                  suffixText: '%',
+                  isDense: true,
+                  contentPadding: EdgeInsets.all(8),
+                ),
+                keyboardType: TextInputType.number,
+                onFieldSubmitted: (value) {
+                  final percentage = double.tryParse(value);
+                  if (percentage != null) {
+                    ratioNotifier.setRatio(percentage / 100.0);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }

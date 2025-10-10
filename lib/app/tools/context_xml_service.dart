@@ -282,6 +282,7 @@ Future<ApiRequestContext> buildApiRequestContext({
   String? chatSystemPromptOverride,
   bool? keepAsSystemPrompt,
   List<Message>? historyOverride,
+  bool isPrediction = false, // FINAL FIX: Add a flag to control pre-emptive checks
 }) async {
   final messageRepo = _ref.read(messageRepositoryProvider);
   final llmService = _ref.read(llmServiceProvider);
@@ -348,7 +349,7 @@ Future<ApiRequestContext> buildApiRequestContext({
 
   // Carried-over XML counts as one turn if it exists. Summary is now part of history.
   if (xmlExists) {
-    fixedTurns = 1;
+    // fixedTurns = 1; // Per user feedback, XML should not reduce the turn limit.
   }
 
   historyTokenBudget = (chat.contextConfig.maxContextTokens ?? 256000) - fixedTokens;
@@ -358,14 +359,15 @@ Future<ApiRequestContext> buildApiRequestContext({
   // 这确保了XML计算不受影响，但上下文窗口从正确的点开始。
   List<Message> historyForWindowing;
   if (chat.lastSummarizedMessageId != null && chat.lastSummarizedMessageId! > 0) {
-    final summaryBoundaryMessage = await messageRepo.getMessageById(chat.lastSummarizedMessageId!);
-    if (summaryBoundaryMessage != null) {
-      historyForWindowing = fullHistory
-          .where((m) => m.timestamp.isAfter(summaryBoundaryMessage.timestamp))
-          .toList();
-      debugPrint("ContextXmlService: Found summary boundary at ${summaryBoundaryMessage.timestamp}. Filtering history for windowing, ${historyForWindowing.length} messages remaining.");
+    // FINAL FIX: The most robust method. Find the index of the boundary message
+    // in the chronologically sorted full history, and take all messages after it.
+    // This handles both timestamp collisions and user-inserted messages correctly.
+    final boundaryIndex = fullHistory.indexWhere((m) => m.id == chat.lastSummarizedMessageId!);
+    if (boundaryIndex != -1) {
+      historyForWindowing = fullHistory.sublist(boundaryIndex + 1);
+      debugPrint("ContextXmlService: Found summary boundary at ID ${chat.lastSummarizedMessageId} (index $boundaryIndex). Filtering history for windowing, ${historyForWindowing.length} messages remaining.");
     } else {
-      // Fallback: If the boundary message was deleted or is otherwise inaccessible, use the full history to avoid breaking the chat.
+      // Fallback: If the boundary message was deleted, use the full history to avoid breaking the chat.
       historyForWindowing = fullHistory;
       debugPrint("ContextXmlService: Could not find summary boundary message with ID ${chat.lastSummarizedMessageId}. Using full history for windowing.");
     }
@@ -389,47 +391,53 @@ Future<ApiRequestContext> buildApiRequestContext({
   // kept history and add them to the dropped list. This ensures the trigger
   // logic in `executePreprocessing` fires at the correct time (when the budget
   // is full), not one turn later.
-  switch (chat.contextConfig.mode) {
-    case ContextManagementMode.turns:
-      final turnLimit = (chat.contextConfig.maxTurns - fixedTurns) * 2;
-      // The +1 represents the incoming user message.
-      if (limitedHistoryForPrompt.length + 1 > turnLimit && limitedHistoryForPrompt.isNotEmpty) {
-        final oldestKeptMessage = limitedHistoryForPrompt.removeAt(0);
-        droppedMessages.insert(0, oldestKeptMessage);
-      }
-      break;
-    case ContextManagementMode.tokens:
-      // For token mode, we must perform a more expensive check.
-      final tokensForCurrentUserMessage = await llmService.countTokens(llmContext: [LlmContent.fromMessage(currentUserMessage)], apiConfig: apiConfig);
+  // FINAL FIX: This entire block should ONLY run during a prediction, not during
+  // a normal context build for sending a message or viewing debug info.
+  if (isPrediction) {
+    switch (chat.contextConfig.mode) {
+      case ContextManagementMode.turns:
+        final turnLimit = (chat.contextConfig.maxTurns - fixedTurns) * 2;
+        // The +1 represents the incoming user message.
+        if (limitedHistoryForPrompt.length + 1 > turnLimit && limitedHistoryForPrompt.isNotEmpty) {
+          final oldestKeptMessage = limitedHistoryForPrompt.removeAt(0);
+          // FIX: Append to the end to maintain chronological order.
+          droppedMessages.add(oldestKeptMessage);
+        }
+        break;
+      case ContextManagementMode.tokens:
+        // For token mode, we must perform a more expensive check.
+        final tokensForCurrentUserMessage = await llmService.countTokens(llmContext: [LlmContent.fromMessage(currentUserMessage)], apiConfig: apiConfig);
 
-      // We must recalculate the total tokens of the kept history to see if adding the new message fits.
-      final tokenFutures = limitedHistoryForPrompt.map((msg) =>
-        llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
-      );
-      final historyTokenCounts = await Future.wait(tokenFutures);
-      final currentHistoryTokens = historyTokenCounts.sum;
+        // We must recalculate the total tokens of the kept history to see if adding the new message fits.
+        final tokenFutures = limitedHistoryForPrompt.map((msg) =>
+          llmService.countTokens(llmContext: [LlmContent.fromMessage(msg)], apiConfig: apiConfig)
+        );
+        final historyTokenCounts = await Future.wait(tokenFutures);
+        final currentHistoryTokens = historyTokenCounts.sum;
 
-      if (currentHistoryTokens + tokensForCurrentUserMessage > historyTokenBudget) {
-        int excessTokens = (currentHistoryTokens + tokensForCurrentUserMessage) - historyTokenBudget;
-        int tokensAccountedForDrop = 0;
-        int messagesToDropCount = 0;
+        if (currentHistoryTokens + tokensForCurrentUserMessage > historyTokenBudget) {
+          int excessTokens = (currentHistoryTokens + tokensForCurrentUserMessage) - historyTokenBudget;
+          int tokensAccountedForDrop = 0;
+          int messagesToDropCount = 0;
 
-        // Iterate from oldest to newest, accumulating tokens to drop.
-        for (final tokenCount in historyTokenCounts) {
-          tokensAccountedForDrop += tokenCount;
-          messagesToDropCount++;
-          if (tokensAccountedForDrop >= excessTokens) {
-            break;
+          // Iterate from oldest to newest, accumulating tokens to drop.
+          for (final tokenCount in historyTokenCounts) {
+            tokensAccountedForDrop += tokenCount;
+            messagesToDropCount++;
+            if (tokensAccountedForDrop >= excessTokens) {
+              break;
+            }
+          }
+
+          if (messagesToDropCount > 0) {
+            final messagesToDrop = limitedHistoryForPrompt.sublist(0, messagesToDropCount);
+            // FIX: Append to the end to maintain chronological order.
+            droppedMessages.addAll(messagesToDrop);
+            limitedHistoryForPrompt.removeRange(0, messagesToDropCount);
           }
         }
-
-        if (messagesToDropCount > 0) {
-          final messagesToDrop = limitedHistoryForPrompt.sublist(0, messagesToDropCount);
-          droppedMessages.insertAll(0, messagesToDrop);
-          limitedHistoryForPrompt.removeRange(0, messagesToDropCount);
-        }
-      }
-      break;
+        break;
+    }
   }
 
   // --- 4. Assemble the final context ---
@@ -621,6 +629,7 @@ Future<ContextPredictionResult> predictContextUsage({required int chatId}) async
   final contextResult = await buildApiRequestContext(
     chatId: chatId,
     currentUserMessage: placeholderMessage,
+    isPrediction: true, // FINAL FIX: Explicitly tell the builder this is a prediction call
   );
 
   bool willExceed = false;
@@ -643,7 +652,7 @@ Future<ContextPredictionResult> predictContextUsage({required int chatId}) async
       final historyTokenCounts = await Future.wait(tokenFutures);
       final currentHistoryTokens = historyTokenCounts.sum;
       
-      final predictedTokens = config.predictedTurnTokens ?? 2048;
+      final predictedTokens = config.predictedTurnTokens ?? 1024;
 
       if (currentHistoryTokens + predictedTokens > (config.maxContextTokens ?? 256000)) {
         willExceed = true;

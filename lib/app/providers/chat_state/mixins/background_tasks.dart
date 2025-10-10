@@ -60,8 +60,9 @@ mixin BackgroundTasks on UiStateManager {
           return;
         }
 
-        // 2. 计算要从当前窗口中总结的消息数量（最旧的30%）
-        final countToSummarize = (keptMessages.length * 0.3).ceil();
+        // 2. 计算要从当前窗口中总结的消息数量（基于用户设置的比例）
+        final summaryRatio = 1.0 - ref.read(summaryRatioProvider); // Invert: 70% kept -> 30% summarized
+        final countToSummarize = (keptMessages.length * summaryRatio).ceil();
         final messagesToSummarize = keptMessages.sublist(0, countToSummarize);
         final lastMessageToSummarize = messagesToSummarize.last;
 
@@ -114,9 +115,13 @@ mixin BackgroundTasks on UiStateManager {
         List<Future> tasks = [];
 
         // 3. Gather all tasks that must run *after* the message is saved.
+        debugPrint("[runAsyncProcessingTasks] Checking tasks for chat ID $chatId...");
         tasks.add(executeAutoTitleGeneration(chat, modelMessage, allMessages));
         tasks.add(executeSecondaryXmlGeneration(chat, modelMessage));
-        if (chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false)) {
+
+        final bool shouldRunPreprocessing = chat.enablePreprocessing && (chat.preprocessingPrompt?.isNotEmpty ?? false);
+        debugPrint("[runAsyncProcessingTasks] Preprocessing check: enablePreprocessing=${chat.enablePreprocessing}, hasPrompt=${chat.preprocessingPrompt?.isNotEmpty ?? false}. Should run: $shouldRunPreprocessing");
+        if (shouldRunPreprocessing) {
           tasks.add(executePreprocessing(chat));
         }
         if (chat.enableHelpMeReply && chat.helpMeReplyTriggerMode == HelpMeReplyTriggerMode.auto) {
@@ -236,8 +241,8 @@ mixin BackgroundTasks on UiStateManager {
     }
 
     /// Executes automatic summarization based on a predictive model.
-    Future<void> executePreprocessing(Chat chat) async {
-      if (state.isCancelled || state.isSummarizing) return;
+    Future<Chat?> executePreprocessing(Chat chat) async {
+      if (state.isCancelled || state.isSummarizing) return null;
 
       // Set summarizing state immediately and ensure it's cleared
       if (mounted) {
@@ -252,8 +257,10 @@ mixin BackgroundTasks on UiStateManager {
 
         // 2. If it won't exceed, we're done.
         if (!predictionResult.willExceed) {
-          return; // Exit the try block. Finally will still run.
+          debugPrint("[executePreprocessing] Prediction is NO exceed. Exiting.");
+          return null; // Exit the try block. Finally will still run.
         }
+        debugPrint("[executePreprocessing] Prediction is YES exceed. Proceeding with summarization.");
 
         // 3. The messages in the current window are the combination of what was
         //    kept and what was just dropped by the prediction.
@@ -263,19 +270,20 @@ mixin BackgroundTasks on UiStateManager {
         ];
 
         if (currentWindowMessages.length < 3) {
-          return;
+          return null;
         }
 
-        // 4. Correctly calculate which messages to summarize.
-        // It should be ALL of the dropped messages PLUS the oldest 30% of the messages that were kept.
-        final countToSummarizeFromKept = (predictionResult.keptMessages.length * 0.3).ceil();
+        // 4. Correctly calculate which messages to summarize based on the global setting.
+        // It should be ALL dropped messages PLUS a percentage of the kept messages.
+        final summaryRatio = 1.0 - ref.read(summaryRatioProvider); // e.g., 1.0 - 0.7 (keep) = 0.3 (summarize)
+        final countToSummarizeFromKept = (predictionResult.keptMessages.length * summaryRatio).floor();
         final messagesToSummarize = [
           ...predictionResult.droppedMessages,
           ...predictionResult.keptMessages.sublist(0, countToSummarizeFromKept),
         ];
 
         if (messagesToSummarize.isEmpty) {
-          return;
+          return null;
         }
 
         // 5. The "following messages" for context are the ones that will REMAIN in the window,
@@ -285,7 +293,7 @@ mixin BackgroundTasks on UiStateManager {
             ? remainingKeptMessages.sublist(0, 4)
             : remainingKeptMessages;
 
-        if (state.isCancelled) return;
+        if (state.isCancelled) return null;
 
         // 6. Generate the new summary chunk, merging with any previous summary.
         final chatRepo = ref.read(chatRepositoryProvider);
@@ -299,11 +307,14 @@ mixin BackgroundTasks on UiStateManager {
         if (newSummaryChunk.isNotEmpty && mounted) {
           // The new boundary is the timestamp of the last message we summarized.
           final newBoundaryId = messagesToSummarize.lastOrNull?.id;
-          await chatRepo.saveChat(chat.copyWith(
+          final chatToSave = chat.copyWith(
             contextSummary: newSummaryChunk,
             lastSummarizedMessageId: newBoundaryId,
-          ));
+          );
+          await chatRepo.saveChat(chatToSave);
           updateContextDebugInfo();
+          // 成功保存后，返回最新的 chat 对象
+          return await chatRepo.getChat(chatId);
         } else if (mounted) {
           // Automatic summarization resulted in an empty summary. Nothing to save.
         }
@@ -317,6 +328,7 @@ mixin BackgroundTasks on UiStateManager {
           state = state.copyWith(isSummarizing: false);
         }
       }
+      return null; // 确保在所有路径上都有返回值
     }
 
     /// A reusable helper to summarize a list of messages in parallel chunks.

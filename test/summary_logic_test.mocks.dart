@@ -558,6 +558,7 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
     String? chatSystemPromptOverride,
     bool? keepAsSystemPrompt,
     List<_i6.Message>? historyOverride,
+    bool? isPrediction = false,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#buildApiRequestContext, [], {
@@ -568,6 +569,7 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
               #chatSystemPromptOverride: chatSystemPromptOverride,
               #keepAsSystemPrompt: keepAsSystemPrompt,
               #historyOverride: historyOverride,
+              #isPrediction: isPrediction,
             }),
             returnValue: _i10.Future<_i4.ApiRequestContext>.value(
               _FakeApiRequestContext_5(
@@ -580,6 +582,7 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
                   #chatSystemPromptOverride: chatSystemPromptOverride,
                   #keepAsSystemPrompt: keepAsSystemPrompt,
                   #historyOverride: historyOverride,
+                  #isPrediction: isPrediction,
                 }),
               ),
             ),
@@ -1091,13 +1094,12 @@ class MockChatStateNotifier extends _i1.Mock implements _i12.ChatStateNotifier {
           as _i10.Future<void>);
 
   @override
-  _i10.Future<void> executePreprocessing(_i6.Chat? chat) =>
+  _i10.Future<_i6.Chat?> executePreprocessing(_i6.Chat? chat) =>
       (super.noSuchMethod(
             Invocation.method(#executePreprocessing, [chat]),
-            returnValue: _i10.Future<void>.value(),
-            returnValueForMissingStub: _i10.Future<void>.value(),
+            returnValue: _i10.Future<_i6.Chat?>.value(),
           )
-          as _i10.Future<void>);
+          as _i10.Future<_i6.Chat?>);
 
   @override
   _i10.Future<String> summarizeMessages(
