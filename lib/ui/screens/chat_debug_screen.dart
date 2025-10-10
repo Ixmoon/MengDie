@@ -9,8 +9,6 @@ import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../app/tools/context_xml_service.dart';
 import '../widgets/app_card.dart';
 import '../widgets/widget_utils.dart'; // 导入新的公用函数
-// import '../widgets/editable_debug_section.dart'; // No longer needed
-import '../../app/providers/chat_state/chat_data_providers.dart';
 import '../../app/providers/repository_providers.dart';
 import '../../app/repositories/message_repository.dart';
 // 此文件包含用于调试聊天上下文和合成 XML 的屏幕界面。

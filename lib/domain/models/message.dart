@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../enums.dart';
-import '../../app/tools/xml_processor.dart';
 
 part 'message.g.dart';
 

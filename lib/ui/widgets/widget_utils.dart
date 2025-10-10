@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'code_editor/code_editor_view.dart';
-import 'code_editor/dropdown_selector.dart';
 import 'code_editor/editor_languages.dart';
 import 'code_editor/editor_themes.dart';
 

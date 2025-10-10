@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart';
-import 'package:flutter/foundation.dart';
 import 'package:postgres/postgres.dart';
 
 import '../../database/app_database.dart';

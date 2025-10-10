@@ -10,16 +10,14 @@ import 'package:gemini_chat_app/app/providers/chat_state/special_action_type.dar
 import 'package:gemini_chat_app/domain/enums.dart';
 import 'package:gemini_chat_app/data/llmapi/llm_service.dart';
 import 'package:gemini_chat_app/data/llmapi/llm_models.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/chat_data_providers.dart';
 import 'package:gemini_chat_app/app/providers/repository_providers.dart';
 import 'package:gemini_chat_app/app/providers/chat_state/mixins/ui_state_manager.dart';
 import 'package:gemini_chat_app/app/tools/context_xml_service.dart';
 import 'package:gemini_chat_app/app/repositories/chat_repository.dart';
 import 'package:gemini_chat_app/domain/models/api_config.dart';
 import 'package:flutter/material.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/chat_screen_state.dart';
 import 'package:gemini_chat_app/app/providers/chat_state_providers.dart';
-import 'package:collection/collection.dart';
+
 
 import 'summary_logic_test.mocks.dart';
 import 'package:gemini_chat_app/app/providers/chat_state/chat_state_notifier.dart';

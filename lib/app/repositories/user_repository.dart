@@ -3,14 +3,12 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../data/database/app_database.dart';
 import '../../data/database/daos/user_dao.dart';
 import '../../data/mappers/user_mapper.dart';
 import '../../domain/models/user.dart';
 import '../providers/auth_providers.dart';
-import '../../data/sync/sync_service.dart';
 
 /// 用户仓库
 ///

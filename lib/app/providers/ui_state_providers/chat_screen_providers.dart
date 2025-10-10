@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/models/models.dart';
 import '../chat_state/chat_data_providers.dart';
-import '../../../core/common_enums.dart';
 
 /// A data class to hold the combined and consistent state for the chat screen.
 /// It bundles the current chat, its siblings for the PageView, and the current index.

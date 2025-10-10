@@ -4,7 +4,6 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // For firstWhereOrNull
 import 'cached_image.dart';
-import '../../app/tools/xml_processor.dart';
 import 'chat/quote_highlight_syntax.dart';
 
 // 导入模型
