@@ -94,6 +94,21 @@ class LlmTextPart extends LlmPart {
   const LlmTextPart(this.text);
 }
 
+/// 表示内容的URL部分
+@immutable
+class LlmUrlPart extends LlmPart {
+  final String url;
+  const LlmUrlPart(this.url);
+}
+
+/// 表示可执行代码的部分
+@immutable
+class LlmExecutableCodePart extends LlmPart {
+  final String language;
+  final String code;
+  const LlmExecutableCodePart({required this.language, required this.code});
+}
+
 /// 表示内容的数据部分 (例如，一张图片)。
 /// 相当于 genai.DataPart
 @immutable
@@ -161,6 +176,7 @@ class LlmStreamChunk {
   final String? error;
   final DateTime timestamp;
   final LlmStreamChunkType type;
+  final Map<String, dynamic>? groundingMetadata; // For Gemini grounding
 
   const LlmStreamChunk({
     required this.textChunk,
@@ -169,6 +185,7 @@ class LlmStreamChunk {
     this.isFinished = false,
     this.error,
     this.type = LlmStreamChunkType.text,
+    this.groundingMetadata,
   });
 
   /// 创建一个错误块。
@@ -201,6 +218,7 @@ class LlmResponse {
   final List<MessagePart> parts;
   final bool isSuccess;
   final String? error;
+  final Map<String, dynamic>? groundingMetadata; // For Gemini grounding
 
   // 为方便访问文本内容而设的 Getter，用于兼容
   String get rawText => parts
@@ -208,13 +226,19 @@ class LlmResponse {
       .map((p) => p.text ?? '')
       .join();
 
-  const LlmResponse({required this.parts, this.isSuccess = true, this.error});
+  const LlmResponse({
+    required this.parts,
+    this.isSuccess = true,
+    this.error,
+    this.groundingMetadata,
+  });
 
   /// 创建一个错误响应。
   const LlmResponse.error(String message)
     : parts = const [],
       isSuccess = false,
-      error = message;
+      error = message,
+      groundingMetadata = null;
 }
 
 // --- Provider-Specific Models ---

@@ -251,13 +251,18 @@ class LlmRequestHandler {
                 }
 
                 final textChunk = textExtractor(jsonMap);
-                if (textChunk.isNotEmpty) {
+                final groundingMetadata =
+                    jsonMap['candidates']?.first?['groundingMetadata']
+                        as Map<String, dynamic>?;
+
+                if (textChunk.isNotEmpty || groundingMetadata != null) {
                   accumulatedResponse += textChunk;
                   yield LlmStreamChunk(
                     textChunk: textChunk,
                     accumulatedText: accumulatedResponse,
                     timestamp: DateTime.now(),
                     isFinished: false,
+                    groundingMetadata: groundingMetadata,
                   );
                 }
               } catch (_) {}

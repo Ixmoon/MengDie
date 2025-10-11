@@ -148,13 +148,6 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 ),
                 const PopupMenuDivider(),
                 _buildPopupMenuItem(
-                  value: 'toggleOutputMode',
-                  icon: chatState.isStreamMode
-                      ? Icons.stream
-                      : Icons.chat_bubble,
-                  label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出',
-                ),
-                _buildPopupMenuItem(
                   value: 'toggleBubbleTransparency',
                   icon: chatState.isBubbleTransparent
                       ? Icons.opacity
@@ -176,13 +169,6 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                       ? Icons.dynamic_feed
                       : Icons.height,
                   label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高',
-                ),
-                _buildPopupMenuItem(
-                  value: 'toggleHighlightQuotes',
-                  icon: chatState.highlightQuotes
-                      ? Icons.format_quote
-                      : Icons.format_quote_outlined,
-                  label: chatState.highlightQuotes ? '关闭引号高亮' : '开启引号高亮',
                 ),
                 const PopupMenuDivider(),
                 _buildPopupMenuItem(
@@ -238,9 +224,6 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
               case 'removeCoverImage':
                 onRemoveCoverImage();
                 break;
-              case 'toggleOutputMode':
-                notifier.toggleOutputMode();
-                break;
               case 'debug':
                 context.push('/chat/debug');
                 break;
@@ -252,9 +235,6 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 break;
               case 'toggleMessageListHeight':
                 notifier.toggleMessageListHeightMode();
-                break;
-              case 'toggleHighlightQuotes':
-                notifier.toggleHighlightQuotes();
                 break;
               case 'exportChat':
                 notifier.showTopMessage(

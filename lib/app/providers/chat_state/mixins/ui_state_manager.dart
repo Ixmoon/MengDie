@@ -29,6 +29,12 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
           _prefs.getBool('chat_${chatId}_is_auto_height_enabled') ?? false,
       highlightQuotes:
           _prefs.getBool('chat_${chatId}_highlight_quotes') ?? false,
+      isGoogleSearchEnabled:
+          _prefs.getBool('chat_${chatId}_is_google_search_enabled') ?? false,
+      isUrlContextEnabled:
+          _prefs.getBool('chat_${chatId}_is_url_context_enabled') ?? false,
+      isCodeExecutionEnabled:
+          _prefs.getBool('chat_${chatId}_is_code_execution_enabled') ?? false,
     );
   }
 
@@ -89,14 +95,35 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
       isMessageListHalfHeight: newValue,
     );
     _prefs.setBool('chat_${chatId}_is_auto_height_enabled', newValue);
-    showTopMessage('智能半高模式已: ${newValue ? "开启" : "关闭"}');
+    showTopMessage('智能半高模式已${newValue ? "开启" : "关闭"}');
   }
 
   void toggleHighlightQuotes() {
     final newValue = !state.highlightQuotes;
     state = state.copyWith(highlightQuotes: newValue);
     _prefs.setBool('chat_${chatId}_highlight_quotes', newValue);
-    showTopMessage('引号内容高亮已: ${newValue ? "开启" : "关闭"}');
+    showTopMessage('引号内容高亮已${newValue ? "开启" : "关闭"}');
+  }
+
+  void toggleGoogleSearch() {
+    final newValue = !state.isGoogleSearchEnabled;
+    state = state.copyWith(isGoogleSearchEnabled: newValue);
+    _prefs.setBool('chat_${chatId}_is_google_search_enabled', newValue);
+    showTopMessage('Google 搜索已${newValue ? "启用" : "关闭"}');
+  }
+
+  void toggleUrlContext() {
+    final newValue = !state.isUrlContextEnabled;
+    state = state.copyWith(isUrlContextEnabled: newValue);
+    _prefs.setBool('chat_${chatId}_is_url_context_enabled', newValue);
+    showTopMessage('URL 上下文已${newValue ? "启用" : "关闭"}');
+  }
+
+  void toggleCodeExecution() {
+    final newValue = !state.isCodeExecutionEnabled;
+    state = state.copyWith(isCodeExecutionEnabled: newValue);
+    _prefs.setBool('chat_${chatId}_is_code_execution_enabled', newValue);
+    showTopMessage('代码执行已${newValue ? "启用" : "关闭"}');
   }
 
   void setMessageListHeightMode(bool isHalfHeight) {

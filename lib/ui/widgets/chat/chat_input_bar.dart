@@ -27,6 +27,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final FocusNode _inputFocusNode = FocusNode();
   final FocusNode _keyboardListenerFocusNode = FocusNode();
   final List<PlatformFile> _attachments = [];
+  bool _isChinesePunctuation = true;
 
   @override
   void dispose() {
@@ -44,10 +45,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     if (text.isEmpty && _attachments.isEmpty) {
       return;
     }
-
-    // The mode-specific logic is now handled in the notifier.
-    // The UI's only job is to gather all parts (text and attachments)
-    // and send them to the single `sendMessage` entry point.
 
     List<MessagePart> parts = [];
     if (text.isNotEmpty) {
@@ -134,6 +131,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         notifier.showTopMessage('选择文件时出错: $e', backgroundColor: Colors.red);
       }
     }
+  }
+
+  void _insertText(String left, String right) {
+    final text = widget.messageController.text;
+    final selection = widget.messageController.selection;
+    final middle = selection.textInside(text);
+    final newText =
+        selection.textBefore(text) +
+        left +
+        middle +
+        right +
+        selection.textAfter(text);
+
+    widget.messageController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: selection.start + left.length + middle.length,
+      ),
+    );
   }
 
   Widget _buildAttachmentsPreview() {
@@ -248,6 +264,166 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
+  Widget _buildIconButton({
+    required IconData icon,
+    required String tooltip,
+    required bool isSelected,
+    required VoidCallback onPressed,
+  }) {
+    final theme = Theme.of(context);
+    return IconButton(
+      icon: Icon(icon),
+      tooltip: tooltip,
+      iconSize: 20,
+      visualDensity: VisualDensity.compact,
+      color: isSelected
+          ? theme.colorScheme.primary
+          : theme.colorScheme.onSurfaceVariant,
+      style: isSelected
+          ? IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary.withAlpha(40),
+            )
+          : null,
+      onPressed: onPressed,
+    );
+  }
+
+  Widget _buildTextButton({
+    required String text,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.compact,
+          foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+    final notifier = ref.read(
+      chatStateNotifierProvider(widget.chatId).notifier,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              _buildIconButton(
+                icon: chatState.isImageGenerationMode
+                    ? Icons.image
+                    : Icons.image_outlined,
+                tooltip: '图片生成模式',
+                isSelected: chatState.isImageGenerationMode,
+                onPressed: notifier.toggleImageGenerationMode,
+              ),
+              _buildIconButton(
+                icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble,
+                tooltip: chatState.isStreamMode ? '流式输出' : '一次性输出',
+                isSelected: chatState.isStreamMode,
+                onPressed: notifier.toggleOutputMode,
+              ),
+              _buildIconButton(
+                icon: chatState.isGoogleSearchEnabled
+                    ? Icons.public
+                    : Icons.public_off,
+                tooltip: 'Google 搜索',
+                isSelected: chatState.isGoogleSearchEnabled,
+                onPressed: notifier.toggleGoogleSearch,
+              ),
+              _buildIconButton(
+                icon: chatState.isUrlContextEnabled
+                    ? Icons.link
+                    : Icons.link_off,
+                tooltip: 'URL 上下文',
+                isSelected: chatState.isUrlContextEnabled,
+                onPressed: notifier.toggleUrlContext,
+              ),
+              _buildIconButton(
+                icon: chatState.isCodeExecutionEnabled
+                    ? Icons.code
+                    : Icons.code_off,
+                tooltip: '代码执行',
+                isSelected: chatState.isCodeExecutionEnabled,
+                onPressed: notifier.toggleCodeExecution,
+              ),
+              _buildIconButton(
+                icon: chatState.highlightQuotes
+                    ? Icons.format_quote
+                    : Icons.format_quote_outlined,
+                tooltip: '引号高亮',
+                isSelected: chatState.highlightQuotes,
+                onPressed: notifier.toggleHighlightQuotes,
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              _buildTextButton(
+                text: '""',
+                tooltip: '添加双引号',
+                onPressed: () {
+                  _insertText(
+                    _isChinesePunctuation ? '“' : '"',
+                    _isChinesePunctuation ? '”' : '"',
+                  );
+                },
+              ),
+              _buildTextButton(
+                text: '()',
+                tooltip: '添加括号',
+                onPressed: () {
+                  _insertText(
+                    _isChinesePunctuation ? '（' : '(',
+                    _isChinesePunctuation ? '）' : ')',
+                  );
+                },
+              ),
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isChinesePunctuation = !_isChinesePunctuation;
+                    });
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    foregroundColor: Theme.of(context).colorScheme.primary,
+                  ),
+                  child: Text(
+                    _isChinesePunctuation ? '中' : '英',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
@@ -274,214 +450,210 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 ),
               ],
             ),
-            child: KeyboardListener(
-              focusNode: _keyboardListenerFocusNode,
-              onKeyEvent: (KeyEvent event) {
-                if (!_inputFocusNode.hasFocus) return;
-                if (event is KeyDownEvent) {
-                  if (event.logicalKey == LogicalKeyboardKey.enter) {
-                    if (HardwareKeyboard.instance.isShiftPressed) {
-                      final currentSelection =
-                          widget.messageController.selection;
-                      final newText = widget.messageController.text
-                          .replaceRange(
-                            currentSelection.start,
-                            currentSelection.end,
-                            '\n',
-                          );
-                      widget.messageController.value = TextEditingValue(
-                        text: newText,
-                        selection: TextSelection.collapsed(
-                          offset: currentSelection.start + 1,
-                        ),
-                      );
-                    } else {
-                      if ((widget.messageController.text.trim().isNotEmpty ||
-                              _attachments.isNotEmpty) &&
-                          !chatState.isLoading) {
-                        _sendMessage();
-                      }
-                    }
-                  }
-                }
-              },
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.image_outlined),
-                    tooltip: '切换图片生成模式',
-                    color: chatState.isImageGenerationMode
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
-                    style: chatState.isImageGenerationMode
-                        ? IconButton.styleFrom(
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withAlpha((255 * 0.1).round()),
-                          )
-                        : null,
-                    onPressed: () {
-                      final notifier = ref.read(
-                        chatStateNotifierProvider(widget.chatId).notifier,
-                      );
-                      notifier.toggleImageGenerationMode();
-                    },
-                  ),
-                  Flexible(
-                    child: TextField(
-                      controller: widget.messageController,
-                      focusNode: _inputFocusNode,
-                      decoration: InputDecoration(
-                        hintText: chatState.isImageGenerationMode
-                            ? '输入图片描述...'
-                            : ((chatState.isLoading ||
-                                      chatState.isProcessingInBackground)
-                                  ? '处理中... (${ref.watch(generationElapsedSecondsProvider)}s)'
-                                  : '输入消息'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(25.0),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.transparent,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16.0,
-                          vertical: 12.0,
-                        ),
-                        isDense: false,
-                      ),
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      minLines: 1,
-                      maxLines: 5,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4.0),
-                  if (chatState.isLoading || chatState.isProcessingInBackground)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4.0),
-                      child: IconButton(
-                        icon: const Icon(Icons.cancel),
-                        tooltip: '停止生成',
-                        onPressed: () async {
-                          if (!mounted) return;
-                          final confirm =
-                              await showDialog<bool>(
-                                context: context,
-                                builder: (dialogContext) => AlertDialog(
-                                  title: const Text('确认停止'),
-                                  content: const Text('确定要停止当前的 AI 响应或后台任务吗？'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.of(
-                                        dialogContext,
-                                      ).pop(false),
-                                      child: const Text('取消'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(dialogContext).pop(true),
-                                      child: Text(
-                                        '确认停止',
-                                        style: TextStyle(
-                                          color: Colors.red.shade700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ) ??
-                              false;
-                          if (!mounted) return;
-                          if (confirm) {
-                            ref
-                                .read(
-                                  chatStateNotifierProvider(
-                                    widget.chatId,
-                                  ).notifier,
-                                )
-                                .cancelGeneration();
-                          }
-                        },
-                        style: IconButton.styleFrom(
-                          foregroundColor: Colors.redAccent,
-                          padding: const EdgeInsets.all(12),
-                        ),
-                      ),
-                    ),
-                  if (!chatState.isLoading &&
-                      !chatState.isProcessingInBackground)
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: widget.messageController,
-                      builder: (context, value, child) {
-                        final isSendMode = value.text.trim().isNotEmpty;
-                        final canSendMessage =
-                            (value.text.trim().isNotEmpty ||
-                            _attachments.isNotEmpty);
-
-                        if (isSendMode) {
-                          return GestureDetector(
-                            onLongPress: chatState.isLoading
-                                ? null
-                                : _pickFiles,
-                            child: IconButton(
-                              icon: const Icon(Icons.send),
-                              tooltip: chatState.isImageGenerationMode
-                                  ? '生成图片 (长按添加文件)'
-                                  : '发送 (长按添加文件)',
-                              onPressed: canSendMessage ? _sendMessage : null,
-                              style:
-                                  IconButton.styleFrom(
-                                    padding: const EdgeInsets.all(12),
-                                  ).copyWith(
-                                    backgroundColor:
-                                        WidgetStateProperty.resolveWith<Color?>(
-                                          (Set<WidgetState> states) {
-                                            if (states.contains(
-                                              WidgetState.disabled,
-                                            )) {
-                                              return Colors.grey.shade300;
-                                            }
-                                            return Theme.of(
-                                              context,
-                                            ).colorScheme.primary;
-                                          },
-                                        ),
-                                    foregroundColor:
-                                        WidgetStateProperty.resolveWith<Color?>(
-                                          (Set<WidgetState> states) {
-                                            if (states.contains(
-                                              WidgetState.disabled,
-                                            )) {
-                                              return Colors.grey.shade700;
-                                            }
-                                            return Theme.of(
-                                              context,
-                                            ).colorScheme.onPrimary;
-                                          },
-                                        ),
-                                  ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                KeyboardListener(
+                  focusNode: _keyboardListenerFocusNode,
+                  onKeyEvent: (KeyEvent event) {
+                    if (!_inputFocusNode.hasFocus) return;
+                    if (event is KeyDownEvent) {
+                      if (event.logicalKey == LogicalKeyboardKey.enter) {
+                        if (HardwareKeyboard.instance.isShiftPressed) {
+                          final currentSelection =
+                              widget.messageController.selection;
+                          final newText = widget.messageController.text
+                              .replaceRange(
+                                currentSelection.start,
+                                currentSelection.end,
+                                '\n',
+                              );
+                          widget.messageController.value = TextEditingValue(
+                            text: newText,
+                            selection: TextSelection.collapsed(
+                              offset: currentSelection.start + 1,
                             ),
                           );
                         } else {
-                          return IconButton(
-                            icon: const Icon(Icons.add_circle_outline),
-                            tooltip: '添加文件',
-                            onPressed: chatState.isLoading ? null : _pickFiles,
+                          if ((widget.messageController.text
+                                      .trim()
+                                      .isNotEmpty ||
+                                  _attachments.isNotEmpty) &&
+                              !chatState.isLoading) {
+                            _sendMessage();
+                          }
+                        }
+                      }
+                    }
+                  },
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Flexible(
+                        child: TextField(
+                          controller: widget.messageController,
+                          focusNode: _inputFocusNode,
+                          decoration: InputDecoration(
+                            hintText: chatState.isImageGenerationMode
+                                ? '输入图片描述...'
+                                : ((chatState.isLoading ||
+                                          chatState.isProcessingInBackground)
+                                      ? '处理中... (${ref.watch(generationElapsedSecondsProvider)}s)'
+                                      : '输入消息'),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(25.0),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: Colors.transparent,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                              vertical: 12.0,
+                            ),
+                            isDense: false,
+                          ),
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          minLines: 1,
+                          maxLines: 5,
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 4.0),
+                      if (chatState.isLoading ||
+                          chatState.isProcessingInBackground)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4.0),
+                          child: IconButton(
+                            icon: const Icon(Icons.cancel),
+                            tooltip: '停止生成',
+                            onPressed: () async {
+                              if (!mounted) return;
+                              final confirm =
+                                  await showDialog<bool>(
+                                    context: context,
+                                    builder: (dialogContext) => AlertDialog(
+                                      title: const Text('确认停止'),
+                                      content: const Text(
+                                        '确定要停止当前的 AI 响应或后台任务吗？',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(false),
+                                          child: const Text('取消'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.of(
+                                            dialogContext,
+                                          ).pop(true),
+                                          child: Text(
+                                            '确认停止',
+                                            style: TextStyle(
+                                              color: Colors.red.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ) ??
+                                  false;
+                              if (!mounted) return;
+                              if (confirm) {
+                                ref
+                                    .read(
+                                      chatStateNotifierProvider(
+                                        widget.chatId,
+                                      ).notifier,
+                                    )
+                                    .cancelGeneration();
+                              }
+                            },
                             style: IconButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
                               padding: const EdgeInsets.all(12),
                             ),
-                          );
-                        }
-                      },
-                    ),
-                ],
-              ),
+                          ),
+                        ),
+                      if (!chatState.isLoading &&
+                          !chatState.isProcessingInBackground)
+                        ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: widget.messageController,
+                          builder: (context, value, child) {
+                            final isSendMode = value.text.trim().isNotEmpty;
+                            final canSendMessage =
+                                (value.text.trim().isNotEmpty ||
+                                _attachments.isNotEmpty);
+
+                            if (isSendMode) {
+                              return GestureDetector(
+                                onLongPress: chatState.isLoading
+                                    ? null
+                                    : _pickFiles,
+                                child: IconButton(
+                                  icon: const Icon(Icons.send),
+                                  tooltip: chatState.isImageGenerationMode
+                                      ? '生成图片 (长按添加文件)'
+                                      : '发送 (长按添加文件)',
+                                  onPressed: canSendMessage
+                                      ? _sendMessage
+                                      : null,
+                                  style:
+                                      IconButton.styleFrom(
+                                        padding: const EdgeInsets.all(12),
+                                      ).copyWith(
+                                        backgroundColor:
+                                            WidgetStateProperty.resolveWith<
+                                              Color?
+                                            >((Set<WidgetState> states) {
+                                              if (states.contains(
+                                                WidgetState.disabled,
+                                              )) {
+                                                return Colors.grey.shade300;
+                                              }
+                                              return Theme.of(
+                                                context,
+                                              ).colorScheme.primary;
+                                            }),
+                                        foregroundColor:
+                                            WidgetStateProperty.resolveWith<
+                                              Color?
+                                            >((Set<WidgetState> states) {
+                                              if (states.contains(
+                                                WidgetState.disabled,
+                                              )) {
+                                                return Colors.grey.shade700;
+                                              }
+                                              return Theme.of(
+                                                context,
+                                              ).colorScheme.onPrimary;
+                                            }),
+                                      ),
+                                ),
+                              );
+                            } else {
+                              return IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                tooltip: '添加文件',
+                                onPressed: chatState.isLoading
+                                    ? null
+                                    : _pickFiles,
+                                style: IconButton.styleFrom(
+                                  padding: const EdgeInsets.all(12),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+                _buildActionButtons(),
+              ],
             ),
           ),
         ),

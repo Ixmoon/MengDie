@@ -23,8 +23,6 @@ class GeminiService implements BaseLlmService {
   final ApiKeyNotifier _apiKeyNotifier;
   final LlmRequestHandler _requestHandler;
   CancelToken? _cancelToken;
-
-  // ===> 在这里添加新代码 <===
   bool _isThinkStreamActive = false;
 
   GeminiService(this._apiKeyNotifier, this._requestHandler);
@@ -34,12 +32,12 @@ class GeminiService implements BaseLlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     required Map<String, dynamic> generationParams,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
-
-    // ===> 在这里添加新代码 <===
-    _isThinkStreamActive = false;
 
     // New API key logic: Prioritize the key from the config, fallback to the pool.
     final apiKey = apiConfig.apiKey?.isNotEmpty == true
@@ -56,11 +54,15 @@ class GeminiService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: true,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeStream(
       payload,
-      textExtractor: _extractTextAndThinkFromChunk, // <--- 修改这里
+      textExtractor: (json) =>
+          _extractTextAndThinkFromChunk(json, isStreaming: true),
     );
   }
 
@@ -69,9 +71,14 @@ class GeminiService implements BaseLlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     required Map<String, dynamic> generationParams,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
+
+    _isThinkStreamActive = false;
 
     // New API key logic: Prioritize the key from the config, fallback to the pool.
     final apiKey = apiConfig.apiKey?.isNotEmpty == true
@@ -88,6 +95,9 @@ class GeminiService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: false,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeOnce(
@@ -97,11 +107,11 @@ class GeminiService implements BaseLlmService {
   }
 
   @override
-  Future<LlmImageResponse> generateImage({
+  Stream<LlmStreamChunk> generateImageStream({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
-  }) async {
+  }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
 
@@ -110,7 +120,7 @@ class GeminiService implements BaseLlmService {
         : _apiKeyNotifier.getNextGeminiApiKey();
 
     if (apiKey == null || apiKey.isEmpty) {
-      return const LlmImageResponse.error("没有可用的 Gemini API Key。");
+      return Stream.value(LlmStreamChunk.error("没有可用的 Gemini API Key。", ''));
     }
 
     final payload = GeminiImagePayload(
@@ -118,38 +128,43 @@ class GeminiService implements BaseLlmService {
       apiConfig: apiConfig,
       generationParams: {},
       llmContext: llmContext,
+      stream: true,
     );
 
-    try {
-      final stream = _requestHandler.executeStream(
-        payload,
-        textExtractor: _extractTextOrImageFromChunk,
+    return _requestHandler.executeStream(
+      payload,
+      textExtractor: _extractTextOrImageFromChunk,
+    );
+  }
+
+  @override
+  Future<LlmImageResponse> generateImageOnce({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    int n = 1,
+  }) {
+    _cancelToken = CancelToken();
+    _requestHandler.setCancelToken(_cancelToken);
+
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
+    if (apiKey == null || apiKey.isEmpty) {
+      return Future.value(
+        const LlmImageResponse.error("没有可用的 Gemini API Key。"),
       );
-
-      final imageChunks = <String>[];
-      final textChunks = <String>[];
-      await for (final chunk in stream) {
-        if (chunk.textChunk.startsWith('IMAGE:')) {
-          imageChunks.add(chunk.textChunk.substring('IMAGE:'.length));
-        } else if (chunk.textChunk.startsWith('TEXT:')) {
-          textChunks.add(chunk.textChunk.substring('TEXT:'.length));
-        }
-        if (chunk.isFinished && chunk.error != null) {
-          return LlmImageResponse.error(chunk.error!);
-        }
-      }
-
-      if (imageChunks.isEmpty && textChunks.isEmpty) {
-        return const LlmImageResponse.error("未生成任何图像或文本数据。");
-      }
-
-      return LlmImageResponse(
-        base64Images: imageChunks,
-        text: textChunks.join(''),
-      );
-    } catch (e) {
-      return LlmImageResponse.error("图像生成流处理失败: $e");
     }
+
+    final payload = GeminiImagePayload(
+      apiKey: apiKey,
+      apiConfig: apiConfig,
+      generationParams: {},
+      llmContext: llmContext,
+      stream: false,
+    );
+
+    return _requestHandler.executeImage(payload);
   }
 
   @override
@@ -200,76 +215,156 @@ class GeminiService implements BaseLlmService {
   }
 
   // --- Helpers ---
-  // ===> 在 GeminiService 类中添加这个完整的新方法 <===
-  String _extractTextAndThinkFromChunk(Map<String, dynamic> json) {
+  String _formatGroundingMetadata(Map<String, dynamic> metadata) {
+    final buffer = StringBuffer();
+    buffer.writeln('<grounding>');
+    final webSearchQueries = metadata['webSearchQueries'] as List?;
+    if (webSearchQueries != null && webSearchQueries.isNotEmpty) {
+      buffer.writeln('  <queries>');
+      for (final query in webSearchQueries) {
+        buffer.writeln('    <query>${query.toString()}</query>');
+      }
+      buffer.writeln('  </queries>');
+    }
+    final groundingChunks = metadata['groundingChunks'] as List?;
+    if (groundingChunks != null && groundingChunks.isNotEmpty) {
+      buffer.writeln('  <sources>');
+      for (final chunk in groundingChunks) {
+        final source = chunk['web'] as Map?;
+        if (source != null) {
+          final uri = source['uri'] as String?;
+          final title = source['title'] as String?;
+          if (uri != null && title != null) {
+            buffer.writeln('    <source uri="$uri">$title</source>');
+          }
+        }
+      }
+      buffer.writeln('  </sources>');
+    }
+    buffer.write('</grounding>');
+    return buffer.toString();
+  }
+
+  String _formatUrlContextMetadata(Map<String, dynamic> metadata) {
+    final buffer = StringBuffer();
+    buffer.writeln('<url_context>');
+    final urlMetadata = metadata['url_metadata'] as List?;
+    if (urlMetadata != null && urlMetadata.isNotEmpty) {
+      buffer.writeln('  <retrieved_urls>');
+      for (final item in urlMetadata) {
+        final url = item['retrieved_url'] as String?;
+        final status = item['url_retrieval_status'] as String?;
+        if (url != null && status != null) {
+          buffer.writeln('    <url status="$status">$url</url>');
+        }
+      }
+      buffer.writeln('  </retrieved_urls>');
+    }
+    buffer.write('</url_context>');
+    return buffer.toString();
+  }
+
+  // Unified chunk processor for both stream and once modes
+  String _extractTextAndThinkFromChunk(
+    Map<String, dynamic> json, {
+    bool isStreaming = false,
+  }) {
     final candidates = json['candidates'] as List?;
     if (candidates == null || candidates.isEmpty) return '';
 
-    final finishReason = candidates.first['finishReason'] as String?;
+    final firstCandidate = candidates.first as Map<String, dynamic>? ?? {};
+
+    // --- Metadata Handling ---
+    final groundingMetadata =
+        firstCandidate['groundingMetadata'] as Map<String, dynamic>?;
+    String groundingXml = '';
+    if (groundingMetadata != null) {
+      groundingXml = _formatGroundingMetadata(groundingMetadata);
+    }
+    final urlContextMetadata =
+        firstCandidate['url_context_metadata'] as Map<String, dynamic>?;
+    String urlContextXml = '';
+    if (urlContextMetadata != null) {
+      urlContextXml = _formatUrlContextMetadata(urlContextMetadata);
+    }
+
+    final finishReason = firstCandidate['finishReason'] as String?;
     if (finishReason != null && finishReason != 'STOP') {
-      return ""; // Return empty string, the logic will be in the request handler.
+      return ""; // The logic is handled in the request handler.
     }
 
-    final content = candidates.first['content'] as Map<String, dynamic>?;
-    final parts = content?['parts'] as List?;
-    if (parts == null || parts.isEmpty) return '';
-
-    final part = parts.first as Map<String, dynamic>? ?? {};
-    final text = part['text'] as String? ?? '';
-
-    final bool isThoughtChunk = part['thought'] as bool? ?? false;
-
-    String result = '';
-
-    if (isThoughtChunk && !_isThinkStreamActive) {
-      _isThinkStreamActive = true;
-      result += '<think>\n';
-    }
-    if (!isThoughtChunk && _isThinkStreamActive) {
-      _isThinkStreamActive = false;
-      result += '</think>\n';
-    }
-
-    result += text;
-    return result;
-  }
-
-  LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
-    final candidates = data['candidates'] as List?;
-    if (candidates == null || candidates.isEmpty) {
-      return const LlmResponse.error(
-        "Invalid response: 'candidates' field is missing or empty.",
-      );
-    }
-
-    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final content = firstCandidate['content'] as Map<String, dynamic>?;
     final parts = content?['parts'] as List?;
     if (parts == null || parts.isEmpty) {
-      // It's possible to have a response with a finishReason but no parts.
-      return const LlmResponse(parts: []);
+      final metadataBuffer = StringBuffer();
+      if (groundingXml.isNotEmpty) metadataBuffer.write('\n$groundingXml');
+      if (urlContextXml.isNotEmpty) metadataBuffer.write('\n$urlContextXml');
+      return metadataBuffer.toString();
     }
 
-    final stringBuffer = StringBuffer();
+    final textBuffer = StringBuffer();
     for (final part in parts) {
-      if (part is! Map<String, dynamic>) continue;
+      final partMap = part as Map<String, dynamic>;
 
-      final text = part['text'] as String?;
-      if (text == null || text.isEmpty) continue;
+      // --- Thought Handling (Restored) ---
+      final isThoughtChunk = partMap['thought'] as bool? ?? false;
+      if (isThoughtChunk && !_isThinkStreamActive) {
+        _isThinkStreamActive = true;
+        textBuffer.write('<think>\n');
+      }
+      if (!isThoughtChunk && _isThinkStreamActive) {
+        _isThinkStreamActive = false;
+        textBuffer.write('</think>\n');
+      }
 
-      final isThought = part['thought'] as bool? ?? false;
-      if (isThought) {
-        stringBuffer.writeln('<think>');
-        stringBuffer.writeln(text);
-        stringBuffer.writeln('</think>');
-      } else {
-        stringBuffer.write(text);
+      // --- Content Part Handling (New + Old) ---
+      if (partMap.containsKey('text')) {
+        textBuffer.write(partMap['text'] as String? ?? '');
+      } else if (partMap.containsKey('executableCode')) {
+        final codeMap = partMap['executableCode'] as Map<String, dynamic>?;
+        final language = (codeMap?['language'] as String? ?? 'python')
+            .toLowerCase();
+        final code = codeMap?['code'] as String? ?? '';
+        if (code.isNotEmpty) {
+          textBuffer.writeln('```$language');
+          textBuffer.writeln(code.trim());
+          textBuffer.writeln('```');
+        }
+      } else if (partMap.containsKey('codeExecutionResult')) {
+        final resultMap =
+            partMap['codeExecutionResult'] as Map<String, dynamic>?;
+        final output = resultMap?['output'] as String? ?? '';
+        if (output.isNotEmpty) {
+          textBuffer.writeln('<codeExecutionResult>');
+          textBuffer.writeln(output.trim());
+          textBuffer.writeln('</codeExecutionResult>');
+        }
       }
     }
 
-    if (stringBuffer.isNotEmpty) {
-      return LlmResponse(parts: [MessagePart.text(stringBuffer.toString())]);
+    // Append metadata XML at the end of the text content.
+    if (groundingXml.isNotEmpty) {
+      textBuffer.write('\n$groundingXml');
+    }
+    if (urlContextXml.isNotEmpty) {
+      textBuffer.write('\n$urlContextXml');
     }
 
+    return textBuffer.toString();
+  }
+
+  LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
+    final text = _extractTextAndThinkFromChunk(data, isStreaming: false);
+    final candidates = data['candidates'] as List?;
+    final groundingMetadata =
+        candidates?.first?['groundingMetadata'] as Map<String, dynamic>?;
+
+    if (text.isNotEmpty) {
+      return LlmResponse(
+        parts: [MessagePart.text(text)],
+        groundingMetadata: groundingMetadata,
+      );
+    }
     return const LlmResponse.error(
       "Invalid response: No valid text parts found in Gemini response.",
     );
@@ -329,10 +424,16 @@ class GeminiService implements BaseLlmService {
 class GeminiChatPayload extends HttpRequestPayload {
   final String apiKey;
   final bool stream;
+  final bool isGoogleSearchEnabled;
+  final bool isUrlContextEnabled;
+  final bool isCodeExecutionEnabled;
 
   GeminiChatPayload({
     required this.apiKey,
     required this.stream,
+    required this.isGoogleSearchEnabled,
+    required this.isUrlContextEnabled,
+    required this.isCodeExecutionEnabled,
     required super.apiConfig,
     required super.generationParams,
     required super.llmContext,
@@ -414,10 +515,34 @@ class GeminiChatPayload extends HttpRequestPayload {
       body['system_instruction'] = systemInstruction;
     }
 
-    // Add tool_config if present, and assign it to the 'tools' key
+    // --- Tools Configuration ---
+    List<dynamic> tools = [];
     if (apiConfig.toolConfig != null && apiConfig.toolConfig!.isNotEmpty) {
-      final toolConfigJson = jsonDecode(apiConfig.toolConfig!);
-      body['tools'] = toolConfigJson; // Corrected from 'tool_config' to 'tools'
+      try {
+        final toolConfigJson = jsonDecode(apiConfig.toolConfig!);
+        if (toolConfigJson is List) {
+          tools.addAll(toolConfigJson);
+        } else if (toolConfigJson is Map) {
+          // Handle cases where a single tool config is provided as a map
+          tools.add(toolConfigJson);
+        }
+      } catch (e) {
+        // Ignore invalid JSON in toolConfig
+      }
+    }
+
+    if (isGoogleSearchEnabled) {
+      tools.add({"google_search": {}});
+    }
+    if (isUrlContextEnabled) {
+      tools.add({"url_context": {}});
+    }
+    if (isCodeExecutionEnabled) {
+      tools.add({"code_execution": {}});
+    }
+
+    if (tools.isNotEmpty) {
+      body['tools'] = tools;
     }
 
     return body;
@@ -483,9 +608,11 @@ class GeminiChatPayload extends HttpRequestPayload {
 
 class GeminiImagePayload extends HttpRequestPayload {
   final String apiKey;
+  final bool stream;
 
   GeminiImagePayload({
     required this.apiKey,
+    required this.stream,
     required super.apiConfig,
     required super.generationParams,
     required super.llmContext,
@@ -497,7 +624,8 @@ class GeminiImagePayload extends HttpRequestPayload {
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true
         ? apiConfig.baseUrl!
         : defaultBaseUrl;
-    return "$baseUrl/v1beta/models/${apiConfig.model}:streamGenerateContent?key=$apiKey&alt=sse";
+    final action = stream ? "streamGenerateContent" : "generateContent";
+    return "$baseUrl/v1beta/models/${apiConfig.model}:$action?key=$apiKey${stream ? '&alt=sse' : ''}";
   }
 
   @override

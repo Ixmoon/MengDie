@@ -320,6 +320,9 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         llmApiContext,
         requestThoughts: requestThoughts,
         messageToUpdateId: messageToUpdateId,
+        isGoogleSearchEnabled: state.isGoogleSearchEnabled,
+        isUrlContextEnabled: state.isUrlContextEnabled,
+        isCodeExecutionEnabled: state.isCodeExecutionEnabled,
       );
     } else {
       await _handleSingleResponse(
@@ -329,6 +332,9 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         carriedOverXmlForThisTurn,
         requestThoughts: requestThoughts,
         messageToUpdateId: messageToUpdateId,
+        isGoogleSearchEnabled: state.isGoogleSearchEnabled,
+        isUrlContextEnabled: state.isUrlContextEnabled,
+        isCodeExecutionEnabled: state.isCodeExecutionEnabled,
       );
     }
   }
@@ -339,6 +345,9 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     List<LlmContent> llmContext, {
     required bool requestThoughts,
     int? messageToUpdateId,
+    required bool isGoogleSearchEnabled,
+    required bool isUrlContextEnabled,
+    required bool isCodeExecutionEnabled,
   }) async {
     final messageRepo = ref.read(messageRepositoryProvider);
     int
@@ -386,6 +395,9 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       llmContext: llmContext,
       apiConfig: apiConfig,
       requestThoughts: requestThoughts,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
     llmStreamSubscription?.cancel();
     llmStreamSubscription = stream.listen(
@@ -456,12 +468,18 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     String? initialCarriedOverXml, {
     required bool requestThoughts,
     int? messageToUpdateId,
+    required bool isGoogleSearchEnabled,
+    required bool isUrlContextEnabled,
+    required bool isCodeExecutionEnabled,
   }) async {
     try {
       final response = await llmService.sendMessageOnce(
         llmContext: llmContext,
         apiConfig: apiConfig,
         requestThoughts: requestThoughts,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
       );
       if (!mounted) return;
 

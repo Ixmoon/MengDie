@@ -76,6 +76,9 @@ class LlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig, // 直接接收配置对象
     bool requestThoughts = false,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) {
     final generationParams = _prepareGenerationParams(apiConfig);
     generationParams['includeThoughts'] = requestThoughts;
@@ -94,6 +97,9 @@ class LlmService {
         llmContext: llmContext,
         apiConfig: apiConfig,
         generationParams: generationParams,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
       );
     } catch (e) {
       return Stream.value(
@@ -111,6 +117,9 @@ class LlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig, // 直接接收配置对象
     bool requestThoughts = false,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) async {
     final generationParams = _prepareGenerationParams(apiConfig);
     // 将摘要请求状态传递给参数 map
@@ -128,6 +137,9 @@ class LlmService {
         llmContext: llmContext,
         apiConfig: apiConfig,
         generationParams: generationParams,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
       );
     } catch (e) {
       return LlmResponse.error("${apiConfig.apiType} API Error: $e");
@@ -157,8 +169,43 @@ class LlmService {
     );
   }
 
-  /// 根据上下文生成图片。
-  Future<LlmImageResponse> generateImage({
+  /// 流式生成图片。
+  Stream<LlmStreamChunk> generateImageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    int n = 1,
+  }) {
+    final service = _services[apiConfig.apiType];
+    if (service == null) {
+      return Stream.value(
+        LlmStreamChunk.error("Unsupported API type: ${apiConfig.apiType}", ''),
+      );
+    }
+    if (apiConfig.apiType != LlmType.openai &&
+        apiConfig.apiType != LlmType.gemini) {
+      return Stream.value(
+        LlmStreamChunk.error(
+          "Image generation is only supported for OpenAI and Gemini compatible APIs.",
+          '',
+        ),
+      );
+    }
+
+    try {
+      return service.generateImageStream(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        n: n,
+      );
+    } catch (e) {
+      return Stream.value(
+        LlmStreamChunk.error("${apiConfig.apiType} API Error: $e", ''),
+      );
+    }
+  }
+
+  /// 一次性生成图片。
+  Future<LlmImageResponse> generateImageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
@@ -177,7 +224,7 @@ class LlmService {
     }
 
     try {
-      return await service.generateImage(
+      return await service.generateImageOnce(
         llmContext: llmContext,
         apiConfig: apiConfig,
         n: n,

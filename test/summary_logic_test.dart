@@ -29,7 +29,7 @@ import 'package:mengdie/app/providers/chat_state/chat_state_notifier.dart';
 ])
 void main() {
   group('BackgroundTasks Summarization Logic', () {
-    late MockProviderRef mockRef;
+    late MockRef mockRef;
     late MockLlmService mockLlmService;
     late MockChatRepository mockChatRepository;
     late MockContextXmlService mockContextXmlService;
@@ -39,7 +39,7 @@ void main() {
     late ApiConfig mockApiConfig;
 
     setUp(() {
-      mockRef = MockProviderRef();
+      mockRef = MockRef();
       mockLlmService = MockLlmService();
       mockChatRepository = MockChatRepository();
       mockContextXmlService = MockContextXmlService();

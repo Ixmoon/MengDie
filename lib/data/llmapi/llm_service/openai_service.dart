@@ -29,6 +29,9 @@ class OpenAIService implements BaseLlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     required Map<String, dynamic> generationParams,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
@@ -51,6 +54,9 @@ class OpenAIService implements BaseLlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     required Map<String, dynamic> generationParams,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
   }) {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
@@ -69,7 +75,31 @@ class OpenAIService implements BaseLlmService {
   }
 
   @override
-  Future<LlmImageResponse> generateImage({
+  Stream<LlmStreamChunk> generateImageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    int n = 1,
+  }) async* {
+    final response = await generateImageOnce(
+      llmContext: llmContext,
+      apiConfig: apiConfig,
+      n: n,
+    );
+    if (response.isSuccess) {
+      final textChunk = response.base64Images.join(',');
+      yield LlmStreamChunk(
+        textChunk: textChunk,
+        accumulatedText: textChunk,
+        isFinished: true,
+        timestamp: DateTime.now(),
+      );
+    } else {
+      yield LlmStreamChunk.error(response.error ?? '未知错误', '');
+    }
+  }
+
+  @override
+  Future<LlmImageResponse> generateImageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart'; // For Color
 
+import '../../../../data/llmapi/llm_models.dart';
 import '../../../../domain/models/api_config.dart';
 import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart'; // For MessageRole and HelpMeReplyTriggerMode
@@ -51,8 +52,6 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
       return;
     }
 
-    final messageRepo = ref.read(messageRepositoryProvider);
-
     // 1. Set loading state and show a temporary placeholder message in the UI.
     final tempMessageId = -DateTime.now().millisecondsSinceEpoch;
     final placeholderMessage = Message(
@@ -86,49 +85,49 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         keepAsSystemPrompt: true, // Keep system prompt for context
       );
 
-      final response = await llmService.generateImage(
-        llmContext: apiRequestContext.contextParts,
-        apiConfig: apiConfig,
-      );
+      // 3. Decide which generation mode to use based on the state
+      final useStream = state.isStreamMode;
 
-      if (!mounted || state.isCancelled) {
-        return;
-      }
+      if (useStream) {
+        final stream = llmService.generateImageStream(
+          llmContext: apiRequestContext.contextParts,
+          apiConfig: apiConfig,
+        );
 
-      // 3. Process response
-      if (response.isSuccess &&
-          (response.base64Images.isNotEmpty ||
-              (response.text?.isNotEmpty ?? false))) {
-        List<MessagePart> parts = [];
-        if (response.text != null && response.text!.isNotEmpty) {
-          parts.add(MessagePart.text(response.text!));
-        }
-        if (response.base64Images.isNotEmpty) {
-          parts.addAll(
-            response.base64Images.map(
-              (base64) => MessagePart.generatedImage(
-                base64Data: base64,
-                prompt: userMessage.rawText,
-              ),
-            ),
-          );
+        final imageChunks = <String>[];
+        final textChunks = <String>[];
+        await for (final chunk in stream) {
+          if (!mounted || state.isCancelled) break;
+          if (chunk.textChunk.startsWith('IMAGE:')) {
+            imageChunks.add(chunk.textChunk.substring('IMAGE:'.length));
+          } else if (chunk.textChunk.startsWith('TEXT:')) {
+            textChunks.add(chunk.textChunk.substring('TEXT:'.length));
+          }
+          if (chunk.isFinished && chunk.error != null) {
+            showTopMessage(chunk.error!, backgroundColor: Colors.red);
+            return; // Exit on stream error
+          }
         }
 
-        if (parts.isNotEmpty) {
-          final modelMessage = Message(
-            chatId: chatId,
-            role: MessageRole.model,
-            parts: parts,
-          );
-          await messageRepo.saveMessage(modelMessage);
-        }
+        if (!mounted || state.isCancelled) return;
 
-        showTopMessage('生成成功', backgroundColor: Colors.green);
+        // Construct a final response object from the collected stream chunks
+        final response = LlmImageResponse(
+          base64Images: imageChunks,
+          text: textChunks.join(''),
+          isSuccess: imageChunks.isNotEmpty || textChunks.isNotEmpty,
+        );
+        await _handleImageResponse(response, userMessage.rawText);
       } else {
-        showTopMessage(response.error ?? "图片生成失败", backgroundColor: Colors.red);
+        // Use the one-time generation method
+        final response = await llmService.generateImageOnce(
+          llmContext: apiRequestContext.contextParts,
+          apiConfig: apiConfig,
+        );
+        await _handleImageResponse(response, userMessage.rawText);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && !state.isCancelled) {
         showTopMessage('生成图片时出错: $e', backgroundColor: Colors.red);
       }
     } finally {
@@ -140,6 +139,50 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         );
         stopUpdateTimer();
       }
+    }
+  }
+
+  /// Handles processing the response from either streaming or one-time image generation.
+  Future<void> _handleImageResponse(
+    LlmImageResponse response,
+    String prompt,
+  ) async {
+    if (!mounted || state.isCancelled) {
+      return;
+    }
+
+    final messageRepo = ref.read(messageRepositoryProvider);
+
+    if (response.isSuccess &&
+        (response.base64Images.isNotEmpty ||
+            (response.text?.isNotEmpty ?? false))) {
+      List<MessagePart> parts = [];
+      if (response.text != null && response.text!.isNotEmpty) {
+        parts.add(MessagePart.text(response.text!));
+      }
+      if (response.base64Images.isNotEmpty) {
+        parts.addAll(
+          response.base64Images.map(
+            (base64) =>
+                MessagePart.generatedImage(base64Data: base64, prompt: prompt),
+          ),
+        );
+      }
+
+      if (parts.isNotEmpty) {
+        final modelMessage = Message(
+          chatId: chatId,
+          role: MessageRole.model,
+          parts: parts,
+        );
+        await messageRepo.saveMessage(modelMessage);
+        showTopMessage('生成成功', backgroundColor: Colors.green);
+      } else {
+        // This case might happen if the stream ends without any content
+        showTopMessage("图片生成未返回任何内容", backgroundColor: Colors.orange);
+      }
+    } else {
+      showTopMessage(response.error ?? "图片生成失败", backgroundColor: Colors.red);
     }
   }
 

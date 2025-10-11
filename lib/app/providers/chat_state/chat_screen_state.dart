@@ -44,6 +44,9 @@ class ChatScreenState {
   final int? keptTokenCount;
   final int? contextTokenLimit;
   final ContextManagementMode? contextManagementMode;
+  final bool isGoogleSearchEnabled; // New state for Google Search toggle
+  final bool isUrlContextEnabled;
+  final bool isCodeExecutionEnabled;
 
   const ChatScreenState({
     this.isLoading = false,
@@ -76,6 +79,9 @@ class ChatScreenState {
     this.keptTokenCount,
     this.contextTokenLimit,
     this.contextManagementMode,
+    this.isGoogleSearchEnabled = false, // Default to false
+    this.isUrlContextEnabled = false,
+    this.isCodeExecutionEnabled = false,
   });
 
   ChatScreenState copyWith({
@@ -119,6 +125,9 @@ class ChatScreenState {
     int? contextTokenLimit,
     ContextManagementMode? contextManagementMode,
     bool clearContextDebugInfo = false,
+    bool? isGoogleSearchEnabled,
+    bool? isUrlContextEnabled,
+    bool? isCodeExecutionEnabled,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -184,6 +193,11 @@ class ChatScreenState {
       contextManagementMode: clearContextDebugInfo
           ? null
           : contextManagementMode ?? this.contextManagementMode,
+      isGoogleSearchEnabled:
+          isGoogleSearchEnabled ?? this.isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled ?? this.isUrlContextEnabled,
+      isCodeExecutionEnabled:
+          isCodeExecutionEnabled ?? this.isCodeExecutionEnabled,
     );
   }
 }
