@@ -10,7 +10,7 @@ dynamic connect() {
   // Changed return type to dynamic
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'gemini_chat_app_drift.sqlite'));
+    final file = File(p.join(dbFolder.path, 'mengdie_drift.sqlite'));
     return NativeDatabase.createInBackground(file);
   });
 }

@@ -2,23 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/mixins/background_tasks.dart';
-import 'package:gemini_chat_app/domain/models/chat.dart';
-import 'package:gemini_chat_app/domain/models/message.dart';
-import 'package:gemini_chat_app/core/common_enums.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/special_action_type.dart';
-import 'package:gemini_chat_app/domain/enums.dart';
-import 'package:gemini_chat_app/data/llmapi/llm_service.dart';
-import 'package:gemini_chat_app/data/llmapi/llm_models.dart';
-import 'package:gemini_chat_app/app/providers/repository_providers.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/mixins/ui_state_manager.dart';
-import 'package:gemini_chat_app/app/tools/context_xml_service.dart';
-import 'package:gemini_chat_app/app/repositories/chat_repository.dart';
-import 'package:gemini_chat_app/domain/models/api_config.dart';
-import 'package:gemini_chat_app/app/providers/chat_state_providers.dart';
+import 'package:mengdie/app/providers/chat_state/mixins/background_tasks.dart';
+import 'package:mengdie/domain/models/chat.dart';
+import 'package:mengdie/domain/models/message.dart';
+import 'package:mengdie/core/common_enums.dart';
+import 'package:mengdie/app/providers/chat_state/special_action_type.dart';
+import 'package:mengdie/domain/enums.dart';
+import 'package:mengdie/data/llmapi/llm_service.dart';
+import 'package:mengdie/data/llmapi/llm_models.dart';
+import 'package:mengdie/app/providers/repository_providers.dart';
+import 'package:mengdie/app/providers/chat_state/mixins/ui_state_manager.dart';
+import 'package:mengdie/app/tools/context_xml_service.dart';
+import 'package:mengdie/app/repositories/chat_repository.dart';
+import 'package:mengdie/domain/models/api_config.dart';
+import 'package:mengdie/app/providers/chat_state_providers.dart';
 
 import 'summary_logic_test.mocks.dart';
-import 'package:gemini_chat_app/app/providers/chat_state/chat_state_notifier.dart';
+import 'package:mengdie/app/providers/chat_state/chat_state_notifier.dart';
 
 @GenerateMocks([
   Ref,
