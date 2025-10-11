@@ -3,56 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers/auth_providers.dart';
-import '../../app/providers/core_providers.dart';
 
 /// 一个处理初始化并重定向到相应页面的屏幕。
-class StartupScreen extends ConsumerStatefulWidget {
+class StartupScreen extends ConsumerWidget {
   const StartupScreen({super.key});
 
   @override
-  ConsumerState<StartupScreen> createState() => _StartupScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 监听 authProvider 的状态。
+    // 之前的 ref.listen 逻辑在这里是有缺陷的，因为它只在状态 *变化* 时触发。
+    // 由于自动登录在 main 函数中已经 await，当 StartupScreen 构建时，
+    // 认证状态已经确定，不会再“变化”，导致 listen 回调永远不执行。
+    final authState = ref.watch(authProvider);
 
-class _StartupScreenState extends ConsumerState<StartupScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // 使用 addPostFrameCallback 以确保在 build 之后安全地执行异步操作和导航。
+    // 使用 addPostFrameCallback 确保导航操作在 build 方法完成后安全地执行。
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeAndRedirect();
+      if (authState.currentUser != null) {
+        // 如果存在当前用户（无论是自动登录还是游客），则导航到主列表。
+        context.replace('/list');
+      } else {
+        // 如果没有用户（即初始状态），则导航到登录页面。
+        context.replace('/login');
+      }
     });
-  }
 
-  Future<void> _initializeAndRedirect() async {
-    // 尝试自动登录
-    await ref.read(authProvider.notifier).tryAutoLogin();
-
-    // 并行初始化核心 providers
-    final coreInitializers = ref.read(coreAsyncInitializersProvider);
-    await Future.wait(
-      coreInitializers.map((provider) {
-        final notifier = ref.read(provider);
-        // Assuming notifiers have an 'init' method.
-        return (notifier as dynamic).init();
-      }),
-    );
-
-    // 检查挂载状态以防止在已释放的 widget 上调用 setState
-    if (!mounted) return;
-
-    // 根据认证状态导航
-    final authState = ref.read(authProvider);
-    if (authState.currentUser != null) {
-      context.replace('/list');
-    } else {
-      context.replace('/login');
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
     // StartupScreen 本身只显示一个加载指示器。
-    // 它的职责是执行初始化并在完成后重定向。
+    // 它的职责是根据最终的认证状态，在下一帧立即执行一次性重定向。
     return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
