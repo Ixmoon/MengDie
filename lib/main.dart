@@ -31,28 +31,6 @@ void main() async {
   // 创建一个 ProviderContainer 以便在 runApp 之前访问 Provider。
   final container = ProviderContainer();
 
-  // 在应用启动时尝试自动登录。
-  // 这是实现登录持久化的关键步骤。
-  await container.read(authProvider.notifier).tryAutoLogin();
-
-  // 使用 Future.wait 并行初始化所有核心 Provider
-  final coreInitializers = container.read(coreAsyncInitializersProvider);
-  await Future.wait(
-    coreInitializers.map((provider) {
-      // 假设所有需要初始化的都是 StateNotifier 的子类，并且有一个 init 方法
-      final notifier = container.read(
-        provider as ProviderListenable<StateNotifier>,
-      );
-      if (notifier.mounted) {
-        // A common pattern might be for notifiers to have an init() method.
-        // We use 'dynamic' to avoid compile-time errors if not all notifiers have it,
-        // though in our case they do.
-        return (notifier as dynamic).init();
-      }
-      return Future.value(null);
-    }),
-  );
-
   // 初始化 SyncService
   final db = container.read(appDatabaseProvider);
   SyncService.initialize(

@@ -17,6 +17,28 @@ import '../widgets/top_message_banner.dart';
 import '../../app/tools/xml_processor.dart';
 import '../widgets/widget_utils.dart';
 
+/// A private class to hold selectors for the ChatScreenState.
+/// This prevents the entire ChatPageContent from rebuilding when only a small
+/// part of the chat state changes.
+class _ChatStateSelectors {
+  const _ChatStateSelectors._();
+
+  static (String?, Color?) selectTopMessage(ChatScreenState state) =>
+      (state.topMessageText, state.topMessageColor);
+
+  static bool selectIsMessageListHalfHeight(ChatScreenState state) =>
+      state.isMessageListHalfHeight;
+
+  static String? selectCarriedOverXml(ChatScreenState state) =>
+      state.carriedOverXml;
+
+  static (bool, bool, bool) selectLoadingIndicators(ChatScreenState state) =>
+      (state.isLoading, state.isProcessingInBackground, state.isStreaming);
+
+  static (bool, bool) selectScrollListenerTriggers(ChatScreenState state) =>
+      (state.isLoading, state.isStreaming);
+}
+
 class ChatPageContent extends ConsumerStatefulWidget {
   const ChatPageContent({
     super.key,
@@ -102,7 +124,6 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     final chatId = widget.chatId;
 
     final chatAsync = ref.watch(currentChatProvider(chatId));
-    final chatState = ref.watch(chatStateNotifierProvider(chatId));
     final pageState = ref.watch(chatPageNotifierProvider(chatId));
     final pageNotifier = ref.read(chatPageNotifierProvider(chatId).notifier);
 
@@ -112,15 +133,48 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
       }
     });
 
-    ref.listen<ChatScreenState>(chatStateNotifierProvider(chatId), (
-      previous,
-      next,
-    ) {
-      if ((next.isLoading && previous?.isLoading == false) ||
-          (next.isStreaming && previous?.isStreaming == false)) {
-        _scrollToBottom();
-      }
-    });
+    // Listen for state changes that should trigger a scroll to the bottom.
+    // Using `select` to only listen to the relevant fields.
+    ref.listen(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectScrollListenerTriggers),
+      (previous, next) {
+        final wasLoading = previous?.$1 ?? false;
+        final wasStreaming = previous?.$2 ?? false;
+        final isLoading = next.$1;
+        final isStreaming = next.$2;
+
+        if ((isLoading && !wasLoading) || (isStreaming && !wasStreaming)) {
+          _scrollToBottom();
+        }
+      },
+    );
+
+    // Watch individual state properties instead of the whole state object.
+    final topMessage = ref.watch(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectTopMessage),
+    );
+    final isMessageListHalfHeight = ref.watch(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectIsMessageListHalfHeight),
+    );
+    final carriedOverXml = ref.watch(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectCarriedOverXml),
+    );
+    final loadingIndicators = ref.watch(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectLoadingIndicators),
+    );
+    final isLoading = loadingIndicators.$1;
+    final isProcessingInBackground = loadingIndicators.$2;
+    final isStreaming = loadingIndicators.$3;
 
     return chatAsync.when(
       data: (chat) {
@@ -217,8 +271,8 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                 child: Column(
                   children: [
                     TopMessageBanner(
-                      message: chatState.topMessageText,
-                      backgroundColor: chatState.topMessageColor,
+                      message: topMessage.$1,
+                      backgroundColor: topMessage.$2,
                       onDismiss: () {
                         if (!mounted) return;
                         ref
@@ -226,23 +280,21 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                             .clearTopMessage();
                       },
                     ),
-                    if (chatState.isMessageListHalfHeight) const Spacer(),
+                    if (isMessageListHalfHeight) const Spacer(),
                     Flexible(
                       flex: 1,
                       child: MessageList(
                         chatId: chatId,
                         scrollController: _scrollController,
                         xmlRules: chat.xmlRules,
-                        carriedOverXml: chatState.carriedOverXml,
+                        carriedOverXml: carriedOverXml,
                         onMessageTap: _handleMessageTap,
                         onSuggestionSelected: (suggestion) {
                           _messageController.text = suggestion;
                         },
                       ),
                     ),
-                    if ((chatState.isLoading ||
-                            chatState.isProcessingInBackground) &&
-                        !chatState.isStreaming)
+                    if ((isLoading || isProcessingInBackground) && !isStreaming)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 0),
                         child: LinearProgressIndicator(minHeight: 2),
