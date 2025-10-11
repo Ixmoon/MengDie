@@ -17,6 +17,7 @@ import 'screens/gemini_api_keys_screen.dart'; // 新增
 import 'screens/chat_screen.dart';
 import 'screens/chat_settings_screen.dart';
 import 'screens/chat_debug_screen.dart';
+import 'screens/prompt_editor_screen.dart';
 
 // 本文件包含应用的路由配置。
 
@@ -96,6 +97,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'debug',
                 parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatDebugScreen(),
+              ),
+              GoRoute(
+                path: 'prompt-editor',
+                parentNavigatorKey: _rootNavigatorKey,
+                builder: (context, state) => const PromptEditorScreen(),
               ),
             ],
           ),

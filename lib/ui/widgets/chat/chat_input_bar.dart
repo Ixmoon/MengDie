@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mime/mime.dart';
@@ -469,6 +471,14 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 tooltip: '引号高亮',
                 isSelected: chatState.highlightQuotes,
                 onPressed: notifier.toggleHighlightQuotes,
+              ),
+              _buildIconButton(
+                icon: Icons.biotech_outlined,
+                tooltip: 'Prompt Injection',
+                isSelected: false,
+                onPressed: () {
+                  context.go('/chat/prompt-editor');
+                },
               ),
             ],
           ),

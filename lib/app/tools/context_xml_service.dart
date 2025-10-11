@@ -28,8 +28,10 @@ import 'xml_processor.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
 import '../../data/llmapi/llm_service.dart'; // For LlmService
 import 'package:collection/collection.dart'; // For lastWhereOrNull
+import '../../domain/models/prompt_item.dart';
 import '../providers/repository_providers.dart';
 import '../providers/chat_state_providers.dart';
+import '../services/prompt_service.dart';
 
 class ContextPredictionResult {
   final bool willExceed;
@@ -314,6 +316,8 @@ class ContextXmlService {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
     final chat = (await _ref.read(chatRepositoryProvider).getChat(chatId))!;
     final apiConfig = notifier.getEffectiveApiConfig();
+    final promptService = _ref.read(promptServiceProvider.notifier);
+    final prompts = promptService.getItemsForChat(chatId);
 
     // 1. 始终获取完整历史记录以确保XML计算的准确性。
     final List<Message> fullHistory =
@@ -351,9 +355,61 @@ class ContextXmlService {
       mergedXmlForInjection = partialCarriedOverResult.xmlString;
     }
 
+    // --- Prompt Injection Logic ---
+    final List<String> onTexts = [];
+    final List<String> insertTexts = [];
+
+    // 'ON' and 'MATCH' statuses
+    final onAndMatchPrompts = prompts.where(
+      (p) =>
+          p.status == PromptItemStatus.on || p.status == PromptItemStatus.match,
+    );
+
+    if (onAndMatchPrompts.isNotEmpty) {
+      // Find the messages to be searched for keyword matching
+      // Note: We take the settings from the *first* active prompt.
+      // Supporting different settings per prompt would require a more complex injection strategy.
+      final firstActivePrompt = onAndMatchPrompts.first;
+      final searchScope = firstActivePrompt.matchMessageCount;
+
+      // Keyword matching is now global and not role-specific, as requested.
+      final messagesToSearch = fullHistory.length > searchScope
+          ? fullHistory.sublist(fullHistory.length - searchScope)
+          : fullHistory;
+
+      for (final prompt in onAndMatchPrompts) {
+        if (prompt.status == PromptItemStatus.on) {
+          onTexts.add(prompt.text);
+        } else if (prompt.status == PromptItemStatus.match) {
+          final keywords = prompt.keyword
+              .split(',')
+              .map((k) => k.trim().toLowerCase());
+          if (keywords.any(
+            (keyword) => messagesToSearch.any(
+              (m) => m.rawText.toLowerCase().contains(keyword),
+            ),
+          )) {
+            onTexts.add(prompt.text);
+          }
+        }
+      }
+    }
+
+    // 'INSERT' status
+    insertTexts.addAll(
+      prompts
+          .where((p) => p.status == PromptItemStatus.insert)
+          .map((p) => p.text),
+    );
+    final insertText = insertTexts.join('\n');
+
     // --- 1. Prepare all "fixed" (non-history) context parts ---
     final List<LlmContent> fixedContextParts = [];
-    final effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
+    var effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
+
+    if (insertText.isNotEmpty) {
+      effectiveSystemPrompt = '${effectiveSystemPrompt ?? ''}\n$insertText';
+    }
     final bool systemPromptExists =
         effectiveSystemPrompt != null &&
         effectiveSystemPrompt.trim().isNotEmpty;
@@ -523,14 +579,20 @@ class ContextXmlService {
       }
     }
 
-    // 在*有限*历史记录中找到最后两个用户消息，以便注入XML。
-    final userMessagesInHistory = limitedHistoryForPrompt
-        .where((m) => m.role == MessageRole.user)
+    // 在*有限*历史记录中找到注入点
+    // Again, take settings from the first active prompt.
+    final firstOnMatchPrompt = onAndMatchPrompts.firstOrNull;
+    final injectionRole = firstOnMatchPrompt?.injectionRole ?? MessageRole.user;
+    final injectionPosition = firstOnMatchPrompt?.injectionPosition ?? 2;
+
+    final targetRoleMessages = limitedHistoryForPrompt
+        .where((m) => m.role == injectionRole)
         .toList();
-    final lastUserMessageInHistory = userMessagesInHistory.lastOrNull;
-    final previousUserMessageInHistory = userMessagesInHistory.length > 1
-        ? userMessagesInHistory[userMessagesInHistory.length - 2]
+    final injectionTargetMessage =
+        targetRoleMessages.length >= injectionPosition
+        ? targetRoleMessages[targetRoleMessages.length - injectionPosition]
         : null;
+
     final lastModelMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull(
       (m) => m.role == MessageRole.model,
     );
@@ -538,34 +600,28 @@ class ContextXmlService {
     for (final message in limitedHistoryForPrompt) {
       final isFirstMessageInHistory =
           message.id == limitedHistoryForPrompt.firstOrNull?.id;
+      final isInjectionTarget = message.id == injectionTargetMessage?.id;
 
+      LlmContent contentToAdd;
+
+      // 1. 从原始消息创建基本 LlmContent
       if (message.role == MessageRole.model) {
         final List<LlmPart> modelParts = [];
-
-        // NEW: Prepend summary if this is the first message and it's a model message
-        if (summaryExists &&
-            isFirstMessageInHistory &&
-            message.role == MessageRole.model) {
+        if (summaryExists && isFirstMessageInHistory) {
           modelParts.add(LlmTextPart("${chat.contextSummary!}\n"));
         }
-
-        // Add text parts, stripping ignored XML
-        // 抽象统一转换
         final allParts = LlmContent.toLlmParts(message.parts);
         for (final part in allParts) {
           if (part is LlmTextPart) {
             final filteredText = (message.id == messageIdToPreserveXml)
                 ? part.text
                 : XmlProcessor.stripIgnoredXmlContent(part.text, chat.xmlRules);
-            if (filteredText.isNotEmpty) {
+            if (filteredText.isNotEmpty)
               modelParts.add(LlmTextPart(filteredText));
-            }
           } else {
             modelParts.add(part);
           }
         }
-
-        // ONLY for the last model message, append its original XML
         if (message.id == lastModelMessageInHistory?.id) {
           final originalXml = chat.enableSecondaryXml
               ? message.secondaryXmlContent
@@ -574,75 +630,67 @@ class ContextXmlService {
             modelParts.add(LlmTextPart(originalXml));
           }
         }
+        contentToAdd = LlmContent("model", modelParts, messageId: message.id);
+      } else {
+        contentToAdd = LlmContent.fromMessage(message);
+      }
 
-        if (modelParts.isNotEmpty) {
-          finalContextParts.add(
-            LlmContent("model", modelParts, messageId: message.id),
-          );
+      // 2. 如果当前消息是注入目标，则附加注入文本
+      if (isInjectionTarget) {
+        final List<LlmPart> combinedParts = List.from(contentToAdd.parts);
+        final combinedInjectionText = [
+          if (mergedXmlForInjection != null && mergedXmlForInjection.isNotEmpty)
+            mergedXmlForInjection,
+          if (onTexts.isNotEmpty) ...onTexts,
+        ].join('\n');
+
+        if (combinedInjectionText.isNotEmpty) {
+          combinedParts.add(LlmTextPart('\n$combinedInjectionText'));
         }
-      } else if (message.role == MessageRole.user) {
-        // --- 用户消息处理逻辑重构 ---
-        final isLastUserMessage = message.id == lastUserMessageInHistory?.id;
-        final isPreviousUserMessage =
-            message.id == previousUserMessageInHistory?.id;
 
-        // 1. 对于倒数第二条用户消息：附加合并后的XML（如果存在）
-        if (isPreviousUserMessage &&
-            mergedXmlForInjection != null &&
-            mergedXmlForInjection.isNotEmpty) {
-          final userParts = LlmContent.toLlmParts(message.parts);
-          userParts.add(LlmTextPart('\n$mergedXmlForInjection'));
-          finalContextParts.add(
-            LlmContent("user", userParts, messageId: message.id),
-          );
+        contentToAdd = LlmContent(
+          contentToAdd.role,
+          combinedParts,
+          messageId: contentToAdd.messageId,
+        );
+      }
 
-          // 2. 对于最后一条用户消息：应用覆盖并附加其自身的原始XML
-        } else if (isLastUserMessage) {
-          final List<LlmPart> combinedUserParts = [];
-          // 添加当前用户消息文本（或覆盖文本）
-          final userText = lastMessageOverride ?? message.rawText;
-          if (userText.isNotEmpty) {
-            combinedUserParts.add(LlmTextPart(userText));
-          }
-          // 抽象统一转换
-          combinedUserParts.addAll(
-            LlmContent.toLlmParts(
-              message.parts
-                  .where((p) => p.type != MessagePartType.text)
-                  .toList(),
-            ),
-          );
-          // 添加当前用户消息自身的原始XML
-          final originalUserXml = chat.enableSecondaryXml
-              ? message.secondaryXmlContent
-              : message.originalXmlContent;
-          if (originalUserXml != null && originalUserXml.isNotEmpty) {
-            combinedUserParts.add(LlmTextPart(originalUserXml));
-          }
-          if (combinedUserParts.isNotEmpty) {
-            finalContextParts.add(
-              LlmContent("user", combinedUserParts, messageId: message.id),
-            );
-          }
-
-          // 3. 对于所有其他历史用户消息：正常添加
-        } else {
-          finalContextParts.add(LlmContent.fromMessage(message));
-        }
+      // 3. 将最终处理过的消息添加到上下文
+      if (contentToAdd.parts.isNotEmpty) {
+        finalContextParts.add(contentToAdd);
       }
     }
 
-    // Handle case where there's no user message in history but an override is present
-    if (lastUserMessageInHistory == null &&
+    // 4. 处理 lastMessageOverride (例如用于 "Help Me Reply")
+    final lastUserMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull(
+      (m) => m.role == MessageRole.user,
+    );
+    if (lastUserMessageInHistory != null &&
         lastMessageOverride != null &&
         lastMessageOverride.isNotEmpty) {
-      finalContextParts.add(
-        LlmContent("user", [LlmTextPart(lastMessageOverride)]),
+      final lastUserMessageIndex = finalContextParts.lastIndexWhere(
+        (c) => c.messageId == lastUserMessageInHistory.id,
       );
+
+      if (lastUserMessageIndex != -1) {
+        final originalContent = finalContextParts[lastUserMessageIndex];
+        final List<LlmPart> newParts = [];
+        newParts.addAll(originalContent.parts.where((p) => p is! LlmTextPart));
+        newParts.add(LlmTextPart(lastMessageOverride));
+        final originalUserXml = chat.enableSecondaryXml
+            ? lastUserMessageInHistory.secondaryXmlContent
+            : lastUserMessageInHistory.originalXmlContent;
+        if (originalUserXml != null && originalUserXml.isNotEmpty) {
+          newParts.add(LlmTextPart(originalUserXml));
+        }
+
+        finalContextParts[lastUserMessageIndex] = LlmContent(
+          originalContent.role,
+          newParts,
+          messageId: originalContent.messageId,
+        );
+      }
     } else if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
-      // NEW LOGIC: If an override is provided, always append it as the very last user message.
-      // This is crucial for special actions like "Secondary XML" or "Help Me Reply"
-      // which need to add a final instruction after the full context.
       finalContextParts.add(
         LlmContent("user", [LlmTextPart(lastMessageOverride)]),
       );
