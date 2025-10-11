@@ -912,12 +912,15 @@ class SyncService {
         );
 
         // Apply ID changes to the complete "toPush" lists
-        if (apiConfigIdChanges.isNotEmpty)
+        if (apiConfigIdChanges.isNotEmpty) {
           _updateMetasInMemory(apiConfigsToPush, apiConfigIdChanges);
-        if (chatIdChanges.isNotEmpty)
+        }
+        if (chatIdChanges.isNotEmpty) {
           _updateMetasInMemory(chatsToPush, chatIdChanges);
-        if (messageIdChanges.isNotEmpty)
+        }
+        if (messageIdChanges.isNotEmpty) {
           _updateMetasInMemory(messagesToPush, messageIdChanges);
+        }
         // Note: user id changes are int->int, but sync meta uses uuid, so no update needed for user metas list
 
         final apiConfigsToPushIds = apiConfigsToPush.map((m) => m.id).toList();

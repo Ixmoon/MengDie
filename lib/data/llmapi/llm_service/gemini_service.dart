@@ -290,27 +290,30 @@ class GeminiChatPayload extends HttpRequestPayload {
       final parts = c.parts
           .map((part) {
             if (part is LlmTextPart) return {'text': part.text};
-            if (part is LlmDataPart)
+            if (part is LlmDataPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
-            if (part is LlmFilePart)
+            }
+            if (part is LlmFilePart) {
               return {
                 'file_data': {
                   'mime_type': part.mimeType,
                   'file_uri': part.fileUri,
                 },
               };
-            if (part is LlmAudioPart)
+            }
+            if (part is LlmAudioPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
+            }
             return null;
           })
           .where((p) => p != null)
@@ -350,16 +353,21 @@ class GeminiChatPayload extends HttpRequestPayload {
 
   Map<String, dynamic> _buildGenerationConfig() {
     final config = <String, dynamic>{};
-    if (generationParams['temperature'] != null)
+    if (generationParams['temperature'] != null) {
       config['temperature'] = generationParams['temperature'];
-    if (generationParams['topP'] != null)
+    }
+    if (generationParams['topP'] != null) {
       config['topP'] = generationParams['topP'];
-    if (generationParams['topK'] != null)
+    }
+    if (generationParams['topK'] != null) {
       config['topK'] = generationParams['topK'];
-    if (generationParams['maxOutputTokens'] != null)
+    }
+    if (generationParams['maxOutputTokens'] != null) {
       config['maxOutputTokens'] = generationParams['maxOutputTokens'];
-    if (generationParams['stopSequences'] != null)
+    }
+    if (generationParams['stopSequences'] != null) {
       config['stopSequences'] = generationParams['stopSequences'];
+    }
 
     final bool includeThoughts =
         generationParams['includeThoughts'] as bool? ?? false;
@@ -433,27 +441,30 @@ class GeminiImagePayload extends HttpRequestPayload {
       final parts = c.parts
           .map((part) {
             if (part is LlmTextPart) return {'text': part.text};
-            if (part is LlmDataPart)
+            if (part is LlmDataPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
-            if (part is LlmFilePart)
+            }
+            if (part is LlmFilePart) {
               return {
                 'file_data': {
                   'mime_type': part.mimeType,
                   'file_uri': part.fileUri,
                 },
               };
-            if (part is LlmAudioPart)
+            }
+            if (part is LlmAudioPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
+            }
             return null;
           })
           .where((p) => p != null)
@@ -505,27 +516,30 @@ class GeminiCountTokensPayload extends HttpRequestPayload {
       final parts = c.parts
           .map((part) {
             if (part is LlmTextPart) return {'text': part.text};
-            if (part is LlmDataPart)
+            if (part is LlmDataPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
-            if (part is LlmFilePart)
+            }
+            if (part is LlmFilePart) {
               return {
                 'file_data': {
                   'mime_type': part.mimeType,
                   'file_uri': part.fileUri,
                 },
               };
-            if (part is LlmAudioPart)
+            }
+            if (part is LlmAudioPart) {
               return {
                 'inline_data': {
                   'mime_type': part.mimeType,
                   'data': part.base64Data,
                 },
               };
+            }
             return null;
           })
           .where((p) => p != null)

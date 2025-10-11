@@ -480,8 +480,9 @@ mixin BackgroundTasks on UiStateManager {
     final summaryPrompt = chat.preprocessingPrompt!;
 
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      if (state.isCancelled)
+      if (state.isCancelled) {
         return ""; // Check for cancellation before each attempt
+      }
 
       try {
         // Manually construct the context for this specific chunk.

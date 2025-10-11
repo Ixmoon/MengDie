@@ -196,20 +196,23 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
 
       final lastMessage = ref.read(lastModelMessageProvider(chatId));
       if (lastMessage == null) {
-        if (onSuggestionsReady != null)
+        if (onSuggestionsReady != null) {
           showTopMessage('没有可供回复的消息', backgroundColor: Colors.orange);
+        }
         return;
       }
 
       final chat = ref.read(currentChatProvider(chatId)).value;
       if (chat == null) {
-        if (onSuggestionsReady != null)
+        if (onSuggestionsReady != null) {
           showTopMessage('无法获取聊天设置', backgroundColor: Colors.red);
+        }
         return;
       }
       if (!chat.enableHelpMeReply) {
-        if (onSuggestionsReady != null)
+        if (onSuggestionsReady != null) {
           showTopMessage('“帮我回复”功能在此聊天中已禁用', backgroundColor: Colors.orange);
+        }
         return;
       }
 

@@ -169,8 +169,9 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
     final currentUser = _ref.read(authProvider).currentUser;
     if (key.isEmpty ||
         currentUser == null ||
-        currentUser.geminiApiKeys.contains(key))
+        currentUser.geminiApiKeys.contains(key)) {
       return;
+    }
 
     final newKeys = [...currentUser.geminiApiKeys, key];
     await _userRepository.updateUserSettings(

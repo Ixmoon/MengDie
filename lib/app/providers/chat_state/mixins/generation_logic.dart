@@ -533,8 +533,9 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
         // 5. Asynchronously run post-save tasks on the saved message.
         if (savedMessage != null) {
-          if (state.isCancelled)
+          if (state.isCancelled) {
             return; // Final check before starting background tasks
+          }
           await runAsyncProcessingTasks(savedMessage);
         } else {
           // If there's no message, ensure loading state is cleared.

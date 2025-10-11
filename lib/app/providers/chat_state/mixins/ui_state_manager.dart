@@ -100,8 +100,9 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
   }
 
   void setMessageListHeightMode(bool isHalfHeight) {
-    if (state.isMessageListHalfHeight == isHalfHeight)
+    if (state.isMessageListHalfHeight == isHalfHeight) {
       return; // Avoid unnecessary state updates
+    }
     state = state.copyWith(isMessageListHalfHeight: isHalfHeight);
   }
 

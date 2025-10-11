@@ -241,16 +241,21 @@ class OpenAIChatPayload extends OpenAIPayload {
     };
 
     final config = <String, dynamic>{};
-    if (generationParams['temperature'] != null)
+    if (generationParams['temperature'] != null) {
       config['temperature'] = generationParams['temperature'];
-    if (generationParams['topP'] != null)
+    }
+    if (generationParams['topP'] != null) {
       config['top_p'] = generationParams['topP'];
-    if (generationParams['maxOutputTokens'] != null)
+    }
+    if (generationParams['maxOutputTokens'] != null) {
       config['max_tokens'] = generationParams['maxOutputTokens'];
-    if (generationParams['stopSequences'] != null)
+    }
+    if (generationParams['stopSequences'] != null) {
       config['stop'] = generationParams['stopSequences'];
-    if (generationParams['reasoning_effort'] != null)
+    }
+    if (generationParams['reasoning_effort'] != null) {
       config['reasoning_effort'] = generationParams['reasoning_effort'];
+    }
 
     requestBody.addAll(config);
 
