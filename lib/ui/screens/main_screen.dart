@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-
 import '../../app/providers/core_providers.dart';
 
 class MainScreen extends ConsumerStatefulWidget {
@@ -31,8 +30,6 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: widget.child,
-    );
+    return Scaffold(body: widget.child);
   }
 }

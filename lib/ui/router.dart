@@ -42,7 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/login', // 登录页
         builder: (context, state) => const LoginScreen(),
       ),
-       GoRoute(
+      GoRoute(
         path: '/', // 启动页，现在作为 ShellRoute 的父级
         builder: (context, state) => const StartupScreen(),
       ),
@@ -73,23 +73,21 @@ final routerProvider = Provider<GoRouter>((ref) {
 
               // 新增：解析 from_folder_id
               final fromFolderIdString = queryParams['from_folder_id'];
-              final fromFolderId = fromFolderIdString != null ? int.tryParse(fromFolderIdString) : null;
+              final fromFolderId = fromFolderIdString != null
+                  ? int.tryParse(fromFolderIdString)
+                  : null;
 
               return NoTransitionPage(
-                child: ChatListScreen(
-                  mode: mode,
-                  fromFolderId: fromFolderId,
-                ),
+                child: ChatListScreen(mode: mode, fromFolderId: fromFolderId),
               );
             },
           ),
           GoRoute(
             path: '/chat',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ChatScreen(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ChatScreen()),
             routes: [
-               GoRoute(
+              GoRoute(
                 path: 'settings',
                 parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatSettingsScreen(),
@@ -99,7 +97,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatDebugScreen(),
               ),
-            ]
+            ],
           ),
         ],
       ),
@@ -110,12 +108,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'api-configs',
-             parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => const ApiConfigsScreen(),
           ),
           GoRoute(
             path: 'gemini-api-keys',
-             parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: _rootNavigatorKey,
             builder: (context, state) => const GeminiApiKeysScreen(),
           ),
         ],

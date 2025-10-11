@@ -32,9 +32,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (activeChatId == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(
-          child: Text("没有选择聊天。\n请从列表中选择一个。"),
-        ),
+        body: const Center(child: Text("没有选择聊天。\n请从列表中选择一个。")),
       );
     }
 
@@ -46,20 +44,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return chatScreenDataAsync.when(
       loading: () => Scaffold(
         appBar: AppBar(
-            leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => context.go('/list'))),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.go('/list'),
+          ),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       ),
       error: (error, stack) => Scaffold(
         appBar: AppBar(
-            leading: IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  // On error, it's safer to reset the active chat.
-                  ref.read(activeChatIdProvider.notifier).state = null;
-                  context.go('/list');
-                })),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              // On error, it's safer to reset the active chat.
+              ref.read(activeChatIdProvider.notifier).state = null;
+              context.go('/list');
+            },
+          ),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(16.0),

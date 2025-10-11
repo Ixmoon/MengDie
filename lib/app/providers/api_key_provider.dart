@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/models/api_config.dart'; // Use the new domain model
@@ -7,7 +7,8 @@ import '../../domain/enums.dart'; // Use the pure enums
 import '../repositories/api_config_repository.dart';
 import '../repositories/user_repository.dart';
 import 'auth_providers.dart';
-import 'repository_providers.dart' show apiConfigRepositoryProvider, userRepositoryProvider;
+import 'repository_providers.dart'
+    show apiConfigRepositoryProvider, userRepositoryProvider;
 
 // --- State ---
 @immutable
@@ -51,7 +52,8 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 
   int? get _userId => _ref.read(authProvider).currentUser?.id;
 
-  ApiKeyNotifier(this._apiConfigRepository, this._userRepository, this._ref) : super(const ApiKeyState());
+  ApiKeyNotifier(this._apiConfigRepository, this._userRepository, this._ref)
+    : super(const ApiKeyState());
 
   Future<void> init() async {
     _ref.listen<AuthState>(authProvider, (previous, next) {
@@ -60,7 +62,6 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
         _loadAllUserData();
       }
     }, fireImmediately: true);
-    
   }
 
   Future<void> saveConfig({
@@ -106,7 +107,10 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
       topK: topK,
       maxOutputTokens: maxOutputTokens,
       stopSequences: stopSequences,
-      createdAt: id == null ? now : (getConfigById(id)?.createdAt ?? now), // Preserve original creation time on update
+      createdAt: id == null
+          ? now
+          : (getConfigById(id)?.createdAt ??
+                now), // Preserve original creation time on update
       updatedAt: now,
       enableReasoningEffort: enableReasoningEffort,
       reasoningEffort: reasoningEffort,
@@ -152,7 +156,10 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
   Future<void> _loadGeminiKeys() async {
     final currentUser = _ref.read(authProvider).currentUser;
     if (currentUser != null) {
-      state = state.copyWith(geminiApiKeys: currentUser.geminiApiKeys, geminiApiKeyIndex: 0);
+      state = state.copyWith(
+        geminiApiKeys: currentUser.geminiApiKeys,
+        geminiApiKeyIndex: 0,
+      );
     } else {
       state = state.copyWith(geminiApiKeys: [], geminiApiKeyIndex: 0);
     }
@@ -160,10 +167,15 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 
   Future<void> addGeminiKey(String key) async {
     final currentUser = _ref.read(authProvider).currentUser;
-    if (key.isEmpty || currentUser == null || currentUser.geminiApiKeys.contains(key)) return;
-    
+    if (key.isEmpty ||
+        currentUser == null ||
+        currentUser.geminiApiKeys.contains(key))
+      return;
+
     final newKeys = [...currentUser.geminiApiKeys, key];
-    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
+    await _userRepository.updateUserSettings(
+      currentUser.copyWith(geminiApiKeys: newKeys),
+    );
     // The listener on authProvider will now handle the state refresh automatically.
   }
 
@@ -173,14 +185,18 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 
     // The user object from the authProvider is guaranteed to have a non-null list.
     final newKeys = currentUser.geminiApiKeys.where((k) => k != key).toList();
-    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: newKeys));
+    await _userRepository.updateUserSettings(
+      currentUser.copyWith(geminiApiKeys: newKeys),
+    );
   }
 
   Future<void> clearAllGeminiKeys() async {
     final currentUser = _ref.read(authProvider).currentUser;
     if (currentUser == null) return;
-    
-    await _userRepository.updateUserSettings(currentUser.copyWith(geminiApiKeys: []));
+
+    await _userRepository.updateUserSettings(
+      currentUser.copyWith(geminiApiKeys: []),
+    );
   }
 
   String? getNextGeminiApiKey() {
@@ -200,10 +216,11 @@ class ApiKeyNotifier extends StateNotifier<ApiKeyState> {
 }
 
 // --- Provider ---
-final apiKeyNotifierProvider = StateNotifierProvider<ApiKeyNotifier, ApiKeyState>((ref) {
-  final apiConfigRepo = ref.watch(apiConfigRepositoryProvider);
-  final userRepo = ref.watch(userRepositoryProvider);
-  final notifier = ApiKeyNotifier(apiConfigRepo, userRepo, ref);
-  notifier.init();
-  return notifier;
-});
+final apiKeyNotifierProvider =
+    StateNotifierProvider<ApiKeyNotifier, ApiKeyState>((ref) {
+      final apiConfigRepo = ref.watch(apiConfigRepositoryProvider);
+      final userRepo = ref.watch(userRepositoryProvider);
+      final notifier = ApiKeyNotifier(apiConfigRepo, userRepo, ref);
+      notifier.init();
+      return notifier;
+    });

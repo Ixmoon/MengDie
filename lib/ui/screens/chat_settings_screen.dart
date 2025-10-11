@@ -136,30 +136,39 @@ const String defaultHelpMeReplyPrompt = '''
 </system_command>
 ''';
 
-
 // 本文件包含用于配置单个聊天会话设置的屏幕界面。
 
 // --- 辅助方法：根据优先级解析有效的 API 配置 ---
-ApiConfig? _getEffectiveApiConfig(WidgetRef ref, Chat chat, {String? specificConfigId}) {
- final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
- if (allConfigs.isEmpty) return null;
+ApiConfig? _getEffectiveApiConfig(
+  WidgetRef ref,
+  Chat chat, {
+  String? specificConfigId,
+}) {
+  final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+  if (allConfigs.isEmpty) return null;
 
- final defaultConfig = allConfigs.first;
+  final defaultConfig = allConfigs.first;
 
- // 检查 specificConfigId 是否有效
- if (specificConfigId != null) {
-   final foundConfig = allConfigs.firstWhere((c) => c.id == specificConfigId, orElse: () => defaultConfig);
-   return foundConfig;
- }
- 
- // 检查聊天的主要 apiConfigId 是否有效
- if (chat.apiConfigId != null) {
-   final foundConfig = allConfigs.firstWhere((c) => c.id == chat.apiConfigId, orElse: () => defaultConfig);
-   return foundConfig;
- }
- 
- // 如果都无效，则回退到列表的第一个
- return defaultConfig;
+  // 检查 specificConfigId 是否有效
+  if (specificConfigId != null) {
+    final foundConfig = allConfigs.firstWhere(
+      (c) => c.id == specificConfigId,
+      orElse: () => defaultConfig,
+    );
+    return foundConfig;
+  }
+
+  // 检查聊天的主要 apiConfigId 是否有效
+  if (chat.apiConfigId != null) {
+    final foundConfig = allConfigs.firstWhere(
+      (c) => c.id == chat.apiConfigId,
+      orElse: () => defaultConfig,
+    );
+    return foundConfig;
+  }
+
+  // 如果都无效，则回退到列表的第一个
+  return defaultConfig;
 }
 
 class ChatSettingsScreen extends ConsumerStatefulWidget {
@@ -171,127 +180,153 @@ class ChatSettingsScreen extends ConsumerStatefulWidget {
 
 class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
   // --- 显示添加/编辑 XML 规则的对话框 ---
-   void _showXmlRuleDialog(BuildContext context, {XmlRule? existingRule, int? ruleIndex}) {
-     final chatId = ref.read(activeChatIdProvider);
-     if (chatId == null) return;
+  void _showXmlRuleDialog(
+    BuildContext context, {
+    XmlRule? existingRule,
+    int? ruleIndex,
+  }) {
+    final chatId = ref.read(activeChatIdProvider);
+    if (chatId == null) return;
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
-    final tagNameController = TextEditingController(text: existingRule?.tagName ?? '');
-   var selectedAction = existingRule?.action ?? XmlAction.collapsible;
-   var ignoreInContext = existingRule?.ignoreInContext ?? false;
+    final tagNameController = TextEditingController(
+      text: existingRule?.tagName ?? '',
+    );
+    var selectedAction = existingRule?.action ?? XmlAction.collapsible;
+    var ignoreInContext = existingRule?.ignoreInContext ?? false;
 
-   showDialog(
-     context: context,
-     builder: (context) {
-       return StatefulBuilder(
-         builder: (context, setDialogState) {
-           return AlertDialog(
-             title: Text(existingRule == null ? '添加 XML 规则' : '编辑 XML 规则'),
-             content: Column(
-               mainAxisSize: MainAxisSize.min,
-               children: [
-                 TextField(
-                   controller: tagNameController,
-                   decoration: const InputDecoration(
-                     labelText: 'XML 标签名称',
-                     border: OutlineInputBorder(),
-                   ),
-                 ),
-                 const SizedBox(height: 15),
-                 DropdownButtonFormField<XmlAction>(
-                   value: selectedAction,
-                   decoration: const InputDecoration(
-                     labelText: 'UI 行为',
-                     border: OutlineInputBorder(),
-                   ),
-                   items: XmlAction.values.map((action) {
-                     String description;
-                     switch (action) {
-                       case XmlAction.collapsible:
-                         description = '折叠 (默认)';
-                         break;
-                       case XmlAction.content:
-                         description = '直接显示内容';
-                         break;
-                       case XmlAction.save:
-                         description = '保存状态';
-                         break;
-                       case XmlAction.update:
-                         description = '更新状态';
-                         break;
-                     }
-                     return DropdownMenuItem(
-                       value: action,
-                       child: Text(description),
-                     );
-                   }).toList(),
-                   onChanged: (value) {
-                     if (value != null) {
-                       setDialogState(() {
-                         selectedAction = value;
-                         // LOGIC: If action is save or update, it cannot be ignored in context.
-                         if (selectedAction == XmlAction.save || selectedAction == XmlAction.update) {
-                           ignoreInContext = false;
-                         }
-                       });
-                     }
-                   },
-                 ),
-                 const SizedBox(height: 10),
-                 CheckboxListTile(
-                   title: const Text('在上下文中忽略'),
-                   subtitle: const Text('此标签不会被包含在发送给模型的历史记录中'),
-                   value: ignoreInContext,
-                   // LOGIC: Disable checkbox if action is save or update.
-                   onChanged: (selectedAction == XmlAction.save || selectedAction == XmlAction.update)
-                     ? null
-                     : (bool? value) {
-                         setDialogState(() {
-                           ignoreInContext = value ?? false;
-                         });
-                       },
-                   controlAffinity: ListTileControlAffinity.leading,
-                   contentPadding: EdgeInsets.zero,
-                 ),
-               ],
-             ),
-             actions: [
-               TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-               TextButton(
-                 onPressed: () {
-                   final tagName = tagNameController.text.trim();
-                   if (tagName.isNotEmpty) {
-                     // Final check to ensure logic consistency before saving
-                     final bool finalIgnoreInContext = (selectedAction == XmlAction.save || selectedAction == XmlAction.update)
-                         ? false
-                         : ignoreInContext;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(existingRule == null ? '添加 XML 规则' : '编辑 XML 规则'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: tagNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'XML 标签名称',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  DropdownButtonFormField<XmlAction>(
+                    initialValue: selectedAction,
+                    decoration: const InputDecoration(
+                      labelText: 'UI 行为',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: XmlAction.values.map((action) {
+                      String description;
+                      switch (action) {
+                        case XmlAction.collapsible:
+                          description = '折叠 (默认)';
+                          break;
+                        case XmlAction.content:
+                          description = '直接显示内容';
+                          break;
+                        case XmlAction.save:
+                          description = '保存状态';
+                          break;
+                        case XmlAction.update:
+                          description = '更新状态';
+                          break;
+                      }
+                      return DropdownMenuItem(
+                        value: action,
+                        child: Text(description),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() {
+                          selectedAction = value;
+                          // LOGIC: If action is save or update, it cannot be ignored in context.
+                          if (selectedAction == XmlAction.save ||
+                              selectedAction == XmlAction.update) {
+                            ignoreInContext = false;
+                          }
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  CheckboxListTile(
+                    title: const Text('在上下文中忽略'),
+                    subtitle: const Text('此标签不会被包含在发送给模型的历史记录中'),
+                    value: ignoreInContext,
+                    // LOGIC: Disable checkbox if action is save or update.
+                    onChanged:
+                        (selectedAction == XmlAction.save ||
+                            selectedAction == XmlAction.update)
+                        ? null
+                        : (bool? value) {
+                            setDialogState(() {
+                              ignoreInContext = value ?? false;
+                            });
+                          },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final tagName = tagNameController.text.trim();
+                    if (tagName.isNotEmpty) {
+                      // Final check to ensure logic consistency before saving
+                      final bool finalIgnoreInContext =
+                          (selectedAction == XmlAction.save ||
+                              selectedAction == XmlAction.update)
+                          ? false
+                          : ignoreInContext;
 
-                     final newRule = XmlRule(
-                       tagName: tagName,
-                       action: selectedAction,
-                       ignoreInContext: finalIgnoreInContext,
-                     );
-                     notifier.updateSettings((chat) {
-                       final rules = List<XmlRule>.from(chat.xmlRules);
-                       if (ruleIndex != null) {
-                         rules[ruleIndex] = newRule;
-                       } else {
-                         if (!rules.any((r) => r.tagName?.toLowerCase() == tagName.toLowerCase())) {
-                           rules.add(newRule);
-                         } else {
-                           ScaffoldMessenger.of(context).showSnackBar(
-                               const SnackBar(content: Text('该标签名称的规则已存在'), backgroundColor: Colors.orange));
-                           return chat; // No change
-                         }
-                       }
-                       return chat.copyWith(xmlRules: rules);
-                     });
-                     Navigator.pop(context);
-                   } else {
-                     ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text('标签名称不能为空'), backgroundColor: Colors.red));
-                   }
-                 },
-                 child: Text(existingRule == null ? '添加' : '保存'),
+                      final newRule = XmlRule(
+                        tagName: tagName,
+                        action: selectedAction,
+                        ignoreInContext: finalIgnoreInContext,
+                      );
+                      notifier.updateSettings((chat) {
+                        final rules = List<XmlRule>.from(chat.xmlRules);
+                        if (ruleIndex != null) {
+                          rules[ruleIndex] = newRule;
+                        } else {
+                          if (!rules.any(
+                            (r) =>
+                                r.tagName?.toLowerCase() ==
+                                tagName.toLowerCase(),
+                          )) {
+                            rules.add(newRule);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('该标签名称的规则已存在'),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                            return chat; // No change
+                          }
+                        }
+                        return chat.copyWith(xmlRules: rules);
+                      });
+                      Navigator.pop(context);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('标签名称不能为空'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: Text(existingRule == null ? '添加' : '保存'),
                 ),
               ],
             );
@@ -300,7 +335,6 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -326,9 +360,6 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         try {
           await notifier.saveSettings();
         } catch (e) {
-          // 在后台静默处理错误，或者使用日志库记录
-          debugPrint('自动保存聊天设置失败: $e');
-          // 可选：显示一个错误提示
           if (scaffoldMessenger.mounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(content: Text('保存失败: $e'), backgroundColor: Colors.red),
@@ -344,42 +375,53 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: IconThemeData(
-          shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
-          ],
-        ),
-        title: Text(
-          '聊天设置',
-          style: TextStyle(
+          elevation: 0,
+          iconTheme: IconThemeData(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+              Shadow(
+                color: Colors.black.withAlpha((255 * 0.5).round()),
+                blurRadius: 1.0,
+              ),
             ],
           ),
-        ),
-      ),
-      body: settingsState.initialChat.when(
-        data: (_) {
-          final chat = settingsState.chatForDisplay;
-          if (chat == null) {
-            return const SizedBox.shrink();
-          }
-          return GestureDetector(
-            onTap: () => FocusScope.of(context).unfocus(),
-            child: Form(
-              child: _buildMainSettingsForm(context, ref, chat, chatId),
+          title: Text(
+            '聊天设置',
+            style: TextStyle(
+              shadows: <Shadow>[
+                Shadow(
+                  color: Colors.black.withAlpha((255 * 0.5).round()),
+                  blurRadius: 1.0,
+                ),
+              ],
             ),
-          );
-        },
-        loading: () => const SizedBox.shrink(),
-        error: (err, stack) => Center(child: Text('无法加载聊天设置: $err')),
-      ),
+          ),
+        ),
+        body: settingsState.initialChat.when(
+          data: (_) {
+            final chat = settingsState.chatForDisplay;
+            if (chat == null) {
+              return const SizedBox.shrink();
+            }
+            return GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: Form(
+                child: _buildMainSettingsForm(context, ref, chat, chatId),
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (err, stack) => Center(child: Text('无法加载聊天设置: $err')),
+        ),
       ),
     );
   }
 
-  Widget _buildMainSettingsForm(BuildContext context, WidgetRef ref, Chat chat, int chatId) {
+  Widget _buildMainSettingsForm(
+    BuildContext context,
+    WidgetRef ref,
+    Chat chat,
+    int chatId,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16.0),
       children: [
@@ -391,7 +433,8 @@ class _ChatSettingsScreenState extends ConsumerState<ChatSettingsScreen> {
         const Divider(height: 30),
         _XmlRulesSettings(
           chatId: chatId,
-          onShowXmlRuleDialog: (rule, index) => _showXmlRuleDialog(context, existingRule: rule, ruleIndex: index),
+          onShowXmlRuleDialog: (rule, index) =>
+              _showXmlRuleDialog(context, existingRule: rule, ruleIndex: index),
         ),
         const Divider(height: 30),
         _AutomationSettings(chatId: chatId),
@@ -432,8 +475,12 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
     super.initState();
     final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
     _titleController = TextEditingController(text: chat.title ?? '');
-    _systemPromptController = TextEditingController(text: chat.systemPrompt ?? '');
-    _continuePromptController = TextEditingController(text: chat.continuePrompt ?? '');
+    _systemPromptController = TextEditingController(
+      text: chat.systemPrompt ?? '',
+    );
+    _continuePromptController = TextEditingController(
+      text: chat.continuePrompt ?? '',
+    );
   }
 
   @override
@@ -453,7 +500,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
     // NOTE: This was causing a bug where the last character could not be deleted.
     // The logic to update from full screen is handled directly in the `onPressed` callback.
     // The controller is the source of truth for user input.
-    ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
+    ref.watch(
+      chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -462,11 +511,14 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
         const SizedBox(height: 15),
         TextFormField(
           controller: _titleController,
-          decoration: const InputDecoration(labelText: '聊天标题', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: '聊天标题',
+            border: OutlineInputBorder(),
+          ),
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith(
-              title: value.isEmpty ? null : value
-            ));
+            notifier.updateSettings(
+              (c) => c.copyWith(title: value.isEmpty ? null : value),
+            );
           },
         ),
         const SizedBox(height: 15),
@@ -487,9 +539,11 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                 );
                 if (newText != null) {
                   _systemPromptController.text = newText;
-                  notifier.updateSettings((c) => c.copyWith(
-                    systemPrompt: newText.isEmpty ? null : newText,
-                  ));
+                  notifier.updateSettings(
+                    (c) => c.copyWith(
+                      systemPrompt: newText.isEmpty ? null : newText,
+                    ),
+                  );
                 }
               },
             ),
@@ -497,9 +551,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
           maxLines: 4,
           minLines: 2,
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith(
-              systemPrompt: value.isEmpty ? null : value
-            ));
+            notifier.updateSettings(
+              (c) => c.copyWith(systemPrompt: value.isEmpty ? null : value),
+            );
           },
         ),
         const SizedBox(height: 15),
@@ -521,9 +575,11 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                 );
                 if (newText != null) {
                   _continuePromptController.text = newText;
-                  notifier.updateSettings((c) => c.copyWith(
-                    continuePrompt: newText.isEmpty ? null : newText,
-                  ));
+                  notifier.updateSettings(
+                    (c) => c.copyWith(
+                      continuePrompt: newText.isEmpty ? null : newText,
+                    ),
+                  );
                 }
               },
             ),
@@ -531,9 +587,9 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
           maxLines: 4,
           minLines: 2,
           onChanged: (value) {
-            notifier.updateSettings((c) => c.copyWith(
-              continuePrompt: value.isEmpty ? null : value
-            ));
+            notifier.updateSettings(
+              (c) => c.copyWith(continuePrompt: value.isEmpty ? null : value),
+            );
           },
         ),
       ],
@@ -547,17 +603,25 @@ class _ApiProviderSettings extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
+    final chat = ref.watch(
+      chatSettingsProvider(chatId).select((s) => s.chatForDisplay!),
+    );
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
-    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+    final apiConfigs = ref.watch(
+      apiKeyNotifierProvider.select((s) => s.apiConfigs),
+    );
 
     // 修复：确保提供给 Dropdown 的项目列表中的值是唯一的，并且当前值有效。
     // 1. 通过 ID 去重，防止因重复 ID 导致断言失败。
-    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    final uniqueApiConfigs = Map.fromEntries(
+      apiConfigs.map((c) => MapEntry(c.id, c)),
+    ).values.toList();
     // 2. 创建一个有效的 ID 集合，用于快速查找。
     final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
     // 3. 检查当前聊天的 apiConfigId 是否在有效列表中，如果不是，则设为 null 以避免崩溃。
-    final safeApiConfigId = validConfigIds.contains(chat.apiConfigId) ? chat.apiConfigId : null;
+    final safeApiConfigId = validConfigIds.contains(chat.apiConfigId)
+        ? chat.apiConfigId
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,20 +629,27 @@ class _ApiProviderSettings extends ConsumerWidget {
         const _SectionTitle('API 提供者'),
         const SizedBox(height: 15),
         if (uniqueApiConfigs.isEmpty)
-          const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
+          const Text(
+            '没有可用的 API 配置。请先在全局设置中添加。',
+            style: TextStyle(color: Colors.orange),
+          )
         else
           DropdownButtonFormField<String?>(
-            value: safeApiConfigId,
+            initialValue: safeApiConfigId,
             decoration: InputDecoration(
               labelText: '聊天 API 配置',
               border: const OutlineInputBorder(),
               hintText: '默认: ${uniqueApiConfigs.first.name}',
             ),
             // 使用去重后的列表构建项目
-            items: uniqueApiConfigs.map((config) => DropdownMenuItem(
-              value: config.id,
-              child: Text(config.name),
-            )).toList(),
+            items: uniqueApiConfigs
+                .map(
+                  (config) => DropdownMenuItem(
+                    value: config.id,
+                    child: Text(config.name),
+                  ),
+                )
+                .toList(),
             onChanged: (value) {
               notifier.updateSettings((c) => c.copyWith(apiConfigId: value));
             },
@@ -594,7 +665,9 @@ class _ContextManagementSettings extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
+    final chat = ref.watch(
+      chatSettingsProvider(chatId).select((s) => s.chatForDisplay!),
+    );
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final contextConfig = chat.contextConfig;
 
@@ -604,15 +677,30 @@ class _ContextManagementSettings extends ConsumerWidget {
         const _SectionTitle('上下文管理'),
         const SizedBox(height: 15),
         DropdownButtonFormField<ContextManagementMode>(
-          value: contextConfig.mode,
-          decoration: const InputDecoration(labelText: '上下文模式', border: OutlineInputBorder()),
-          items: ContextManagementMode.values.map((mode) => DropdownMenuItem(
-            value: mode,
-            child: Text(mode == ContextManagementMode.turns ? '按轮数' : '按 Tokens (实验性)'),
-          )).toList(),
+          initialValue: contextConfig.mode,
+          decoration: const InputDecoration(
+            labelText: '上下文模式',
+            border: OutlineInputBorder(),
+          ),
+          items: ContextManagementMode.values
+              .map(
+                (mode) => DropdownMenuItem(
+                  value: mode,
+                  child: Text(
+                    mode == ContextManagementMode.turns
+                        ? '按轮数'
+                        : '按 Tokens (实验性)',
+                  ),
+                ),
+              )
+              .toList(),
           onChanged: (value) {
             if (value != null) {
-              notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(mode: value)));
+              notifier.updateSettings(
+                (c) => c.copyWith(
+                  contextConfig: contextConfig.copyWith(mode: value),
+                ),
+              );
             }
           },
         ),
@@ -621,9 +709,18 @@ class _ContextManagementSettings extends ConsumerWidget {
           TextFormField(
             key: ValueKey('maxTurns_${chat.id}'),
             initialValue: contextConfig.maxTurns.toString(),
-            decoration: const InputDecoration(labelText: '最大对话轮数', border: OutlineInputBorder()),
+            decoration: const InputDecoration(
+              labelText: '最大对话轮数',
+              border: OutlineInputBorder(),
+            ),
             keyboardType: TextInputType.number,
-            onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxTurns: int.tryParse(value) ?? 10))),
+            onChanged: (value) => notifier.updateSettings(
+              (c) => c.copyWith(
+                contextConfig: contextConfig.copyWith(
+                  maxTurns: int.tryParse(value) ?? 10,
+                ),
+              ),
+            ),
           ),
         if (contextConfig.mode == ContextManagementMode.tokens)
           Column(
@@ -631,14 +728,25 @@ class _ContextManagementSettings extends ConsumerWidget {
               TextFormField(
                 key: ValueKey('maxTokens_${chat.id}'),
                 initialValue: contextConfig.maxContextTokens?.toString() ?? '',
-                decoration: const InputDecoration(labelText: '最大 Tokens (可选)', hintText: '留空则不限制', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: '最大 Tokens (可选)',
+                  hintText: '留空则不限制',
+                  border: OutlineInputBorder(),
+                ),
                 keyboardType: TextInputType.number,
-                onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(maxContextTokens: int.tryParse(value)))),
+                onChanged: (value) => notifier.updateSettings(
+                  (c) => c.copyWith(
+                    contextConfig: contextConfig.copyWith(
+                      maxContextTokens: int.tryParse(value),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 15),
               TextFormField(
                 key: ValueKey('predictedTokens_${chat.id}'),
-                initialValue: contextConfig.predictedTurnTokens?.toString() ?? '2048',
+                initialValue:
+                    contextConfig.predictedTurnTokens?.toString() ?? '2048',
                 decoration: const InputDecoration(
                   labelText: '预测回合 Tokens',
                   hintText: '用于后台总结的预测值',
@@ -646,7 +754,13 @@ class _ContextManagementSettings extends ConsumerWidget {
                   helperText: '后台任务会用此值预测未来消耗，以提前触发总结。',
                 ),
                 keyboardType: TextInputType.number,
-                onChanged: (value) => notifier.updateSettings((c) => c.copyWith(contextConfig: contextConfig.copyWith(predictedTurnTokens: int.tryParse(value) ?? 2048))),
+                onChanged: (value) => notifier.updateSettings(
+                  (c) => c.copyWith(
+                    contextConfig: contextConfig.copyWith(
+                      predictedTurnTokens: int.tryParse(value) ?? 2048,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -659,11 +773,16 @@ class _XmlRulesSettings extends ConsumerWidget {
   final int chatId;
   final Function(XmlRule?, int?) onShowXmlRuleDialog;
 
-  const _XmlRulesSettings({required this.chatId, required this.onShowXmlRuleDialog});
+  const _XmlRulesSettings({
+    required this.chatId,
+    required this.onShowXmlRuleDialog,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatSettingsProvider(chatId).select((s) => s.chatForDisplay!));
+    final chat = ref.watch(
+      chatSettingsProvider(chatId).select((s) => s.chatForDisplay!),
+    );
     final notifier = ref.read(chatSettingsProvider(chatId).notifier);
     final xmlRules = chat.xmlRules;
 
@@ -678,7 +797,7 @@ class _XmlRulesSettings extends ConsumerWidget {
               icon: const Icon(Icons.add_circle_outline),
               tooltip: '添加规则',
               onPressed: () => onShowXmlRuleDialog(null, null),
-            )
+            ),
           ],
         ),
         const SizedBox(height: 5),
@@ -693,7 +812,9 @@ class _XmlRulesSettings extends ConsumerWidget {
               final rule = xmlRules[index];
               return ListTile(
                 title: Text('<${rule.tagName ?? "无效规则"}>'),
-                subtitle: Text('UI: ${rule.action.name} / 上下文: ${rule.ignoreInContext ? "忽略" : "包含"}'),
+                subtitle: Text(
+                  'UI: ${rule.action.name} / 上下文: ${rule.ignoreInContext ? "忽略" : "包含"}',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -703,11 +824,16 @@ class _XmlRulesSettings extends ConsumerWidget {
                       onPressed: () => onShowXmlRuleDialog(rule, index),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 20,
+                        color: Colors.redAccent,
+                      ),
                       tooltip: '删除规则',
                       onPressed: () {
                         notifier.updateSettings((c) {
-                          final rules = List<XmlRule>.from(c.xmlRules)..removeAt(index);
+                          final rules = List<XmlRule>.from(c.xmlRules)
+                            ..removeAt(index);
                           return c.copyWith(xmlRules: rules);
                         });
                       },
@@ -728,7 +854,8 @@ class _AutomationSettings extends ConsumerStatefulWidget {
   const _AutomationSettings({required this.chatId});
 
   @override
-  ConsumerState<_AutomationSettings> createState() => _AutomationSettingsState();
+  ConsumerState<_AutomationSettings> createState() =>
+      _AutomationSettingsState();
 }
 
 class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
@@ -739,8 +866,12 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
   void initState() {
     super.initState();
     final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
-    _preprocessingPromptController = TextEditingController(text: chat.preprocessingPrompt ?? '');
-    _secondaryXmlPromptController = TextEditingController(text: chat.secondaryXmlPrompt ?? '');
+    _preprocessingPromptController = TextEditingController(
+      text: chat.preprocessingPrompt ?? '',
+    );
+    _secondaryXmlPromptController = TextEditingController(
+      text: chat.secondaryXmlPrompt ?? '',
+    );
   }
 
   @override
@@ -752,14 +883,20 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
+    final chat = ref.watch(
+      chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!),
+    );
     final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
-    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+    final apiConfigs = ref.watch(
+      apiKeyNotifierProvider.select((s) => s.apiConfigs),
+    );
 
     // 修复：确保下拉菜单数据源的健壮性
-    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    final uniqueApiConfigs = Map.fromEntries(
+      apiConfigs.map((c) => MapEntry(c.id, c)),
+    ).values.toList();
     final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
- 
+
     // The controller is the source of truth during user input.
     // The previous ref.listen was causing a bug where the last character could not be deleted.
 
@@ -772,11 +909,18 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
           title: const Text('启用上下文总结'),
           subtitle: const Text('在回复后，对被遗忘的旧消息进行总结'),
           value: chat.enablePreprocessing,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enablePreprocessing: value)),
+          onChanged: (value) => notifier.updateSettings(
+            (c) => c.copyWith(enablePreprocessing: value),
+          ),
         ),
         if (chat.enablePreprocessing)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 16.0),
+            padding: const EdgeInsets.only(
+              top: 8.0,
+              left: 16.0,
+              right: 16.0,
+              bottom: 16.0,
+            ),
             child: TextFormField(
               controller: _preprocessingPromptController,
               decoration: InputDecoration(
@@ -795,9 +939,11 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                     );
                     if (newText != null) {
                       _preprocessingPromptController.text = newText;
-                      notifier.updateSettings((c) => c.copyWith(
-                        preprocessingPrompt: newText.isEmpty ? null : newText,
-                      ));
+                      notifier.updateSettings(
+                        (c) => c.copyWith(
+                          preprocessingPrompt: newText.isEmpty ? null : newText,
+                        ),
+                      );
                     }
                   },
                 ),
@@ -805,44 +951,67 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               maxLines: 3,
               minLines: 1,
               onChanged: (value) {
-                notifier.updateSettings((c) => c.copyWith(
-                  preprocessingPrompt: value.isEmpty ? null : value
-                ));
+                notifier.updateSettings(
+                  (c) => c.copyWith(
+                    preprocessingPrompt: value.isEmpty ? null : value,
+                  ),
+                );
               },
             ),
           ),
-       if (chat.enablePreprocessing)
-         Padding(
-           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        if (chat.enablePreprocessing)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: DropdownButtonFormField<String?>(
-              value: validConfigIds.contains(chat.preprocessingApiConfigId) ? chat.preprocessingApiConfigId : null,
+              initialValue:
+                  validConfigIds.contains(chat.preprocessingApiConfigId)
+                  ? chat.preprocessingApiConfigId
+                  : null,
               decoration: InputDecoration(
                 labelText: '用于总结的 API 配置',
                 border: const OutlineInputBorder(),
-                hintText: '默认: ${ _getEffectiveApiConfig(ref, chat, specificConfigId: chat.preprocessingApiConfigId)?.name ?? 'N/A'}'
+                hintText:
+                    '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.preprocessingApiConfigId)?.name ?? 'N/A'}',
               ),
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
-                  child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                  child: Text(
+                    '使用聊天默认配置',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
-                ...uniqueApiConfigs.map((config) => DropdownMenuItem(
-                  value: config.id,
-                  child: Text(config.name),
-                )),
+                ...uniqueApiConfigs.map(
+                  (config) => DropdownMenuItem(
+                    value: config.id,
+                    child: Text(config.name),
+                  ),
+                ),
               ],
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(preprocessingApiConfigId: value)),
+              onChanged: (value) => notifier.updateSettings(
+                (c) => c.copyWith(preprocessingApiConfigId: value),
+              ),
             ),
-         ),
+          ),
         SwitchListTile(
           title: const Text('启用再生XML生成'),
           subtitle: const Text('在回复后，使用再生XML提示词生成额外XML内容'),
           value: chat.enableSecondaryXml,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableSecondaryXml: value)),
+          onChanged: (value) => notifier.updateSettings(
+            (c) => c.copyWith(enableSecondaryXml: value),
+          ),
         ),
         if (chat.enableSecondaryXml)
           Padding(
-            padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0, bottom: 8.0),
+            padding: const EdgeInsets.only(
+              top: 8.0,
+              left: 16.0,
+              right: 16.0,
+              bottom: 8.0,
+            ),
             child: TextFormField(
               controller: _secondaryXmlPromptController,
               decoration: InputDecoration(
@@ -861,9 +1030,11 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                     );
                     if (newText != null) {
                       _secondaryXmlPromptController.text = newText;
-                      notifier.updateSettings((c) => c.copyWith(
-                        secondaryXmlPrompt: newText.isEmpty ? null : newText,
-                      ));
+                      notifier.updateSettings(
+                        (c) => c.copyWith(
+                          secondaryXmlPrompt: newText.isEmpty ? null : newText,
+                        ),
+                      );
                     }
                   },
                 ),
@@ -871,35 +1042,51 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               maxLines: 3,
               minLines: 1,
               onChanged: (value) {
-                notifier.updateSettings((c) => c.copyWith(
-                  secondaryXmlPrompt: value.isEmpty ? null : value
-                ));
+                notifier.updateSettings(
+                  (c) => c.copyWith(
+                    secondaryXmlPrompt: value.isEmpty ? null : value,
+                  ),
+                );
               },
             ),
           ),
-       if (chat.enableSecondaryXml)
-         Padding(
-           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        if (chat.enableSecondaryXml)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: DropdownButtonFormField<String?>(
-              value: validConfigIds.contains(chat.secondaryXmlApiConfigId) ? chat.secondaryXmlApiConfigId : null,
+              initialValue:
+                  validConfigIds.contains(chat.secondaryXmlApiConfigId)
+                  ? chat.secondaryXmlApiConfigId
+                  : null,
               decoration: InputDecoration(
                 labelText: '用于再生XML的 API 配置',
                 border: const OutlineInputBorder(),
-                hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}'
+                hintText:
+                    '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}',
               ),
               items: [
                 const DropdownMenuItem<String?>(
                   value: null,
-                  child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                  child: Text(
+                    '使用聊天默认配置',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
-                ...uniqueApiConfigs.map((config) => DropdownMenuItem(
-                  value: config.id,
-                  child: Text(config.name),
-                )),
+                ...uniqueApiConfigs.map(
+                  (config) => DropdownMenuItem(
+                    value: config.id,
+                    child: Text(config.name),
+                  ),
+                ),
               ],
-              onChanged: (value) => notifier.updateSettings((c) => c.copyWith(secondaryXmlApiConfigId: value)),
+              onChanged: (value) => notifier.updateSettings(
+                (c) => c.copyWith(secondaryXmlApiConfigId: value),
+              ),
             ),
-         ),
+          ),
       ],
     );
   }
@@ -910,7 +1097,8 @@ class _HelpMeReplySettings extends ConsumerStatefulWidget {
   const _HelpMeReplySettings({required this.chatId});
 
   @override
-  ConsumerState<_HelpMeReplySettings> createState() => _HelpMeReplySettingsState();
+  ConsumerState<_HelpMeReplySettings> createState() =>
+      _HelpMeReplySettingsState();
 }
 
 class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
@@ -920,7 +1108,9 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
   void initState() {
     super.initState();
     final chat = ref.read(chatSettingsProvider(widget.chatId)).chatForDisplay!;
-    _promptController = TextEditingController(text: chat.helpMeReplyPrompt ?? '');
+    _promptController = TextEditingController(
+      text: chat.helpMeReplyPrompt ?? '',
+    );
   }
 
   @override
@@ -931,12 +1121,18 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
 
   @override
   Widget build(BuildContext context) {
-    final chat = ref.watch(chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!));
+    final chat = ref.watch(
+      chatSettingsProvider(widget.chatId).select((s) => s.chatForDisplay!),
+    );
     final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
-    final apiConfigs = ref.watch(apiKeyNotifierProvider.select((s) => s.apiConfigs));
+    final apiConfigs = ref.watch(
+      apiKeyNotifierProvider.select((s) => s.apiConfigs),
+    );
 
     // 修复：确保下拉菜单数据源的健壮性
-    final uniqueApiConfigs = Map.fromEntries(apiConfigs.map((c) => MapEntry(c.id, c))).values.toList();
+    final uniqueApiConfigs = Map.fromEntries(
+      apiConfigs.map((c) => MapEntry(c.id, c)),
+    ).values.toList();
     final validConfigIds = uniqueApiConfigs.map((c) => c.id).toSet();
 
     return Column(
@@ -948,11 +1144,16 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
           title: const Text('启用“帮我回复”'),
           subtitle: const Text('根据对话上下文，生成多个回复选项'),
           value: chat.enableHelpMeReply,
-          onChanged: (value) => notifier.updateSettings((c) => c.copyWith(enableHelpMeReply: value)),
+          onChanged: (value) => notifier.updateSettings(
+            (c) => c.copyWith(enableHelpMeReply: value),
+          ),
         ),
         if (chat.enableHelpMeReply)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -974,9 +1175,13 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                         );
                         if (newText != null) {
                           _promptController.text = newText;
-                          notifier.updateSettings((c) => c.copyWith(
-                            helpMeReplyPrompt: newText.isEmpty ? null : newText,
-                          ));
+                          notifier.updateSettings(
+                            (c) => c.copyWith(
+                              helpMeReplyPrompt: newText.isEmpty
+                                  ? null
+                                  : newText,
+                            ),
+                          );
                         }
                       },
                     ),
@@ -984,51 +1189,86 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                   maxLines: 3,
                   minLines: 1,
                   onChanged: (value) {
-                    notifier.updateSettings((c) => c.copyWith(
-                      helpMeReplyPrompt: value.isEmpty ? null : value,
-                    ));
+                    notifier.updateSettings(
+                      (c) => c.copyWith(
+                        helpMeReplyPrompt: value.isEmpty ? null : value,
+                      ),
+                    );
                   },
                 ),
                 const SizedBox(height: 15),
                 if (apiConfigs.isEmpty)
-                  const Text('没有可用的 API 配置。请先在全局设置中添加。', style: TextStyle(color: Colors.orange))
+                  const Text(
+                    '没有可用的 API 配置。请先在全局设置中添加。',
+                    style: TextStyle(color: Colors.orange),
+                  )
                 else
                   DropdownButtonFormField<String?>(
-                    value: validConfigIds.contains(chat.helpMeReplyApiConfigId) ? chat.helpMeReplyApiConfigId : null,
+                    initialValue:
+                        validConfigIds.contains(chat.helpMeReplyApiConfigId)
+                        ? chat.helpMeReplyApiConfigId
+                        : null,
                     decoration: InputDecoration(
                       labelText: '用于“帮我回复”的 API 配置',
                       border: const OutlineInputBorder(),
-                      hintText: '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.helpMeReplyApiConfigId)?.name ?? 'N/A'}',
+                      hintText:
+                          '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.helpMeReplyApiConfigId)?.name ?? 'N/A'}',
                     ),
                     items: [
                       const DropdownMenuItem<String?>(
                         value: null,
-                        child: Text('使用聊天默认配置', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                        child: Text(
+                          '使用聊天默认配置',
+                          style: TextStyle(
+                            fontStyle: FontStyle.italic,
+                            color: Colors.grey,
+                          ),
+                        ),
                       ),
-                      ...uniqueApiConfigs.map((config) => DropdownMenuItem(
-                        value: config.id,
-                        child: Text(config.name),
-                      )),
+                      ...uniqueApiConfigs.map(
+                        (config) => DropdownMenuItem(
+                          value: config.id,
+                          child: Text(config.name),
+                        ),
+                      ),
                     ],
-                    onChanged: (value) => notifier.updateSettings((c) => c.copyWith(helpMeReplyApiConfigId: value)),
+                    onChanged: (value) => notifier.updateSettings(
+                      (c) => c.copyWith(helpMeReplyApiConfigId: value),
+                    ),
                   ),
                 const SizedBox(height: 15),
                 Text('触发模式', style: Theme.of(context).textTheme.bodyLarge),
                 const SizedBox(height: 8),
                 SegmentedButton<HelpMeReplyTriggerMode>(
                   segments: const [
-                    ButtonSegment<HelpMeReplyTriggerMode>(value: HelpMeReplyTriggerMode.manual, label: Text('手动'), icon: Icon(Icons.touch_app_rounded)),
-                    ButtonSegment<HelpMeReplyTriggerMode>(value: HelpMeReplyTriggerMode.auto, label: Text('自动'), icon: Icon(Icons.play_arrow_rounded)),
+                    ButtonSegment<HelpMeReplyTriggerMode>(
+                      value: HelpMeReplyTriggerMode.manual,
+                      label: Text('手动'),
+                      icon: Icon(Icons.touch_app_rounded),
+                    ),
+                    ButtonSegment<HelpMeReplyTriggerMode>(
+                      value: HelpMeReplyTriggerMode.auto,
+                      label: Text('自动'),
+                      icon: Icon(Icons.play_arrow_rounded),
+                    ),
                   ],
                   selected: {chat.helpMeReplyTriggerMode},
                   onSelectionChanged: (newSelection) {
-                    notifier.updateSettings((c) => c.copyWith(helpMeReplyTriggerMode: newSelection.first));
+                    notifier.updateSettings(
+                      (c) => c.copyWith(
+                        helpMeReplyTriggerMode: newSelection.first,
+                      ),
+                    );
                   },
                   showSelectedIcon: false,
                   style: ButtonStyle(
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
-                    shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    shape: WidgetStateProperty.all(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                   ),
                 ),
               ],

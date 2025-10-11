@@ -6,31 +6,20 @@ import 'package:json_annotation/json_annotation.dart';
 // These are kept separate from UI-level or Isar-specific enums if needed.
 
 @JsonEnum()
-enum LlmType {
-  gemini,
-  openai,
-}
+enum LlmType { gemini, openai }
 
 @JsonEnum()
-enum MessageRole {
-  user,
-  model,
-}
+enum MessageRole { user, model }
 
 @JsonEnum()
-enum XmlAction {
-  save,
-  update,
-  collapsible,
-  content,
-}
+enum XmlAction { save, update, collapsible, content }
 
 enum LocalHarmCategory {
   harassment,
   hateSpeech,
   sexuallyExplicit,
   dangerousContent,
-  unknown
+  unknown,
 }
 
 enum LocalHarmBlockThreshold {
@@ -38,14 +27,11 @@ enum LocalHarmBlockThreshold {
   lowAndAbove,
   mediumAndAbove,
   highAndAbove,
-  unspecified
+  unspecified,
 }
 
 @JsonEnum()
-enum ContextManagementMode {
-  turns,
-  tokens,
-}
+enum ContextManagementMode { turns, tokens }
 
 // ThemeModeSetting is not directly stored in the database tables being refactored
 // so it's not included here for now.

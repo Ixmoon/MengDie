@@ -16,7 +16,9 @@ class UserDao extends DatabaseAccessor<AppDatabase> with _$UserDaoMixin {
   /// [username] 要查找的用户名。
   /// 返回一个 [DriftUser] 对象，如果未找到则返回 null。
   Future<DriftUser?> getUserByUsername(String username) {
-    return (select(users)..where((u) => u.username.equals(username))).getSingleOrNull();
+    return (select(
+      users,
+    )..where((u) => u.username.equals(username))).getSingleOrNull();
   }
 
   /// 根据用户ID查找用户。
@@ -34,11 +36,14 @@ class UserDao extends DatabaseAccessor<AppDatabase> with _$UserDaoMixin {
     final companionWithTime = user.copyWith(updatedAt: Value(DateTime.now()));
     return into(users).insertOnConflictUpdate(companionWithTime);
   }
+
   /// 监听单个用户的变化。
   ///
   /// [userId] 要监听的用户的ID。
   /// 返回一个用户数据流。
   Stream<DriftUser?> watchUser(int userId) {
-    return (select(users)..where((u) => u.id.equals(userId))).watchSingleOrNull();
+    return (select(
+      users,
+    )..where((u) => u.id.equals(userId))).watchSingleOrNull();
   }
 }

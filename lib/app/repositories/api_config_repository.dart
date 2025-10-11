@@ -15,8 +15,11 @@ class ApiConfigRepository {
   }
 
   Stream<List<ApiConfig>> watchAllConfigs(int userId) {
-    return _dao.watchAllApiConfigs(userId).map((driftConfigs) =>
-        driftConfigs.map(ApiConfigMapper.fromData).toList());
+    return _dao
+        .watchAllApiConfigs(userId)
+        .map(
+          (driftConfigs) => driftConfigs.map(ApiConfigMapper.fromData).toList(),
+        );
   }
 
   Future<ApiConfig?> getConfigById(String id, int userId) async {
@@ -31,8 +34,6 @@ class ApiConfigRepository {
 
   Future<void> deleteConfig(String id, int userId) =>
       _dao.deleteApiConfig(id, userId);
-  
-  Future<void> clearAllConfigs(int userId) =>
-      _dao.clearAllApiConfigs(userId);
 
+  Future<void> clearAllConfigs(int userId) => _dao.clearAllApiConfigs(userId);
 }

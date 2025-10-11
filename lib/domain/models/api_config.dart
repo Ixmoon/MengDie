@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
+
 import '../enums.dart';
 
 @immutable
@@ -22,7 +23,8 @@ class ApiConfig {
   // OpenAI specific settings
   final bool? enableReasoningEffort;
   final OpenAIReasoningEffort? reasoningEffort;
-  final String? toolChoice; // e.g., "auto", "none", or '{"type": "function", "function": {"name": "my_function"}}'
+  final String?
+  toolChoice; // e.g., "auto", "none", or '{"type": "function", "function": {"name": "my_function"}}'
 
   // Gemini specific settings
   final int? thinkingBudget;

@@ -37,7 +37,9 @@ class XmlRuleListConverter extends TypeConverter<List<XmlRule>, String> {
       }
       return true; // Keep this rule
     }).toList();
-    return filteredJsonData.map((item) => XmlRule.fromJson(item as Map<String, dynamic>)).toList();
+    return filteredJsonData
+        .map((item) => XmlRule.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   @override
@@ -52,7 +54,10 @@ class LlmTypeConverter extends TypeConverter<LlmType, String> {
 
   @override
   LlmType fromSql(String fromDb) {
-    return LlmType.values.firstWhere((e) => e.name == fromDb, orElse: () => LlmType.gemini);
+    return LlmType.values.firstWhere(
+      (e) => e.name == fromDb,
+      orElse: () => LlmType.gemini,
+    );
   }
 
   @override
@@ -67,7 +72,10 @@ class MessageRoleConverter extends TypeConverter<MessageRole, String> {
 
   @override
   MessageRole fromSql(String fromDb) {
-    return MessageRole.values.firstWhere((e) => e.name == fromDb, orElse: () => MessageRole.user);
+    return MessageRole.values.firstWhere(
+      (e) => e.name == fromDb,
+      orElse: () => MessageRole.user,
+    );
   }
 
   @override
@@ -94,7 +102,11 @@ class StringListConverter extends TypeConverter<List<String>, String> {
       // Handle potential old data that was stored as a single string or comma-separated.
       if (fromDb.startsWith('[') && fromDb.endsWith(']')) {
         final content = fromDb.substring(1, fromDb.length - 1);
-        return content.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        return content
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
       }
       return [fromDb];
     }
@@ -106,6 +118,7 @@ class StringListConverter extends TypeConverter<List<String>, String> {
     return json.encode(value);
   }
 }
+
 // For generic Map<String, dynamic> to handle legacy columns gracefully
 class JsonMapConverter extends TypeConverter<Map<String, dynamic>?, String?> {
   const JsonMapConverter();
@@ -133,14 +146,18 @@ class JsonMapConverter extends TypeConverter<Map<String, dynamic>?, String?> {
 }
 
 // For OpenAIReasoningEffort enum
-class OpenAIReasoningEffortConverter extends TypeConverter<OpenAIReasoningEffort?, String?> {
+class OpenAIReasoningEffortConverter
+    extends TypeConverter<OpenAIReasoningEffort?, String?> {
   const OpenAIReasoningEffortConverter();
 
   @override
   OpenAIReasoningEffort? fromSql(String? fromDb) {
     if (fromDb == null) return null;
     // Safely find the enum by name, defaulting to 'none' if not found.
-    return OpenAIReasoningEffort.values.firstWhere((e) => e.name == fromDb, orElse: () => OpenAIReasoningEffort.auto);
+    return OpenAIReasoningEffort.values.firstWhere(
+      (e) => e.name == fromDb,
+      orElse: () => OpenAIReasoningEffort.auto,
+    );
   }
 
   @override
@@ -150,13 +167,17 @@ class OpenAIReasoningEffortConverter extends TypeConverter<OpenAIReasoningEffort
 }
 
 // For HelpMeReplyTriggerMode enum
-class HelpMeReplyTriggerModeConverter extends TypeConverter<HelpMeReplyTriggerMode?, String?> {
+class HelpMeReplyTriggerModeConverter
+    extends TypeConverter<HelpMeReplyTriggerMode?, String?> {
   const HelpMeReplyTriggerModeConverter();
 
   @override
   HelpMeReplyTriggerMode? fromSql(String? fromDb) {
     if (fromDb == null) return null;
-    return HelpMeReplyTriggerMode.values.firstWhere((e) => e.name == fromDb, orElse: () => HelpMeReplyTriggerMode.manual);
+    return HelpMeReplyTriggerMode.values.firstWhere(
+      (e) => e.name == fromDb,
+      orElse: () => HelpMeReplyTriggerMode.manual,
+    );
   }
 
   @override

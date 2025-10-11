@@ -29,12 +29,17 @@ class ChatPageLogic {
   bool _isPushing = false;
   bool get isPushing => _isPushing;
 
-  void handleMessageTap(Message message, MessagePart part, List<Message> allMessages) {
+  void handleMessageTap(
+    Message message,
+    MessagePart part,
+    List<Message> allMessages,
+  ) {
     if (ref.read(chatStateNotifierProvider(chatId)).isLoading) return;
 
     final isUser = message.role == MessageRole.user;
     final messageIndex = allMessages.indexWhere((m) => m.id == message.id);
-    final isLastUserMessage = isUser &&
+    final isLastUserMessage =
+        isUser &&
         messageIndex >= 0 &&
         (messageIndex == allMessages.length - 1 ||
             (messageIndex == allMessages.length - 2 &&
@@ -45,10 +50,12 @@ class ChatPageLogic {
       builder: (modalContext) {
         List<Widget> options = [];
         final isTextOnly = part.type == MessagePartType.text;
-        
+
         options.add(
           ListTile(
-            leading: Icon(isTextOnly ? Icons.edit_outlined : Icons.upload_file_outlined),
+            leading: Icon(
+              isTextOnly ? Icons.edit_outlined : Icons.upload_file_outlined,
+            ),
             title: Text(isTextOnly ? '编辑消息' : '重新上传'),
             onTap: () {
               Navigator.pop(modalContext);
@@ -58,7 +65,7 @@ class ChatPageLogic {
                 replaceAttachment(message, part);
               }
             },
-          )
+          ),
         );
 
         if (!isTextOnly) {
@@ -70,7 +77,7 @@ class ChatPageLogic {
                 Navigator.pop(modalContext);
                 saveAttachment(message);
               },
-            )
+            ),
           );
         }
 
@@ -82,7 +89,7 @@ class ChatPageLogic {
               Navigator.pop(modalContext);
               forkChatFromMessage(message, allMessages);
             },
-          )
+          ),
         );
 
         if (isLastUserMessage) {
@@ -94,7 +101,7 @@ class ChatPageLogic {
                 Navigator.pop(modalContext);
                 regenerateResponse(message);
               },
-            )
+            ),
           );
         }
 
@@ -106,32 +113,39 @@ class ChatPageLogic {
             title: Text('删除消息', style: TextStyle(color: Colors.red.shade400)),
             onTap: () async {
               Navigator.pop(modalContext);
-              final confirm = await showDialog<bool>(
+              final confirm =
+                  await showDialog<bool>(
                     context: context,
                     builder: (dialogContext) => AlertDialog(
                       title: const Text('确认删除'),
                       content: const Text('确定删除这条消息吗？'),
                       actions: [
                         TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(false),
-                            child: const Text('取消')),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          child: const Text('取消'),
+                        ),
                         TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(true),
-                            child: Text('删除', style: TextStyle(color: Colors.red.shade700))),
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(true),
+                          child: Text(
+                            '删除',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
                       ],
                     ),
-                  ) ?? false;
+                  ) ??
+                  false;
 
               if (confirm) {
                 deleteMessagePart(message, part);
               }
             },
-          )
+          ),
         );
 
-        return SafeArea(
-          child: Wrap(children: options),
-        );
+        return SafeArea(child: Wrap(children: options));
       },
     );
   }
@@ -149,10 +163,11 @@ class ChatPageLogic {
       xmlController.text = useSecondaryXml
           ? (message.secondaryXmlContent ?? '')
           : (message.originalXmlContent ?? '');
-    } else { // For user messages, always use originalXmlContent
+    } else {
+      // For user messages, always use originalXmlContent
       xmlController.text = message.originalXmlContent ?? '';
     }
-    
+
     showDialog(
       context: context,
       builder: (dialogContext) {
@@ -164,7 +179,7 @@ class ChatPageLogic {
             children: [
               Text(
                 message.role == MessageRole.model ? '模型消息:' : '用户消息:',
-                style: const TextStyle(fontWeight: FontWeight.bold)
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -194,7 +209,10 @@ class ChatPageLogic {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('XML内容:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'XML内容:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: xmlController,
@@ -236,19 +254,29 @@ class ChatPageLogic {
             ),
             TextButton(
               onPressed: () async {
-                final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+                final notifier = ref.read(
+                  chatStateNotifierProvider(chatId).notifier,
+                );
                 final newModelsTextFromInput = textController.text;
                 final newXmlFromInput = xmlController.text;
 
-                if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
-                  notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
+                if (newModelsTextFromInput.trim().isEmpty &&
+                    !message.parts.any((p) => p.type != MessagePartType.text)) {
+                  notifier.showTopMessage(
+                    '消息内容不能为空',
+                    backgroundColor: Colors.orange,
+                  );
                   return;
                 }
 
-                final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                final newParts = List<MessagePart>.from(
+                  message.parts.where((p) => p.type != MessagePartType.text),
+                );
                 newParts.add(MessagePart.text(newModelsTextFromInput));
 
-                final finalCombinedXml = newXmlFromInput.isNotEmpty ? newXmlFromInput : null;
+                final finalCombinedXml = newXmlFromInput.isNotEmpty
+                    ? newXmlFromInput
+                    : null;
 
                 Message updatedMessage;
                 if (message.role == MessageRole.model && useSecondaryXml) {
@@ -264,24 +292,36 @@ class ChatPageLogic {
                     clearOriginalXml: finalCombinedXml == null,
                   );
                 }
-                
+
                 Navigator.pop(dialogContext);
-                await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+                await notifier.editMessage(
+                  updatedMessage.id,
+                  updatedMessage: updatedMessage,
+                );
               },
               child: const Text('保存'),
             ),
             TextButton(
               onPressed: () async {
-                final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+                final notifier = ref.read(
+                  chatStateNotifierProvider(chatId).notifier,
+                );
                 final newModelsTextFromInput = textController.text;
                 final newXmlFromInput = xmlController.text;
 
-                if (newModelsTextFromInput.trim().isEmpty && !message.parts.any((p) => p.type != MessagePartType.text)) {
-                  notifier.showTopMessage('消息内容不能为空', backgroundColor: Colors.orange);
+                if (newModelsTextFromInput.trim().isEmpty &&
+                    !message.parts.any((p) => p.type != MessagePartType.text)) {
+                  notifier.showTopMessage(
+                    '消息内容不能为空',
+                    backgroundColor: Colors.orange,
+                  );
                   return;
                 }
 
-                final processResult = XmlProcessor.processPostStream(newModelsTextFromInput, chat.xmlRules);
+                final processResult = XmlProcessor.processPostStream(
+                  newModelsTextFromInput,
+                  chat.xmlRules,
+                );
                 final finalCleanModelsText = processResult.modelsText;
                 final newlyExtractedXml = processResult.extractedXml;
 
@@ -292,9 +332,13 @@ class ChatPageLogic {
                 if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) {
                   xmlParts.add(newlyExtractedXml);
                 }
-                final finalCombinedXml = xmlParts.isEmpty ? null : xmlParts.join('\n');
+                final finalCombinedXml = xmlParts.isEmpty
+                    ? null
+                    : xmlParts.join('\n');
 
-                final newParts = List<MessagePart>.from(message.parts.where((p) => p.type != MessagePartType.text));
+                final newParts = List<MessagePart>.from(
+                  message.parts.where((p) => p.type != MessagePartType.text),
+                );
                 newParts.add(MessagePart.text(finalCleanModelsText));
 
                 Message updatedMessage;
@@ -311,9 +355,12 @@ class ChatPageLogic {
                     clearOriginalXml: finalCombinedXml == null,
                   );
                 }
-                
+
                 Navigator.pop(dialogContext);
-                await notifier.editMessage(updatedMessage.id, updatedMessage: updatedMessage);
+                await notifier.editMessage(
+                  updatedMessage.id,
+                  updatedMessage: updatedMessage,
+                );
               },
               child: const Text('保存并应用'),
             ),
@@ -323,7 +370,10 @@ class ChatPageLogic {
     );
   }
 
-  Future<void> replaceAttachment(Message messageToReplace, MessagePart partToReplace) async {
+  Future<void> replaceAttachment(
+    Message messageToReplace,
+    MessagePart partToReplace,
+  ) async {
     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -334,8 +384,9 @@ class ChatPageLogic {
 
       if (result != null && result.files.single.bytes != null) {
         final file = result.files.single;
-        final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
-        
+        final mimeType =
+            lookupMimeType(file.name) ?? 'application/octet-stream';
+
         MessagePart newPart;
         if (mimeType.startsWith('image/')) {
           newPart = MessagePart.image(
@@ -350,7 +401,7 @@ class ChatPageLogic {
             fileName: file.name,
           );
         }
-        
+
         final newParts = messageToReplace.parts.map((p) {
           // Using reference equality, assuming the tapped part is passed correctly.
           return p == partToReplace ? newPart : p;
@@ -359,15 +410,16 @@ class ChatPageLogic {
         await notifier.editMessage(messageToReplace.id, newParts: newParts);
       }
     } catch (e) {
-      debugPrint("Error replacing attachment: $e");
       notifier.showTopMessage('替换附件时出错: $e', backgroundColor: Colors.red);
     }
   }
 
   Future<void> saveAttachment(Message message) async {
     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
-    
-    final attachments = message.parts.where((p) => p.base64Data != null && p.type != MessagePartType.text).toList();
+
+    final attachments = message.parts
+        .where((p) => p.base64Data != null && p.type != MessagePartType.text)
+        .toList();
 
     if (attachments.isEmpty) {
       notifier.showTopMessage('没有可保存的附件', backgroundColor: Colors.orange);
@@ -420,14 +472,23 @@ class ChatPageLogic {
     String fileName;
     if (partToSave.type == MessagePartType.generatedImage) {
       final promptText = partToSave.text ?? 'generated_image';
-      final sanitizedPrompt = promptText.replaceAll(RegExp(r'[\s\\/:*?"<>|]+'), '_');
-      final snippet = sanitizedPrompt.substring(0, sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length);
+      final sanitizedPrompt = promptText.replaceAll(
+        RegExp(r'[\s\\/:*?"<>|]+'),
+        '_',
+      );
+      final snippet = sanitizedPrompt.substring(
+        0,
+        sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length,
+      );
       fileName = '${snippet}_${DateTime.now().millisecondsSinceEpoch}.png';
     } else if (partToSave.fileName != null) {
       fileName = partToSave.fileName!;
     } else {
-      final extension = extensionFromMime(partToSave.mimeType ?? 'application/octet-stream');
-      fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final extension = extensionFromMime(
+        partToSave.mimeType ?? 'application/octet-stream',
+      );
+      fileName =
+          'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
     }
 
     try {
@@ -439,28 +500,35 @@ class ChatPageLogic {
       );
 
       if (savePath != null) {
-        notifier.showTopMessage('文件已保存到: $savePath', backgroundColor: Colors.green);
+        notifier.showTopMessage(
+          '文件已保存到: $savePath',
+          backgroundColor: Colors.green,
+        );
       } else {
         notifier.showTopMessage('已取消保存', backgroundColor: Colors.orange);
       }
     } catch (e) {
-      debugPrint("Error saving attachment: $e");
       notifier.showTopMessage('保存文件时出错: $e', backgroundColor: Colors.red);
     }
   }
 
-  Future<void> forkChatFromMessage(Message message, List<Message> allMessages) async {
+  Future<void> forkChatFromMessage(
+    Message message,
+    List<Message> allMessages,
+  ) async {
     // This is now a fire-and-forget call.
     // The notifier is responsible for the entire operation, including updating the active chat state.
     // This decouples the UI logic completely from the business logic.
-    debugPrint("[ChatPageLogic] Triggering fork from message ${message.id} in chat $chatId.");
-    await ref.read(chatStateNotifierProvider(chatId).notifier).duplicateChat(upToMessageId: message.id);
-    debugPrint("[ChatPageLogic] Fork operation triggered.");
+    await ref
+        .read(chatStateNotifierProvider(chatId).notifier)
+        .duplicateChat(upToMessageId: message.id);
   }
 
   Future<void> regenerateResponse(Message userMessage) async {
     // No context/ref access after await, so no mounted check needed here.
-    await ref.read(chatStateNotifierProvider(chatId).notifier).regenerateResponse(userMessage);
+    await ref
+        .read(chatStateNotifierProvider(chatId).notifier)
+        .regenerateResponse(userMessage);
   }
 
   Future<void> deleteMessagePart(Message message, MessagePart part) async {
@@ -480,7 +548,7 @@ class ChatPageLogic {
 
     _isPushing = true;
     onStateChange();
-    
+
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     scaffoldMessenger.showSnackBar(
       const SnackBar(
@@ -492,7 +560,7 @@ class ChatPageLogic {
     final success = await SyncService.instance.forcePushChanges();
 
     if (!context.mounted) return;
-    
+
     scaffoldMessenger.showSnackBar(
       SnackBar(
         content: Text(success ? '上传成功' : '上传失败或无需上传'),
@@ -518,11 +586,14 @@ class ChatPageLogic {
         final chatToUpdate = chat.copyWith(coverImageBase64: newBase64String);
         await ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
         if (!context.mounted) return;
-        ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已更新', backgroundColor: Colors.green);
+        ref
+            .read(chatStateNotifierProvider(chatId).notifier)
+            .showTopMessage('封面图片已更新', backgroundColor: Colors.green);
       }
     } catch (e) {
-      debugPrint("设置封面图片 (Base64) 时出错: $e");
-      ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('图片处理失败: $e', backgroundColor: Colors.red);
+      ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('图片处理失败: $e', backgroundColor: Colors.red);
     }
   }
 
@@ -538,9 +609,11 @@ class ChatPageLogic {
 
     try {
       final Uint8List imageBytes = base64Decode(base64String);
-      final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
+      final sanitizedTitle =
+          chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ??
+          'chat_$chatId';
       final suggestedFileName = 'cover_$sanitizedTitle.jpg';
-      
+
       final String? savePath = await FilePicker.platform.saveFile(
         dialogTitle: '请选择封面保存位置',
         fileName: suggestedFileName,
@@ -550,12 +623,14 @@ class ChatPageLogic {
       if (!context.mounted) return;
 
       if (savePath != null) {
-        notifier.showTopMessage('封面已保存到: $savePath', backgroundColor: Colors.green);
+        notifier.showTopMessage(
+          '封面已保存到: $savePath',
+          backgroundColor: Colors.green,
+        );
       } else {
         notifier.showTopMessage('已取消保存', backgroundColor: Colors.orange);
       }
     } catch (e) {
-      debugPrint("导出封面时出错: $e");
       notifier.showTopMessage('导出封面失败: $e', backgroundColor: Colors.red);
     }
   }
@@ -566,17 +641,22 @@ class ChatPageLogic {
       final updatedChat = chatToUpdate.copyWith(coverImageBase64: null);
       await ref.read(chatRepositoryProvider).saveChat(updatedChat);
       if (!context.mounted) return;
-      ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);
+      ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('封面图片已移除', backgroundColor: Colors.green);
     }
   }
 
-  List<Widget> _buildInsertMessageOptions(BuildContext modalContext, int messageIndex) {
+  List<Widget> _buildInsertMessageOptions(
+    BuildContext modalContext,
+    int messageIndex,
+  ) {
     final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
 
     Future<void> insertAndEdit(int index, MessageRole role) async {
       // Close the bottom sheet first.
       Navigator.pop(modalContext);
-      
+
       final newId = await notifier.insertMessage(index, role);
       if (newId == null || !context.mounted) return;
 
@@ -585,11 +665,18 @@ class ChatPageLogic {
 
       // Find the newly created message from the updated list.
       final messages = ref.read(chatMessagesProvider(chatId)).value ?? [];
-      final newMessage = messages.firstWhere((m) => m.id == newId, orElse: () {
-        debugPrint("Could not find newly inserted message with id $newId");
-        // Return a dummy message with a non-positive ID to indicate "not found".
-        return Message(id: -1, chatId: chatId, role: MessageRole.user, parts: []);
-      });
+      final newMessage = messages.firstWhere(
+        (m) => m.id == newId,
+        orElse: () {
+          // Return a dummy message with a non-positive ID to indicate "not found".
+          return Message(
+            id: -1,
+            chatId: chatId,
+            role: MessageRole.user,
+            parts: [],
+          );
+        },
+      );
 
       if (newMessage.id > 0) {
         showEditMessageDialog(newMessage);
@@ -630,10 +717,12 @@ class ChatPageLogic {
     await Future.delayed(const Duration(milliseconds: 100));
 
     final updatedMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
-    final newMessage = updatedMessages.firstWhere((m) => m.id == newId, orElse: () {
-      debugPrint("Could not find newly inserted message with id $newId at the end");
-      return Message(id: -1, chatId: chatId, role: role, parts: []);
-    });
+    final newMessage = updatedMessages.firstWhere(
+      (m) => m.id == newId,
+      orElse: () {
+        return Message(id: -1, chatId: chatId, role: role, parts: []);
+      },
+    );
 
     if (newMessage.id > 0) {
       showEditMessageDialog(newMessage);

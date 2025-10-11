@@ -17,16 +17,10 @@ import '../repository_providers.dart';
 class ChatPageState {
   final bool isPushing;
 
-  const ChatPageState({
-    this.isPushing = false,
-  });
+  const ChatPageState({this.isPushing = false});
 
-  ChatPageState copyWith({
-    bool? isPushing,
-  }) {
-    return ChatPageState(
-      isPushing: isPushing ?? this.isPushing,
-    );
+  ChatPageState copyWith({bool? isPushing}) {
+    return ChatPageState(isPushing: isPushing ?? this.isPushing);
   }
 }
 
@@ -60,11 +54,14 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
       if (chat != null) {
         final chatToUpdate = chat.copyWith(coverImageBase64: newBase64String);
         await _ref.read(chatRepositoryProvider).saveChat(chatToUpdate);
-        _ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已更新', backgroundColor: Colors.green);
+        _ref
+            .read(chatStateNotifierProvider(chatId).notifier)
+            .showTopMessage('封面图片已更新', backgroundColor: Colors.green);
       }
     } catch (e) {
-      debugPrint("设置封面图片 (Base64) 时出错: $e");
-      _ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('图片处理失败: $e', backgroundColor: Colors.red);
+      _ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('图片处理失败: $e', backgroundColor: Colors.red);
     }
   }
 
@@ -73,15 +70,19 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     final String? base64String = chat?.coverImageBase64;
 
     if (base64String == null || base64String.isEmpty) {
-      _ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('没有可导出的图片', backgroundColor: Colors.orange);
+      _ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('没有可导出的图片', backgroundColor: Colors.orange);
       return null;
     }
 
     try {
       final Uint8List imageBytes = base64Decode(base64String);
-      final sanitizedTitle = chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ?? 'chat_$chatId';
+      final sanitizedTitle =
+          chat?.title?.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_') ??
+          'chat_$chatId';
       final suggestedFileName = 'cover_$sanitizedTitle.jpg';
-      
+
       final String? savePath = await FilePicker.platform.saveFile(
         dialogTitle: '请选择封面保存位置',
         fileName: suggestedFileName,
@@ -89,8 +90,9 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
       );
       return savePath;
     } catch (e) {
-      debugPrint("导出封面时出错: $e");
-      _ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('导出封面失败: $e', backgroundColor: Colors.red);
+      _ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('导出封面失败: $e', backgroundColor: Colors.red);
       return null;
     }
   }
@@ -100,10 +102,12 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     if (chatToUpdate != null) {
       final updatedChat = chatToUpdate.copyWith(coverImageBase64: null);
       await _ref.read(chatRepositoryProvider).saveChat(updatedChat);
-      _ref.read(chatStateNotifierProvider(chatId).notifier).showTopMessage('封面图片已移除', backgroundColor: Colors.green);
+      _ref
+          .read(chatStateNotifierProvider(chatId).notifier)
+          .showTopMessage('封面图片已移除', backgroundColor: Colors.green);
     }
   }
-  
+
   Future<Message?> addMessageAtEnd(MessageRole role) async {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
     final messages = _ref.read(chatMessagesProvider(chatId)).value ?? [];
@@ -114,22 +118,28 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     await Future.delayed(const Duration(milliseconds: 50));
 
     final updatedMessages = _ref.read(chatMessagesProvider(chatId)).value ?? [];
-    final newMessage = updatedMessages.firstWhere((m) => m.id == newId, orElse: () {
-      debugPrint("Could not find newly inserted message with id $newId at the end");
-      return Message(id: -1, chatId: chatId, role: role, parts: []);
-    });
+    final newMessage = updatedMessages.firstWhere(
+      (m) => m.id == newId,
+      orElse: () {
+        return Message(id: -1, chatId: chatId, role: role, parts: []);
+      },
+    );
 
     return newMessage.id > 0 ? newMessage : null;
   }
 
   // --- Methods to be called from UI callbacks ---
-  
+
   Future<void> regenerateResponse(Message userMessage) async {
-    await _ref.read(chatStateNotifierProvider(chatId).notifier).regenerateResponse(userMessage);
+    await _ref
+        .read(chatStateNotifierProvider(chatId).notifier)
+        .regenerateResponse(userMessage);
   }
 
   Future<void> forkChatFromMessage(Message message) async {
-    await _ref.read(chatStateNotifierProvider(chatId).notifier).duplicateChat(upToMessageId: message.id);
+    await _ref
+        .read(chatStateNotifierProvider(chatId).notifier)
+        .duplicateChat(upToMessageId: message.id);
   }
 
   Future<void> deleteMessagePart(Message message, MessagePart part) async {
@@ -142,7 +152,11 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     }
   }
 
-  Future<void> insertMessageAndEdit({required int index, required MessageRole role, required Function(Message) onMessageCreated}) async {
+  Future<void> insertMessageAndEdit({
+    required int index,
+    required MessageRole role,
+    required Function(Message) onMessageCreated,
+  }) async {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
     final newId = await notifier.insertMessage(index, role);
     if (newId == null) return;
@@ -150,16 +164,22 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     await Future.delayed(const Duration(milliseconds: 50));
 
     final updatedMessages = _ref.read(chatMessagesProvider(chatId)).value ?? [];
-    final newMessage = updatedMessages.firstWhere((m) => m.id == newId, orElse: () {
-      return Message(id: -1, chatId: chatId, role: role, parts: []);
-    });
+    final newMessage = updatedMessages.firstWhere(
+      (m) => m.id == newId,
+      orElse: () {
+        return Message(id: -1, chatId: chatId, role: role, parts: []);
+      },
+    );
 
     if (newMessage.id > 0) {
       onMessageCreated(newMessage);
     }
   }
 
-  Future<void> replaceAttachment(Message messageToReplace, MessagePart partToReplace) async {
+  Future<void> replaceAttachment(
+    Message messageToReplace,
+    MessagePart partToReplace,
+  ) async {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -170,8 +190,9 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
 
       if (result != null && result.files.single.bytes != null) {
         final file = result.files.single;
-        final mimeType = lookupMimeType(file.name) ?? 'application/octet-stream';
-        
+        final mimeType =
+            lookupMimeType(file.name) ?? 'application/octet-stream';
+
         MessagePart newPart;
         if (mimeType.startsWith('image/')) {
           newPart = MessagePart.image(
@@ -186,7 +207,7 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
             fileName: file.name,
           );
         }
-        
+
         final newParts = messageToReplace.parts.map((p) {
           return p == partToReplace ? newPart : p;
         }).toList();
@@ -194,15 +215,19 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
         await notifier.editMessage(messageToReplace.id, newParts: newParts);
       }
     } catch (e) {
-      debugPrint("Error replacing attachment: $e");
       notifier.showTopMessage('替换附件时出错: $e', backgroundColor: Colors.red);
     }
   }
 
-  Future<String?> saveAttachment(Message message, {MessagePart? specificPart}) async {
+  Future<String?> saveAttachment(
+    Message message, {
+    MessagePart? specificPart,
+  }) async {
     final notifier = _ref.read(chatStateNotifierProvider(chatId).notifier);
-    
-    final attachments = message.parts.where((p) => p.base64Data != null && p.type != MessagePartType.text).toList();
+
+    final attachments = message.parts
+        .where((p) => p.base64Data != null && p.type != MessagePartType.text)
+        .toList();
 
     if (attachments.isEmpty) {
       notifier.showTopMessage('没有可保存的附件', backgroundColor: Colors.orange);
@@ -217,7 +242,10 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
       // For now, we'll just save the first one if not specified.
       // A better implementation would involve the UI asking which one to save.
       partToSave = attachments.first;
-       notifier.showTopMessage('消息包含多个附件，已默认保存第一个。', backgroundColor: Colors.blue);
+      notifier.showTopMessage(
+        '消息包含多个附件，已默认保存第一个。',
+        backgroundColor: Colors.blue,
+      );
     } else {
       partToSave = attachments.first;
     }
@@ -230,14 +258,23 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
     String fileName;
     if (partToSave.type == MessagePartType.generatedImage) {
       final promptText = partToSave.text ?? 'generated_image';
-      final sanitizedPrompt = promptText.replaceAll(RegExp(r'[\s\\/:*?"<>|]+'), '_');
-      final snippet = sanitizedPrompt.substring(0, sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length);
+      final sanitizedPrompt = promptText.replaceAll(
+        RegExp(r'[\s\\/:*?"<>|]+'),
+        '_',
+      );
+      final snippet = sanitizedPrompt.substring(
+        0,
+        sanitizedPrompt.length > 50 ? 50 : sanitizedPrompt.length,
+      );
       fileName = '${snippet}_${DateTime.now().millisecondsSinceEpoch}.png';
     } else if (partToSave.fileName != null) {
       fileName = partToSave.fileName!;
     } else {
-      final extension = extensionFromMime(partToSave.mimeType ?? 'application/octet-stream');
-      fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final extension = extensionFromMime(
+        partToSave.mimeType ?? 'application/octet-stream',
+      );
+      fileName =
+          'attachment_${DateTime.now().millisecondsSinceEpoch}.$extension';
     }
 
     try {
@@ -249,7 +286,6 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
       );
       return savePath;
     } catch (e) {
-      debugPrint("Error saving attachment: $e");
       notifier.showTopMessage('保存文件时出错: $e', backgroundColor: Colors.red);
       return null;
     }
@@ -257,7 +293,7 @@ class ChatPageNotifier extends StateNotifier<ChatPageState> {
 }
 
 // 3. Create the Provider
-final chatPageNotifierProvider =
-    StateNotifierProvider.autoDispose.family<ChatPageNotifier, ChatPageState, int>((ref, chatId) {
-  return ChatPageNotifier(chatId, ref);
-});
+final chatPageNotifierProvider = StateNotifierProvider.autoDispose
+    .family<ChatPageNotifier, ChatPageState, int>((ref, chatId) {
+      return ChatPageNotifier(chatId, ref);
+    });

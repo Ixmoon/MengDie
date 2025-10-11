@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import '../llm_models.dart';
 import '../../../domain/models/api_config.dart';
 
@@ -65,7 +64,9 @@ class LlmRequestHandler {
       if (response.statusCode == 200 && response.data != null) {
         return responseParser(response.data as Map<String, dynamic>);
       } else {
-        return LlmResponse.error("API Error: ${response.statusCode} ${response.statusMessage}");
+        return LlmResponse.error(
+          "API Error: ${response.statusCode} ${response.statusMessage}",
+        );
       }
     } on DioException catch (e) {
       return _handleDioErrorResponse(e, payload.apiConfig.apiType.name);
@@ -75,7 +76,10 @@ class LlmRequestHandler {
   }
 
   /// Executes a request that returns a stream of responses.
-  Stream<LlmStreamChunk> executeStream(HttpRequestPayload payload, {required String Function(Map<String, dynamic> json) textExtractor}) async* {
+  Stream<LlmStreamChunk> executeStream(
+    HttpRequestPayload payload, {
+    required String Function(Map<String, dynamic> json) textExtractor,
+  }) async* {
     try {
       final response = await _dio.post<ResponseBody>(
         payload.buildUrl(),
@@ -86,7 +90,10 @@ class LlmRequestHandler {
           headers: payload.buildHeaders(),
         ),
       );
-      yield* _processSseStream(stream: response.data!.stream, textExtractor: textExtractor);
+      yield* _processSseStream(
+        stream: response.data!.stream,
+        textExtractor: textExtractor,
+      );
     } on DioException catch (e) {
       yield* _handleStreamDioError(e, payload.apiConfig.apiType.name);
     } catch (e) {
@@ -112,32 +119,45 @@ class LlmRequestHandler {
         // Generic parsing logic would go here, likely needing a parser function
         // passed from the service, similar to the stream's textExtractor.
         final data = responseData['data'] as List?;
-         if (data != null && data.isNotEmpty) {
-           final images = data
-               .map((item) => item['b64_json'] as String?)
-               .whereType<String>()
-               .toList();
-           return LlmImageResponse(base64Images: images, isSuccess: true);
-         }
-         final candidates = responseData['candidates'] as List?;
-         if (candidates != null && candidates.isNotEmpty) {
-           final images = candidates
-               .expand((candidate) => (candidate['content']?['parts'] as List? ?? []))
-               .map((part) => part['inlineData']?['data'] as String?)
-               .whereType<String>()
-               .toList();
-            final text = candidates
-               .expand((candidate) => (candidate['content']?['parts'] as List? ?? []))
-               .map((part) => part['text'] as String?)
-               .whereType<String>().join();
-           if (images.isNotEmpty || text.isNotEmpty) {
-              return LlmImageResponse(base64Images: images, text: text, isSuccess: true);
-           }
-         }
+        if (data != null && data.isNotEmpty) {
+          final images = data
+              .map((item) => item['b64_json'] as String?)
+              .whereType<String>()
+              .toList();
+          return LlmImageResponse(base64Images: images, isSuccess: true);
+        }
+        final candidates = responseData['candidates'] as List?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final images = candidates
+              .expand(
+                (candidate) => (candidate['content']?['parts'] as List? ?? []),
+              )
+              .map((part) => part['inlineData']?['data'] as String?)
+              .whereType<String>()
+              .toList();
+          final text = candidates
+              .expand(
+                (candidate) => (candidate['content']?['parts'] as List? ?? []),
+              )
+              .map((part) => part['text'] as String?)
+              .whereType<String>()
+              .join();
+          if (images.isNotEmpty || text.isNotEmpty) {
+            return LlmImageResponse(
+              base64Images: images,
+              text: text,
+              isSuccess: true,
+            );
+          }
+        }
 
-        return const LlmImageResponse.error("Image response format unexpected.");
+        return const LlmImageResponse.error(
+          "Image response format unexpected.",
+        );
       } else {
-         return LlmImageResponse.error("API Error: ${response.statusCode} ${response.statusMessage}");
+        return LlmImageResponse.error(
+          "API Error: ${response.statusCode} ${response.statusMessage}",
+        );
       }
     } on DioException catch (e) {
       return _handleDioErrorImage(e, payload.apiConfig.apiType.name);
@@ -145,7 +165,7 @@ class LlmRequestHandler {
       return _handleGeneralErrorImage(e, payload.apiConfig.apiType.name);
     }
   }
-  
+
   /// Executes a request to count tokens and returns the integer count.
   Future<int> executeCountTokens(HttpRequestPayload payload) async {
     try {
@@ -161,25 +181,25 @@ class LlmRequestHandler {
         if (totalTokens != null) {
           return totalTokens;
         } else {
-          throw Exception("Count tokens response format unexpected: 'totalTokens' field is missing or not an int.");
+          throw Exception(
+            "Count tokens response format unexpected: 'totalTokens' field is missing or not an int.",
+          );
         }
       } else {
         throw DioException(
           requestOptions: response.requestOptions,
           response: response,
-          message: "API Error: ${response.statusCode} ${response.statusMessage}",
+          message:
+              "API Error: ${response.statusCode} ${response.statusMessage}",
         );
       }
-    } on DioException catch (e) {
+    } on DioException {
       // Re-throw to be handled by the caller, which will then fallback to local calculation.
-      debugPrint(_formatDioError(e, payload.apiConfig.apiType.name));
       rethrow;
     } catch (e) {
-      debugPrint("Unexpected error in executeCountTokens: $e");
       rethrow;
     }
   }
-
 
   // --- 3. Private Helper Methods (Moved from LlmHelper) ---
 
@@ -192,7 +212,8 @@ class LlmRequestHandler {
 
     try {
       await for (var chunk in stream) {
-        final rawChunk = carryOverBuffer + utf8.decode(chunk, allowMalformed: true);
+        final rawChunk =
+            carryOverBuffer + utf8.decode(chunk, allowMalformed: true);
         var lines = rawChunk.split('\n');
 
         if (!rawChunk.endsWith('\n')) {
@@ -222,7 +243,10 @@ class LlmRequestHandler {
                 // Check for finish reason before extracting text
                 final finishReason = _extractFinishReason(jsonMap);
                 if (finishReason != null) {
-                  yield LlmStreamChunk.finishReason(finishReason, accumulatedResponse);
+                  yield LlmStreamChunk.finishReason(
+                    finishReason,
+                    accumulatedResponse,
+                  );
                   return; // Stop processing the stream
                 }
 
@@ -236,18 +260,18 @@ class LlmRequestHandler {
                     isFinished: false,
                   );
                 }
-              } catch (e) {
-                debugPrint("Error parsing SSE chunk JSON: $jsonData. Error: $e");
-              }
+              } catch (_) {}
             }
           }
         }
       }
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
-        debugPrint("Stream request cancelled by user.");
         // Yield a final error chunk and then stop the stream.
-        yield LlmStreamChunk.error("Request cancelled by user.", accumulatedResponse);
+        yield LlmStreamChunk.error(
+          "Request cancelled by user.",
+          accumulatedResponse,
+        );
         return;
       }
       // For other Dio errors, rethrow to be handled by the caller in executeStream.
@@ -289,11 +313,13 @@ class LlmRequestHandler {
       return const LlmResponse.error("Request cancelled by user.");
     }
     final errorMessage = _formatDioError(e, serviceName);
-    debugPrint(errorMessage);
     return LlmResponse.error(errorMessage);
   }
 
-  Stream<LlmStreamChunk> _handleStreamDioError(DioException e, String serviceName) async* {
+  Stream<LlmStreamChunk> _handleStreamDioError(
+    DioException e,
+    String serviceName,
+  ) async* {
     if (CancelToken.isCancel(e)) {
       yield LlmStreamChunk.error("Request cancelled by user.", '');
       return;
@@ -309,23 +335,26 @@ class LlmRequestHandler {
         bodyString = await utf8.decodeStream(data.stream);
         // Now that we have the string, try to parse it for a detailed message.
         final errorJson = jsonDecode(bodyString);
-        details = errorJson['error']?['message'] ??
-                  errorJson['message'] ??
-                  errorJson.toString();
+        details =
+            errorJson['error']?['message'] ??
+            errorJson['message'] ??
+            errorJson.toString();
       } catch (_) {
         // If decoding or parsing fails, use the raw string (if not too long).
-        details = bodyString.length > 200 ? "${bodyString.substring(0, 200)}..." : bodyString;
+        details = bodyString.length > 200
+            ? "${bodyString.substring(0, 200)}..."
+            : bodyString;
       }
     } else if (data != null) {
       // Fallback for non-streamed error bodies
       details = data.toString();
     }
 
-    final errorMsg = "$serviceName API DioException: ${e.message}\n"
-                     "Status: ${e.response?.statusCode} - ${e.response?.statusMessage}\n"
-                     "Details: $details";
-    
-    debugPrint(errorMsg);
+    final errorMsg =
+        "$serviceName API DioException: ${e.message}\n"
+        "Status: ${e.response?.statusCode} - ${e.response?.statusMessage}\n"
+        "Details: $details";
+
     yield LlmStreamChunk.error(errorMsg, '');
   }
 
@@ -334,62 +363,59 @@ class LlmRequestHandler {
       return const LlmImageResponse.error("Request cancelled by user.");
     }
     final errorMessage = _formatDioError(e, serviceName);
-    debugPrint(errorMessage);
     return LlmImageResponse.error(errorMessage);
   }
 
   String _formatDioError(DioException e, String serviceName) {
-      String errorMsg = "$serviceName API DioException: ${e.message}";
-      if (e.response != null) {
-          errorMsg += "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
-          
-          // vvv --- 从这里开始，替换旧的 Body 处理逻辑 --- vvv
-          if (e.response?.data != null) {
-              try {
-                  final data = e.response!.data;
-                  Map<String, dynamic> errorJson;
+    String errorMsg = "$serviceName API DioException: ${e.message}";
+    if (e.response != null) {
+      errorMsg +=
+          "\nStatus: ${e.response?.statusCode} - ${e.response?.statusMessage}";
 
-                  if (data is Map<String, dynamic>) {
-                      errorJson = data;
-                  } else if (data is String && data.isNotEmpty) {
-                      errorJson = jsonDecode(data);
-                  } else {
-                      throw const FormatException("响应体不是一个有效的 JSON 对象或字符串");
-                  }
-                  
-                  // 尝试从常见的错误结构中提取核心消息
-                  final message = errorJson['error']?['message'] ??  // OpenAI & Gemini v1
-                                  errorJson['message'] ??             // Generic & Gemini v1.5
-                                  errorJson.toString();               // 如果找不到，则回退
-                  errorMsg += "\nDetails: $message";
+      // vvv --- 从这里开始，替换旧的 Body 处理逻辑 --- vvv
+      if (e.response?.data != null) {
+        try {
+          final data = e.response!.data;
+          Map<String, dynamic> errorJson;
 
-              } catch (_) {
-                  // 如果解析 JSON 失败，则回退到打印整个 Body
-                  errorMsg += "\nBody: ${e.response!.data.toString()}";
-              }
+          if (data is Map<String, dynamic>) {
+            errorJson = data;
+          } else if (data is String && data.isNotEmpty) {
+            errorJson = jsonDecode(data);
           } else {
-              errorMsg += "\nBody: (No response body)";
+            throw const FormatException("响应体不是一个有效的 JSON 对象或字符串");
           }
-          // ^^^ --- 到这里结束替换 --- ^^^
+
+          // 尝试从常见的错误结构中提取核心消息
+          final message =
+              errorJson['error']?['message'] ?? // OpenAI & Gemini v1
+              errorJson['message'] ?? // Generic & Gemini v1.5
+              errorJson.toString(); // 如果找不到，则回退
+          errorMsg += "\nDetails: $message";
+        } catch (_) {
+          // 如果解析 JSON 失败，则回退到打印整个 Body
+          errorMsg += "\nBody: ${e.response!.data.toString()}";
+        }
+      } else {
+        errorMsg += "\nBody: (No response body)";
       }
-      return errorMsg;
+      // ^^^ --- 到这里结束替换 --- ^^^
+    }
+    return errorMsg;
   }
 
   LlmResponse _handleGeneralErrorResponse(Object e, String serviceName) {
     final errorMsg = "Unexpected $serviceName Error: $e";
-    debugPrint(errorMsg);
     return LlmResponse.error(errorMsg);
   }
 
   LlmStreamChunk _handleGeneralErrorStream(Object e, String serviceName) {
     final errorMsg = "Unexpected $serviceName Error: $e";
-    debugPrint(errorMsg);
     return LlmStreamChunk.error(errorMsg, '');
   }
 
   LlmImageResponse _handleGeneralErrorImage(Object e, String serviceName) {
     final errorMsg = "Unexpected $serviceName Error: $e";
-    debugPrint(errorMsg);
     return LlmImageResponse.error(errorMsg);
   }
 }

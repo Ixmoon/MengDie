@@ -39,7 +39,6 @@ import 'chat_screen.dart'; // 导入聊天屏幕
 // - **`ChatListBody`**: 独立的主体内容组件，负责渲染列表、网格、加载、错误和空状态。
 // - **`ChatListItem` / `ChatGridItem`**: 独立的列表/网格项组件。
 
-
 // --- 聊天列表屏幕 ---
 // 使用 ConsumerStatefulWidget 以便访问 Ref 并管理本地状态（如视图模式、多选）。
 class ChatListScreen extends ConsumerStatefulWidget {
@@ -123,19 +122,22 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   }
 
   // --- 多选删除确认对话框 ---
-   Future<void> _showMultiDeleteConfirmationDialog() async {
-     if (_selectedItemIds.isEmpty) return; // 没有选中项则不显示
- 
-     // 在调用异步方法前检查 mounted
-     if (!context.mounted) return;
- 
-     final confirm = await showDialog<bool>(
-       context: context,
-       builder: (ctx) => AlertDialog(
+  Future<void> _showMultiDeleteConfirmationDialog() async {
+    if (_selectedItemIds.isEmpty) return; // 没有选中项则不显示
+
+    // 在调用异步方法前检查 mounted
+    if (!context.mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
         title: Text('确认删除 (${_selectedItemIds.length})'),
         content: const Text('确定删除选中的项目吗？此操作无法撤销。'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text('删除', style: TextStyle(color: Colors.red.shade700)),
@@ -144,32 +146,39 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       ),
     );
 
-        if (confirm == true) {
-          // 异步操作前再次检查 mounted
-          if (!mounted) return; // 增加额外的 mounted 检查
-          final scaffoldMessenger = ScaffoldMessenger.of(context);
-          try {
-            final repo = ref.read(chatRepositoryProvider);
-            final deletedCount = await repo.deleteChats(_selectedItemIds.toList());
-            // 异步操作后，再次检查 State 是否挂载
-            if (mounted) { // 使用 State 的 mounted 属性
-              scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                SnackBar(content: Text('已删除 $deletedCount 个项目'), duration: const Duration(seconds: 2)),
-              );
-              // 退出多选模式
-              _toggleMultiSelectMode(enable: false);
-            }
-          } catch (e) {
-            // 异步操作后，再次检查 State 是否挂载
-            if (mounted) { // 使用 State 的 mounted 属性
-              scaffoldMessenger.showSnackBar( // 使用捕获的 scaffoldMessenger
-                SnackBar(content: Text('删除失败: $e'), backgroundColor: Colors.red),
-              );
-            }
-          }
+    if (confirm == true) {
+      // 异步操作前再次检查 mounted
+      if (!mounted) return; // 增加额外的 mounted 检查
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      try {
+        final repo = ref.read(chatRepositoryProvider);
+        final deletedCount = await repo.deleteChats(_selectedItemIds.toList());
+        // 异步操作后，再次检查 State 是否挂载
+        if (mounted) {
+          // 使用 State 的 mounted 属性
+          scaffoldMessenger.showSnackBar(
+            // 使用捕获的 scaffoldMessenger
+            SnackBar(
+              content: Text('已删除 $deletedCount 个项目'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          // 退出多选模式
+          _toggleMultiSelectMode(enable: false);
         }
+      } catch (e) {
+        // 异步操作后，再次检查 State 是否挂载
+        if (mounted) {
+          // 使用 State 的 mounted 属性
+          scaffoldMessenger.showSnackBar(
+            // 使用捕获的 scaffoldMessenger
+            SnackBar(content: Text('删除失败: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
-  
+
   // --- 新增：多选操作方法 ---
   void _selectAll(List<Chat> allItems) {
     setState(() {
@@ -195,29 +204,43 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   Future<void> _exportSelected() async {
     if (_selectedItemIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有选择任何项目'), duration: Duration(seconds: 2)),
+        const SnackBar(
+          content: Text('没有选择任何项目'),
+          duration: Duration(seconds: 2),
+        ),
       );
       return;
     }
 
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     scaffoldMessenger.showSnackBar(
-      SnackBar(content: Text('正在打包 ${_selectedItemIds.length} 个项目...'), duration: const Duration(days: 1)),
+      SnackBar(
+        content: Text('正在打包 ${_selectedItemIds.length} 个项目...'),
+        duration: const Duration(days: 1),
+      ),
     );
 
     try {
       final service = ref.read(chatExportImportServiceProvider);
-      final savePath = await service.exportChatsToZip(_selectedItemIds.toList());
-      
+      final savePath = await service.exportChatsToZip(
+        _selectedItemIds.toList(),
+      );
+
       if (mounted) {
         scaffoldMessenger.hideCurrentSnackBar();
         if (savePath != null) {
           scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text('已成功导出到: $savePath'), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text('已成功导出到: $savePath'),
+              backgroundColor: Colors.green,
+            ),
           );
         } else {
-           scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('导出操作已取消'), duration: Duration(seconds: 2)),
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text('导出操作已取消'),
+              duration: Duration(seconds: 2),
+            ),
           );
         }
         _toggleMultiSelectMode(enable: false);
@@ -237,15 +260,14 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final key = child.key;
 
     // 安全检查：仅当拖动的项目有整数类型的ValueKey，并且处于多选模式，并且该项目被选中时，才应用堆叠动画
-    if (_isMultiSelectMode && key is ValueKey<int> && _selectedItemIds.contains(key.value)) {
+    if (_isMultiSelectMode &&
+        key is ValueKey<int> &&
+        _selectedItemIds.contains(key.value)) {
       final selectedCount = _selectedItemIds.length;
 
       // 创建一个基础的卡片包裹被拖动的项，使其具有阴影和边界
       // 这是实现堆叠视觉效果的关键
-      final Widget proxyItem = Card(
-        elevation: 4.0,
-        child: child,
-      );
+      final Widget proxyItem = Card(elevation: 4.0, child: child);
 
       // 使用 AnimatedBuilder 来根据拖动动画的进程构建UI
       return AnimatedBuilder(
@@ -274,7 +296,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         },
       );
     }
-    
+
     // 对于其他情况（如单选模式、拖动未选中项、或拖动的是没有ValueKey<int>的控件如“上移”按钮），返回默认代理
     // 使用 Material 和 elevation 可以确保拖动项浮动在其他列表项之上
     return Material(
@@ -298,9 +320,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
       // 安全检查
       if (dataOldIndex < 0 || dataOldIndex >= _localChats!.length) return;
-      
+
       final draggedItemId = _localChats![dataOldIndex].id;
-      final isMultiDrag = _isMultiSelectMode && _selectedItemIds.contains(draggedItemId);
+      final isMultiDrag =
+          _isMultiSelectMode && _selectedItemIds.contains(draggedItemId);
 
       final List<Chat> itemsToMove = isMultiDrag
           ? _localChats!.where((c) => _selectedItemIds.contains(c.id)).toList()
@@ -311,12 +334,22 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         await _handleMoveToParent(itemsToMove);
         return;
       }
-      
-      final potentialTargetIndex = (newIndex > oldIndex) ? newIndex - 1 : newIndex;
-      final dataTargetIndex = inFolder ? potentialTargetIndex - 1 : potentialTargetIndex;
+
+      final potentialTargetIndex = (newIndex > oldIndex)
+          ? newIndex - 1
+          : newIndex;
+      final dataTargetIndex = inFolder
+          ? potentialTargetIndex - 1
+          : potentialTargetIndex;
       if (dataTargetIndex >= 0 && dataTargetIndex < _localChats!.length) {
         final targetItem = _localChats![dataTargetIndex];
-        final validItemsToMove = itemsToMove.where((item) => item.id != targetItem.id && item.parentFolderId != targetItem.id).toList();
+        final validItemsToMove = itemsToMove
+            .where(
+              (item) =>
+                  item.id != targetItem.id &&
+                  item.parentFolderId != targetItem.id,
+            )
+            .toList();
         if (targetItem.isFolder && validItemsToMove.isNotEmpty) {
           await _handleMoveIntoFolder(validItemsToMove, targetItem);
           return;
@@ -327,21 +360,31 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       final reorderedChats = List<Chat>.from(_localChats!);
       if (isMultiDrag) {
         // 多选排序
-        reorderedChats.removeWhere((c) => itemsToMove.map((i) => i.id).contains(c.id));
-        
+        reorderedChats.removeWhere(
+          (c) => itemsToMove.map((i) => i.id).contains(c.id),
+        );
+
         final int stableItemsBeforeNewIndex = _localChats!
             .take(newIndex)
             .where((c) => !_selectedItemIds.contains(c.id))
             .length;
-        
-        final insertionIndex = inFolder ? stableItemsBeforeNewIndex - 1 : stableItemsBeforeNewIndex;
-        reorderedChats.insertAll(insertionIndex.clamp(0, reorderedChats.length), itemsToMove);
+
+        final insertionIndex = inFolder
+            ? stableItemsBeforeNewIndex - 1
+            : stableItemsBeforeNewIndex;
+        reorderedChats.insertAll(
+          insertionIndex.clamp(0, reorderedChats.length),
+          itemsToMove,
+        );
       } else {
         // 单选排序
         final movedItem = reorderedChats.removeAt(dataOldIndex);
         final insertionIndex = (newIndex > oldIndex) ? newIndex - 1 : newIndex;
         final dataNewIndex = inFolder ? insertionIndex - 1 : insertionIndex;
-        reorderedChats.insert(dataNewIndex.clamp(0, reorderedChats.length), movedItem);
+        reorderedChats.insert(
+          dataNewIndex.clamp(0, reorderedChats.length),
+          movedItem,
+        );
       }
 
       // 应用乐观更新并更新数据库
@@ -358,11 +401,17 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       if (chatsToUpdate.isNotEmpty) {
         await ref.read(chatRepositoryProvider).updateChatOrder(chatsToUpdate);
       }
-
     } catch (e) {
-      ref.invalidate(chatListProvider((parentFolderId: ref.read(currentFolderIdProvider), mode: widget.mode)));
+      ref.invalidate(
+        chatListProvider((
+          parentFolderId: ref.read(currentFolderIdProvider),
+          mode: widget.mode,
+        )),
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       if (mounted) {
@@ -384,54 +433,68 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     if (parentFolder == null) return;
 
     // 乐观更新
-    _localChats!.removeWhere((c) => itemsToMove.map((i) => i.id).contains(c.id));
+    _localChats!.removeWhere(
+      (c) => itemsToMove.map((i) => i.id).contains(c.id),
+    );
     setState(() {});
 
-    await ref.read(chatRepositoryProvider).moveChatsToNewParent(
-      chatIds: itemsToMove.map((c) => c.id).toList(),
-      newParentFolderId: parentFolder.parentFolderId,
-    );
+    await ref
+        .read(chatRepositoryProvider)
+        .moveChatsToNewParent(
+          chatIds: itemsToMove.map((c) => c.id).toList(),
+          newParentFolderId: parentFolder.parentFolderId,
+        );
 
     if (mounted) {
       _selectedItemIds.clear();
       _isMultiSelectMode = false;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("${itemsToMove.length} 个项目已移至上一级"),
-        backgroundColor: Colors.green,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${itemsToMove.length} 个项目已移至上一级"),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 
   /// 处理“拖入文件夹”的逻辑
-  Future<void> _handleMoveIntoFolder(List<Chat> itemsToMove, Chat targetFolder) async {
+  Future<void> _handleMoveIntoFolder(
+    List<Chat> itemsToMove,
+    Chat targetFolder,
+  ) async {
     // 乐观更新
-    _localChats!.removeWhere((c) => itemsToMove.map((i) => i.id).contains(c.id));
-    setState(() {});
-    
-    await ref.read(chatRepositoryProvider).moveChatsToNewParent(
-      chatIds: itemsToMove.map((c) => c.id).toList(),
-      newParentFolderId: targetFolder.id,
+    _localChats!.removeWhere(
+      (c) => itemsToMove.map((i) => i.id).contains(c.id),
     );
+    setState(() {});
+
+    await ref
+        .read(chatRepositoryProvider)
+        .moveChatsToNewParent(
+          chatIds: itemsToMove.map((c) => c.id).toList(),
+          newParentFolderId: targetFolder.id,
+        );
 
     if (mounted) {
       _selectedItemIds.clear();
       _isMultiSelectMode = false;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("${itemsToMove.length} 个项目已移至 '${targetFolder.title}'"),
-        backgroundColor: Colors.green,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${itemsToMove.length} 个项目已移至 '${targetFolder.title}'"),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
     final currentFolderId = ref.watch(currentFolderIdProvider);
-    final chatListProviderInstance = chatListProvider((parentFolderId: currentFolderId, mode: widget.mode));
-    
+    final chatListProviderInstance = chatListProvider((
+      parentFolderId: currentFolderId,
+      mode: widget.mode,
+    ));
+
     // 优化：仅在文件夹内（currentFolderId != null）时才订阅 currentChatProvider。
     final currentFolderAsync = currentFolderId != null
         ? ref.watch(currentChatProvider(currentFolderId))
@@ -505,20 +568,23 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
             final List<Chat> displayChats;
             if (_isMultiSelectMode && _draggedItemId != null) {
-              displayChats = _localChats!.where((chat) => !_selectedItemIds.contains(chat.id)).toList();
+              displayChats = _localChats!
+                  .where((chat) => !_selectedItemIds.contains(chat.id))
+                  .toList();
             } else {
               displayChats = _localChats ?? [];
             }
-            
+
             if (chatIndex >= 0 && chatIndex < displayChats.length) {
-               final draggedChat = displayChats[chatIndex];
-               if (_isMultiSelectMode && _selectedItemIds.contains(draggedChat.id)) {
-                 if (_draggedItemId != draggedChat.id) {
-                   setState(() {
-                     _draggedItemId = draggedChat.id;
-                   });
-                 }
-               }
+              final draggedChat = displayChats[chatIndex];
+              if (_isMultiSelectMode &&
+                  _selectedItemIds.contains(draggedChat.id)) {
+                if (_draggedItemId != draggedChat.id) {
+                  setState(() {
+                    _draggedItemId = draggedChat.id;
+                  });
+                }
+              }
             }
           });
           return child;
@@ -535,7 +601,8 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         currentFolderAsync: currentFolderAsync,
         selectedItemCount: _selectedItemIds.length,
         allItems: _localChats ?? [],
-        onToggleMultiSelectMode: () => _toggleMultiSelectMode(enable: !_isMultiSelectMode),
+        onToggleMultiSelectMode: () =>
+            _toggleMultiSelectMode(enable: !_isMultiSelectMode),
         onToggleViewMode: () {
           setState(() {
             _isGridView = !_isGridView;
@@ -546,21 +613,38 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           final scaffoldMessenger = ScaffoldMessenger.of(context);
           final importType = widget.mode == ChatListMode.normal ? '聊天' : '模板';
           scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text('正在导入$importType...'), duration: const Duration(seconds: 10)),
+            SnackBar(
+              content: Text('正在导入$importType...'),
+              duration: const Duration(seconds: 10),
+            ),
           );
           try {
-            final count = await ref.read(chatExportImportServiceProvider).importChats(parentFolderId: currentFolderId);
+            final count = await ref
+                .read(chatExportImportServiceProvider)
+                .importChats(parentFolderId: currentFolderId);
             if (!context.mounted) return;
             scaffoldMessenger.hideCurrentSnackBar();
             if (count > 0) {
-              scaffoldMessenger.showSnackBar(SnackBar(content: Text('成功导入 $count 个$importType！')));
+              scaffoldMessenger.showSnackBar(
+                SnackBar(content: Text('成功导入 $count 个$importType！')),
+              );
             } else {
-              scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入已取消或没有导入任何项目'), duration: Duration(seconds: 2)));
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Text('导入已取消或没有导入任何项目'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
             }
           } catch (e) {
             if (!context.mounted) return;
             scaffoldMessenger.hideCurrentSnackBar();
-            scaffoldMessenger.showSnackBar(SnackBar(content: Text('导入$importType失败: $e'), backgroundColor: Colors.red));
+            scaffoldMessenger.showSnackBar(
+              SnackBar(
+                content: Text('导入$importType失败: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
           }
         },
         onSelectAll: () => _selectAll(_localChats ?? []),
@@ -571,12 +655,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       ),
       body: body,
       floatingActionButton: widget.mode == ChatListMode.templateSelection
-        ? null
-        : FloatingActionButton(
-            onPressed: () => _showCreateMenu(context, ref, currentFolderId),
-            tooltip: '新建',
-            child: const Icon(Icons.add),
-          ),
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showCreateMenu(context, ref, currentFolderId),
+              tooltip: '新建',
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
@@ -596,7 +680,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       //    - 单选：通过 oldIndex 从 *完整列表* 中安全地找到被拖动的项
       final List<Chat> itemsToMove;
       if (isMultiDrag) {
-        itemsToMove = _localChats!.where((c) => _selectedItemIds.contains(c.id)).toList();
+        itemsToMove = _localChats!
+            .where((c) => _selectedItemIds.contains(c.id))
+            .toList();
       } else {
         final dataOldIndex = inFolder ? oldIndex - 1 : oldIndex;
         if (dataOldIndex < 0 || dataOldIndex >= _localChats!.length) return;
@@ -605,8 +691,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
       // 2. 处理特殊目标（移至上一级 或 拖入文件夹）
       //    - 目标项的识别基于 *稳定项列表*
-      final stableChats = _localChats!.where((c) => !itemsToMove.map((i) => i.id).contains(c.id)).toList();
-      
+      final stableChats = _localChats!
+          .where((c) => !itemsToMove.map((i) => i.id).contains(c.id))
+          .toList();
+
       // 2a. 移至上一级
       if (inFolder && newIndex == 0) {
         await _handleMoveToParent(itemsToMove);
@@ -614,42 +702,63 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       }
 
       // 2b. 拖入文件夹
-      final potentialTargetIndex = (newIndex > oldIndex) ? newIndex - 1 : newIndex;
-      final stableTargetIndex = inFolder ? potentialTargetIndex - 1 : potentialTargetIndex;
-      
+      final potentialTargetIndex = (newIndex > oldIndex)
+          ? newIndex - 1
+          : newIndex;
+      final stableTargetIndex = inFolder
+          ? potentialTargetIndex - 1
+          : potentialTargetIndex;
+
       if (stableTargetIndex >= 0 && stableTargetIndex < stableChats.length) {
         final Chat targetItem = stableChats[stableTargetIndex];
-        final validItemsToMove = itemsToMove.where((item) => item.id != targetItem.id && item.parentFolderId != targetItem.id).toList();
+        final validItemsToMove = itemsToMove
+            .where(
+              (item) =>
+                  item.id != targetItem.id &&
+                  item.parentFolderId != targetItem.id,
+            )
+            .toList();
 
         if (targetItem.isFolder && validItemsToMove.isNotEmpty) {
           await _handleMoveIntoFolder(validItemsToMove, targetItem);
           return;
         }
       }
-      
+
       // 3. 处理常规排序
       final reorderedChats = List<Chat>.from(_localChats!);
-      reorderedChats.removeWhere((c) => itemsToMove.map((i) => i.id).contains(c.id));
+      reorderedChats.removeWhere(
+        (c) => itemsToMove.map((i) => i.id).contains(c.id),
+      );
 
       // 找到目标位置项在 reorderedChats 中的正确索引
       int insertionIndex;
       if (stableTargetIndex >= 0 && stableTargetIndex < stableChats.length) {
         final targetItem = stableChats[stableTargetIndex];
-        insertionIndex = reorderedChats.indexWhere((c) => c.id == targetItem.id);
-        
+        insertionIndex = reorderedChats.indexWhere(
+          (c) => c.id == targetItem.id,
+        );
+
         // 当向下拖动且目标在拖动项原位置之后时，插入点需要+1
-        final originalDraggedItemIndex = _localChats!.indexWhere((c) => c.id == itemsToMove.first.id);
-        final originalTargetItemIndex = _localChats!.indexWhere((c) => c.id == targetItem.id);
+        final originalDraggedItemIndex = _localChats!.indexWhere(
+          (c) => c.id == itemsToMove.first.id,
+        );
+        final originalTargetItemIndex = _localChats!.indexWhere(
+          (c) => c.id == targetItem.id,
+        );
         if (originalTargetItemIndex > originalDraggedItemIndex) {
-           insertionIndex++;
+          insertionIndex++;
         }
       } else {
         // 拖到末尾
         insertionIndex = reorderedChats.length;
       }
 
-      reorderedChats.insertAll(insertionIndex.clamp(0, reorderedChats.length), itemsToMove);
-      
+      reorderedChats.insertAll(
+        insertionIndex.clamp(0, reorderedChats.length),
+        itemsToMove,
+      );
+
       // 4. 应用乐观更新并更新数据库
       _localChats = reorderedChats;
       setState(() {});
@@ -664,11 +773,17 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       if (chatsToUpdate.isNotEmpty) {
         await ref.read(chatRepositoryProvider).updateChatOrder(chatsToUpdate);
       }
-
     } catch (e) {
-      ref.invalidate(chatListProvider((parentFolderId: ref.read(currentFolderIdProvider), mode: widget.mode)));
+      ref.invalidate(
+        chatListProvider((
+          parentFolderId: ref.read(currentFolderIdProvider),
+          mode: widget.mode,
+        )),
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: Colors.red),
+        );
       }
     } finally {
       if (mounted) {
@@ -708,11 +823,15 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             // 如果是模板，则从模板创建新聊天
             final repo = ref.read(chatRepositoryProvider);
             // 关键修复：将 fromFolderId 传递给创建方法
-            final newChatId = await repo.createChatFromTemplate(chat.id, parentFolderId: widget.fromFolderId);
+            final newChatId = await repo.createChatFromTemplate(
+              chat.id,
+              parentFolderId: widget.fromFolderId,
+            );
             if (context.mounted) {
               ref.read(activeChatIdProvider.notifier).state = newChatId;
               // 关键修复：创建后重置 currentFolderIdProvider，确保返回时回到正确的聊天列表层级
-              ref.read(currentFolderIdProvider.notifier).state = widget.fromFolderId;
+              ref.read(currentFolderIdProvider.notifier).state =
+                  widget.fromFolderId;
               if (!mounted) return;
               context.go('/chat'); // 直接进入新创建的聊天
             }
@@ -731,9 +850,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             if (!mounted) return;
             // 终极修复：使用标准的 Navigator.push 来确保可以正确返回，绕过 go_router 的固定返回逻辑
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => ChatScreen(
-                onBackButtonPressed: () => Navigator.of(context).pop(),
-              )),
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(
+                  onBackButtonPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
             );
           }
           break;
@@ -741,10 +862,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     }
   }
 
-
-
   // --- 显示创建菜单 (根据是否在文件夹内调整) ---
-  void _showCreateMenu(BuildContext context, WidgetRef ref, int? currentFolderId) {
+  void _showCreateMenu(
+    BuildContext context,
+    WidgetRef ref,
+    int? currentFolderId,
+  ) {
     // 根据模式显示不同的菜单项
     final isNormalMode = widget.mode == ChatListMode.normal;
     final isManageMode = widget.mode == ChatListMode.templateManagement;
@@ -762,7 +885,9 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   Navigator.pop(ctx);
                   // 关键修复：导航到模板选择时，带上当前文件夹ID作为来源
                   ref.read(currentFolderIdProvider.notifier).state = null;
-                  context.push('/list?mode=select&from_folder_id=$currentFolderId');
+                  context.push(
+                    '/list?mode=select&from_folder_id=$currentFolderId',
+                  );
                 },
               ),
             if (isNormalMode)
@@ -796,11 +921,18 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     // saveChat 现在会自动处理用户绑定
                     await repo.saveChat(newChat);
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('空白模板已创建')));
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('空白模板已创建')));
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建失败: $e'), backgroundColor: Colors.red));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('创建失败: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   }
                 },
@@ -822,7 +954,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   }
 
   // --- 显示创建文件夹对话框 (接收 parentFolderId) ---
-  Future<void> _showCreateFolderDialog(BuildContext context, WidgetRef ref, int? parentFolderId) async {
+  Future<void> _showCreateFolderDialog(
+    BuildContext context,
+    WidgetRef ref,
+    int? parentFolderId,
+  ) async {
     final folderNameController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -845,7 +981,10 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () {
               if (formKey.currentState!.validate()) {
@@ -862,7 +1001,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       try {
         final repo = ref.read(chatRepositoryProvider);
         final isTemplateMode = widget.mode == ChatListMode.templateManagement;
-        
+
         // 调用仓库中新增的、更清晰的方法来创建文件夹
         // addFolder (通过 saveChat) 现在会自动处理用户绑定
         await repo.addFolder(
@@ -872,11 +1011,18 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         );
 
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('文件夹 "$folderName" 已创建'), duration: const Duration(seconds: 1)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('文件夹 "$folderName" 已创建'),
+              duration: const Duration(seconds: 1),
+            ),
+          );
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('创建文件夹失败: $e'), backgroundColor: Colors.red));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('创建文件夹失败: $e'), backgroundColor: Colors.red),
+          );
         }
       }
     }

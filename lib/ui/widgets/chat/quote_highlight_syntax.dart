@@ -14,14 +14,6 @@ class QuoteHighlightSyntax extends md.InlineSyntax {
     final inner = match.group(2) ?? '';
     final closeQuote = match.group(3) ?? '';
 
-    // Debug: 打印匹配信息（只保留前 60 个字符预览）
-    try {
-      // final preview = inner.length > 60 ? '${inner.substring(0, 60)}...' : inner;
-      // debugPrint('[QuoteHighlightSyntax] matched open="$openQuote" close="$closeQuote" preview="$preview"');
-    } catch (e) {
-      // debugPrint('[QuoteHighlightSyntax] matched (preview failed): $e');
-    }
-
     // 创建自定义元素节点；将内部文本作为属性以便构建器可以读取并渲染。
     final element = md.Element.withTag('quote_highlight');
     element.attributes['open'] = openQuote;
@@ -46,7 +38,9 @@ class QuoteHighlightBuilder extends MarkdownElementBuilder {
 
     // 简单内联 Markdown 解析（支持 **bold** 和 *italic*）以保留常见格式，
     // 同时保证整体内容使用橙黄色前景色。
-    TextStyle baseStyle = (preferredStyle ?? const TextStyle()).copyWith(color: Colors.orange);
+    TextStyle baseStyle = (preferredStyle ?? const TextStyle()).copyWith(
+      color: Colors.orange,
+    );
 
     List<InlineSpan> parseInline(String s) {
       final List<InlineSpan> spans = [];
@@ -63,13 +57,27 @@ class QuoteHighlightBuilder extends MarkdownElementBuilder {
           int lastPos = 0;
           for (final im in italicRegex.allMatches(rest)) {
             if (im.start > lastPos) {
-              spans.add(TextSpan(text: rest.substring(lastPos, im.start), style: baseStyle));
+              spans.add(
+                TextSpan(
+                  text: rest.substring(lastPos, im.start),
+                  style: baseStyle,
+                ),
+              );
             }
-            spans.add(TextSpan(text: im.group(1), style: baseStyle.merge(const TextStyle(fontStyle: FontStyle.italic))));
+            spans.add(
+              TextSpan(
+                text: im.group(1),
+                style: baseStyle.merge(
+                  const TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ),
+            );
             lastPos = im.end;
           }
           if (lastPos < rest.length) {
-            spans.add(TextSpan(text: rest.substring(lastPos), style: baseStyle));
+            spans.add(
+              TextSpan(text: rest.substring(lastPos), style: baseStyle),
+            );
           }
           break;
         } else {
@@ -78,7 +86,14 @@ class QuoteHighlightBuilder extends MarkdownElementBuilder {
           if (start > idx) {
             spans.addAll(parseInline(s.substring(idx, start)));
           }
-          spans.add(TextSpan(text: m.group(1), style: baseStyle.merge(const TextStyle(fontWeight: FontWeight.bold))));
+          spans.add(
+            TextSpan(
+              text: m.group(1),
+              style: baseStyle.merge(
+                const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          );
           idx = end;
           if (idx >= s.length) break;
         }
@@ -88,14 +103,14 @@ class QuoteHighlightBuilder extends MarkdownElementBuilder {
 
     final parsedSpans = parseInline(content);
 
-  return RichText(
-    text: TextSpan(
-      children: [
-        TextSpan(text: open, style: preferredStyle),
-        ...parsedSpans,
-        TextSpan(text: close, style: preferredStyle),
-      ],
-    ),
-  );
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(text: open, style: preferredStyle),
+          ...parsedSpans,
+          TextSpan(text: close, style: preferredStyle),
+        ],
+      ),
+    );
   }
 }

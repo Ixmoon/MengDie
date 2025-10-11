@@ -15,7 +15,9 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
 
   Future<List<int>> _getChatIdsForCurrentUser() async {
     if (userId == 0) return [];
-    final user = await (db.select(db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
+    final user = await (db.select(
+      db.users,
+    )..where((u) => u.id.equals(userId))).getSingleOrNull();
     return user?.chatIds ?? [];
   }
 
@@ -25,13 +27,27 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     if (chatIds.isEmpty) return [];
 
     final query = db.selectOnly(db.chats)..where(db.chats.id.isIn(chatIds));
-    final rows = await (query..addColumns([db.chats.id, db.chats.createdAt, db.chats.updatedAt])).get();
-    
-    return rows.map((row) => SyncMeta(
-      id: row.read(db.chats.id)!,
-      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.chats.createdAt)!),
-      updatedAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.chats.updatedAt)!)
-    )).toList();
+    final rows =
+        await (query..addColumns([
+              db.chats.id,
+              db.chats.createdAt,
+              db.chats.updatedAt,
+            ]))
+            .get();
+
+    return rows
+        .map(
+          (row) => SyncMeta(
+            id: row.read(db.chats.id)!,
+            createdAt: const MicrosecondDateTimeConverter().fromSql(
+              row.read(db.chats.createdAt)!,
+            ),
+            updatedAt: const MicrosecondDateTimeConverter().fromSql(
+              row.read(db.chats.updatedAt)!,
+            ),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -40,28 +56,38 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     if (chatIds.isEmpty) return [];
 
     // Determine the final set of IDs to query remotely
-    final idsToQuery = localIds?.cast<int>().where((id) => chatIds.contains(id)).toList() ?? chatIds;
+    final idsToQuery =
+        localIds?.cast<int>().where((id) => chatIds.contains(id)).toList() ??
+        chatIds;
     if (idsToQuery.isEmpty) return [];
 
     final rows = await remoteConnection!.execute(
-      Sql.named('SELECT id, created_at, updated_at FROM chats WHERE id = ANY(@ids)'),
+      Sql.named(
+        'SELECT id, created_at, updated_at FROM chats WHERE id = ANY(@ids)',
+      ),
       parameters: {'ids': idsToQuery},
     );
 
-    return rows.map((row) => SyncMeta(
-      id: row[0] as int,
-      createdAt: row[1] as DateTime,
-      updatedAt: row[2] as DateTime
-    )).toList();
+    return rows
+        .map(
+          (row) => SyncMeta(
+            id: row[0] as int,
+            createdAt: row[1] as DateTime,
+            updatedAt: row[2] as DateTime,
+          ),
+        )
+        .toList();
   }
 
   @override
   Future<void> push(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final chatIds = ids.cast<int>();
-    final chatsToPush = await (db.select(db.chats)..where((t) => t.id.isIn(chatIds))).get();
+    final chatsToPush = await (db.select(
+      db.chats,
+    )..where((t) => t.id.isIn(chatIds))).get();
     if (chatsToPush.isEmpty) return;
-    
+
     await _batchPushChats(remoteConnection!, chatsToPush);
   }
 
@@ -69,51 +95,67 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   Future<void> pull(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final chatIds = ids.cast<int>();
-    
-    final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM chats WHERE id = ANY(@ids)'), parameters: {'ids': chatIds});
+
+    final rows = await remoteConnection!.execute(
+      Sql.named('SELECT * FROM chats WHERE id = ANY(@ids)'),
+      parameters: {'ids': chatIds},
+    );
     final chatsToPull = rows.map((r) {
-        final map = r.toColumnMap();
-        final now = DateTime.now();
-        final created = map['created_at'] ?? now;
-        final updated = map['updated_at'] ?? created;
-        return ChatData(
-          id: map['id'],
-          title: map['title'],
-          systemPrompt: map['system_prompt'],
-          createdAt: created,
-          updatedAt: updated,
-          coverImageBase64: null,
-          backgroundImagePath: map['background_image_path'],
-          orderIndex: map['order_index'],
-          isFolder: map['is_folder'],
-          parentFolderId: map['parent_folder_id'],
-          contextConfig: const ContextConfigConverter().fromSql(map['context_config']),
-          xmlRules: const XmlRuleListConverter().fromSql(map['xml_rules']),
-          apiConfigId: map['api_config_id'],
-          enablePreprocessing: map['enable_preprocessing'],
-          preprocessingPrompt: map['preprocessing_prompt'],
-          contextSummary: map['context_summary'],
-          lastSummarizedMessageId: map['last_summarized_message_id'],
-          preprocessingApiConfigId: map['preprocessing_api_config_id'],
-          enableSecondaryXml: map['enable_secondary_xml'],
-          secondaryXmlPrompt: map['secondary_xml_prompt'],
-          secondaryXmlApiConfigId: map['secondary_xml_api_config_id'],
-          continuePrompt: map['continue_prompt'],
-          enableHelpMeReply: map['enable_help_me_reply'],
-          helpMeReplyPrompt: map['help_me_reply_prompt'],
-          helpMeReplyApiConfigId: map['help_me_reply_api_config_id'],
-          helpMeReplyTriggerMode: map['help_me_reply_trigger_mode'] == null ? null : const HelpMeReplyTriggerModeConverter().fromSql(map['help_me_reply_trigger_mode']),
-        );
+      final map = r.toColumnMap();
+      final now = DateTime.now();
+      final created = map['created_at'] ?? now;
+      final updated = map['updated_at'] ?? created;
+      return ChatData(
+        id: map['id'],
+        title: map['title'],
+        systemPrompt: map['system_prompt'],
+        createdAt: created,
+        updatedAt: updated,
+        coverImageBase64: null,
+        backgroundImagePath: map['background_image_path'],
+        orderIndex: map['order_index'],
+        isFolder: map['is_folder'],
+        parentFolderId: map['parent_folder_id'],
+        contextConfig: const ContextConfigConverter().fromSql(
+          map['context_config'],
+        ),
+        xmlRules: const XmlRuleListConverter().fromSql(map['xml_rules']),
+        apiConfigId: map['api_config_id'],
+        enablePreprocessing: map['enable_preprocessing'],
+        preprocessingPrompt: map['preprocessing_prompt'],
+        contextSummary: map['context_summary'],
+        lastSummarizedMessageId: map['last_summarized_message_id'],
+        preprocessingApiConfigId: map['preprocessing_api_config_id'],
+        enableSecondaryXml: map['enable_secondary_xml'],
+        secondaryXmlPrompt: map['secondary_xml_prompt'],
+        secondaryXmlApiConfigId: map['secondary_xml_api_config_id'],
+        continuePrompt: map['continue_prompt'],
+        enableHelpMeReply: map['enable_help_me_reply'],
+        helpMeReplyPrompt: map['help_me_reply_prompt'],
+        helpMeReplyApiConfigId: map['help_me_reply_api_config_id'],
+        helpMeReplyTriggerMode: map['help_me_reply_trigger_mode'] == null
+            ? null
+            : const HelpMeReplyTriggerModeConverter().fromSql(
+                map['help_me_reply_trigger_mode'],
+              ),
+      );
     }).toList();
     if (chatsToPull.isEmpty) return;
 
     await db.batch((batch) {
-      batch.insertAll(db.chats, chatsToPull.map((c) => c.toCompanion(true)), mode: InsertMode.insertOrReplace);
+      batch.insertAll(
+        db.chats,
+        chatsToPull.map((c) => c.toCompanion(true)),
+        mode: InsertMode.insertOrReplace,
+      );
     });
   }
 
   @override
-  Future<Map<dynamic, dynamic>> resolveConflicts(List<SyncMeta> localMetas, List<SyncMeta> remoteMetas) async {
+  Future<Map<dynamic, dynamic>> resolveConflicts(
+    List<SyncMeta> localMetas,
+    List<SyncMeta> remoteMetas,
+  ) async {
     final localIdMap = {for (var meta in localMetas) meta.id: meta};
     final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
     final conflictingIds = <int>{};
@@ -148,31 +190,46 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    final chatIdsToDelete = keys.map((key) {
-      try {
-        return int.tryParse(key.substring(1, key.indexOf(','))) ?? -1;
-      } catch (e) {
-        return -1;
-      }
-    }).where((id) => id != -1).toList();
+    final chatIdsToDelete = keys
+        .map((key) {
+          try {
+            return int.tryParse(key.substring(1, key.indexOf(','))) ?? -1;
+          } catch (e) {
+            return -1;
+          }
+        })
+        .where((id) => id != -1)
+        .toList();
 
     if (chatIdsToDelete.isNotEmpty) {
-      await remoteConnection!.execute(Sql.named('DELETE FROM messages WHERE chat_id = ANY(@ids)'), parameters: {'ids': chatIdsToDelete});
-      await remoteConnection!.execute(Sql.named('DELETE FROM chats WHERE id = ANY(@ids)'), parameters: {'ids': chatIdsToDelete});
+      await remoteConnection!.execute(
+        Sql.named('DELETE FROM messages WHERE chat_id = ANY(@ids)'),
+        parameters: {'ids': chatIdsToDelete},
+      );
+      await remoteConnection!.execute(
+        Sql.named('DELETE FROM chats WHERE id = ANY(@ids)'),
+        parameters: {'ids': chatIdsToDelete},
+      );
     }
   }
 
   // ============== CONFLICT RESOLUTION HELPER (moved from SyncService) ==============
 
   Future<int?> _resolveChatConflict(int oldId, List<DriftUser> allUsers) async {
-    final chat = await (db.select(db.chats)..where((tbl) => tbl.id.equals(oldId))).getSingleOrNull();
+    final chat = await (db.select(
+      db.chats,
+    )..where((tbl) => tbl.id.equals(oldId))).getSingleOrNull();
     if (chat == null) {
       return null;
     }
 
-    final messages = await (db.select(db.messages)..where((tbl) => tbl.chatId.equals(oldId))).get();
-    
-    final newChatCompanion = chat.toCompanion(false).copyWith(id: const Value.absent());
+    final messages = await (db.select(
+      db.messages,
+    )..where((tbl) => tbl.chatId.equals(oldId))).get();
+
+    final newChatCompanion = chat
+        .toCompanion(false)
+        .copyWith(id: const Value.absent());
     final newChat = await db.into(db.chats).insertReturning(newChatCompanion);
     final newId = newChat.id;
 
@@ -182,17 +239,22 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
           .write(MessagesCompanion(chatId: Value(newId)));
     }
 
-    await (db.update(db.chats)..where((tbl) => tbl.parentFolderId.equals(oldId)))
+    await (db.update(db.chats)
+          ..where((tbl) => tbl.parentFolderId.equals(oldId)))
         .write(ChatsCompanion(parentFolderId: Value(newId)));
 
     // Optimization: Instead of querying the DB for each conflict, we now filter the pre-fetched user list in memory.
     // This significantly reduces DB load when many chat conflicts occur.
-    final affectedUsers = allUsers.where((user) => user.chatIds?.contains(oldId) ?? false).toList();
+    final affectedUsers = allUsers
+        .where((user) => user.chatIds?.contains(oldId) ?? false)
+        .toList();
 
     if (affectedUsers.isNotEmpty) {
       await db.batch((batch) {
         for (final user in affectedUsers) {
-          final newChatIds = user.chatIds!.map((id) => id == oldId ? newId : id).toList();
+          final newChatIds = user.chatIds!
+              .map((id) => id == oldId ? newId : id)
+              .toList();
           batch.update(
             db.users,
             UsersCompanion(chatIds: Value(newChatIds)),
@@ -208,9 +270,12 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
 
   // ============== PRIVATE DATA FETCHING & BATCH PUSH HELPERS (moved from SyncService) ==============
 
-  Future<void> _batchPushChats(Connection remoteConnection, List<ChatData> chats) async {
+  Future<void> _batchPushChats(
+    Connection remoteConnection,
+    List<ChatData> chats,
+  ) async {
     if (chats.isEmpty) return;
-    
+
     await remoteConnection.execute(
       Sql.named('''
         INSERT INTO chats (
@@ -262,31 +327,107 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
       '''),
       parameters: {
         'ids': TypedValue(Type.integerArray, chats.map((c) => c.id).toList()),
-        'titles': TypedValue(Type.textArray, chats.map((c) => c.title).toList()),
-        'system_prompts': TypedValue(Type.textArray, chats.map((c) => c.systemPrompt).toList()),
-        'created_ats': TypedValue(Type.timestampArray, chats.map((c) => c.createdAt).toList()),
-        'updated_ats': TypedValue(Type.timestampArray, chats.map((c) => c.updatedAt).toList()),
-        'order_indexes': TypedValue(Type.integerArray, chats.map((c) => c.orderIndex).toList()),
-        'is_folders': TypedValue(Type.booleanArray, chats.map((c) => c.isFolder).toList()),
-        'parent_folder_ids': TypedValue(Type.integerArray, chats.map((c) => c.parentFolderId).toList()),
-        'background_image_paths': TypedValue(Type.textArray, chats.map((c) => c.backgroundImagePath).toList()),
-        'context_configs': TypedValue(Type.textArray, chats.map((c) => const ContextConfigConverter().toSql(c.contextConfig)).toList()),
-        'xml_rules_list': TypedValue(Type.textArray, chats.map((c) => const XmlRuleListConverter().toSql(c.xmlRules)).toList()),
-        'api_config_ids': TypedValue(Type.textArray, chats.map((c) => c.apiConfigId).toList()),
-        'enable_preprocessings': TypedValue(Type.booleanArray, chats.map((c) => c.enablePreprocessing).toList()),
-        'preprocessing_prompts': TypedValue(Type.textArray, chats.map((c) => c.preprocessingPrompt).toList()),
-        'context_summaries': TypedValue(Type.textArray, chats.map((c) => c.contextSummary).toList()),
-        'last_summarized_message_ids': TypedValue(Type.integerArray, chats.map((c) => c.lastSummarizedMessageId).toList()),
-        'preprocessing_api_config_ids': TypedValue(Type.textArray, chats.map((c) => c.preprocessingApiConfigId).toList()),
-        'enable_secondary_xmls': TypedValue(Type.booleanArray, chats.map((c) => c.enableSecondaryXml).toList()),
-        'secondary_xml_prompts': TypedValue(Type.textArray, chats.map((c) => c.secondaryXmlPrompt).toList()),
-        'secondary_xml_api_config_ids': TypedValue(Type.textArray, chats.map((c) => c.secondaryXmlApiConfigId).toList()),
-        'continue_prompts': TypedValue(Type.textArray, chats.map((c) => c.continuePrompt).toList()),
-        'enable_help_me_replies': TypedValue(Type.booleanArray, chats.map((c) => c.enableHelpMeReply).toList()),
-        'help_me_reply_prompts': TypedValue(Type.textArray, chats.map((c) => c.helpMeReplyPrompt).toList()),
-        'help_me_reply_api_config_ids': TypedValue(Type.textArray, chats.map((c) => c.helpMeReplyApiConfigId).toList()),
-        'help_me_reply_trigger_modes': TypedValue(Type.textArray, chats.map((c) => c.helpMeReplyTriggerMode?.name).toList()),
-      }
+        'titles': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.title).toList(),
+        ),
+        'system_prompts': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.systemPrompt).toList(),
+        ),
+        'created_ats': TypedValue(
+          Type.timestampArray,
+          chats.map((c) => c.createdAt).toList(),
+        ),
+        'updated_ats': TypedValue(
+          Type.timestampArray,
+          chats.map((c) => c.updatedAt).toList(),
+        ),
+        'order_indexes': TypedValue(
+          Type.integerArray,
+          chats.map((c) => c.orderIndex).toList(),
+        ),
+        'is_folders': TypedValue(
+          Type.booleanArray,
+          chats.map((c) => c.isFolder).toList(),
+        ),
+        'parent_folder_ids': TypedValue(
+          Type.integerArray,
+          chats.map((c) => c.parentFolderId).toList(),
+        ),
+        'background_image_paths': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.backgroundImagePath).toList(),
+        ),
+        'context_configs': TypedValue(
+          Type.textArray,
+          chats
+              .map((c) => const ContextConfigConverter().toSql(c.contextConfig))
+              .toList(),
+        ),
+        'xml_rules_list': TypedValue(
+          Type.textArray,
+          chats
+              .map((c) => const XmlRuleListConverter().toSql(c.xmlRules))
+              .toList(),
+        ),
+        'api_config_ids': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.apiConfigId).toList(),
+        ),
+        'enable_preprocessings': TypedValue(
+          Type.booleanArray,
+          chats.map((c) => c.enablePreprocessing).toList(),
+        ),
+        'preprocessing_prompts': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.preprocessingPrompt).toList(),
+        ),
+        'context_summaries': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.contextSummary).toList(),
+        ),
+        'last_summarized_message_ids': TypedValue(
+          Type.integerArray,
+          chats.map((c) => c.lastSummarizedMessageId).toList(),
+        ),
+        'preprocessing_api_config_ids': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.preprocessingApiConfigId).toList(),
+        ),
+        'enable_secondary_xmls': TypedValue(
+          Type.booleanArray,
+          chats.map((c) => c.enableSecondaryXml).toList(),
+        ),
+        'secondary_xml_prompts': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.secondaryXmlPrompt).toList(),
+        ),
+        'secondary_xml_api_config_ids': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.secondaryXmlApiConfigId).toList(),
+        ),
+        'continue_prompts': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.continuePrompt).toList(),
+        ),
+        'enable_help_me_replies': TypedValue(
+          Type.booleanArray,
+          chats.map((c) => c.enableHelpMeReply).toList(),
+        ),
+        'help_me_reply_prompts': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.helpMeReplyPrompt).toList(),
+        ),
+        'help_me_reply_api_config_ids': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.helpMeReplyApiConfigId).toList(),
+        ),
+        'help_me_reply_trigger_modes': TypedValue(
+          Type.textArray,
+          chats.map((c) => c.helpMeReplyTriggerMode?.name).toList(),
+        ),
+      },
     );
   }
 }

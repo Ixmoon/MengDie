@@ -38,8 +38,9 @@ class AppCard extends StatelessWidget {
     // 确定最终的内边距和外边距
     final finalPadding = padding ?? const EdgeInsets.all(12.0);
     final finalMargin = margin ?? const EdgeInsets.symmetric(vertical: 8.0);
-    final finalShape = shape ?? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0));
-
+    final finalShape =
+        shape ??
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0));
 
     // 如果没有 onTap 回调，则只返回一个普通的 Card
     return Card(
@@ -48,17 +49,11 @@ class AppCard extends StatelessWidget {
       shape: finalShape,
       clipBehavior: Clip.antiAlias, // 确保 InkWell 的水波纹效果不会超出圆角边界
       child: onTap != null
-        ? InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: finalPadding,
-              child: child,
-            ),
-          )
-        : Padding(
-            padding: finalPadding,
-            child: child,
-          ),
+          ? InkWell(
+              onTap: onTap,
+              child: Padding(padding: finalPadding, child: child),
+            )
+          : Padding(padding: finalPadding, child: child),
     );
   }
 }

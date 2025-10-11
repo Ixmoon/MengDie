@@ -14,22 +14,23 @@ export 'chat_state/chat_screen_state.dart';
 /// This is the central provider that gives access to the ChatStateNotifier.
 /// It asynchronously initializes the notifier with SharedPreferences.
 final chatStateNotifierProvider =
-    StateNotifierProvider.family<ChatStateNotifier, ChatScreenState, int>(
-  (ref, chatId) {
-    // Asynchronously get the SharedPreferences instance.
-    final prefsFuture = SharedPreferences.getInstance();
-    
-    // Create the notifier instance.
-    final notifier = ChatStateNotifier(ref, chatId);
+    StateNotifierProvider.family<ChatStateNotifier, ChatScreenState, int>((
+      ref,
+      chatId,
+    ) {
+      // Asynchronously get the SharedPreferences instance.
+      final prefsFuture = SharedPreferences.getInstance();
 
-    // When the preferences are ready, initialize the notifier.
-    prefsFuture.then((prefs) {
-      // Check if the notifier is still mounted before calling init.
-      if (notifier.mounted) {
-        notifier.init(prefs);
-      }
+      // Create the notifier instance.
+      final notifier = ChatStateNotifier(ref, chatId);
+
+      // When the preferences are ready, initialize the notifier.
+      prefsFuture.then((prefs) {
+        // Check if the notifier is still mounted before calling init.
+        if (notifier.mounted) {
+          notifier.init(prefs);
+        }
+      });
+
+      return notifier;
     });
-    
-    return notifier;
-  },
-);

@@ -18,8 +18,10 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 // --- SharedPreferences Provider ---
 // 提供 SharedPreferences 实例的 FutureProvider。
 // 这个 Provider 会异步初始化 SharedPreferences，无需在 main() 中手动处理。
-final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) async {
-	return await SharedPreferences.getInstance();
+final sharedPreferencesProvider = FutureProvider<SharedPreferences>((
+  ref,
+) async {
+  return await SharedPreferences.getInstance();
 });
 
 /// A provider that exposes a list of providers that need to be initialized asynchronously

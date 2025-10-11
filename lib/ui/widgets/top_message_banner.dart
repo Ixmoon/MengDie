@@ -22,12 +22,17 @@ class TopMessageBanner extends StatelessWidget {
         duration: const Duration(milliseconds: 300),
         transitionBuilder: (Widget child, Animation<double> animation) {
           return SizeTransition(
-            sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+            sizeFactor: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOut,
+            ),
             axisAlignment: -1.0,
             child: FadeTransition(opacity: animation, child: child),
           );
         },
-        child: const SizedBox.shrink(key: ValueKey<String?>('empty')), // 给空状态一个 key
+        child: const SizedBox.shrink(
+          key: ValueKey<String?>('empty'),
+        ), // 给空状态一个 key
       );
     }
 
@@ -39,10 +44,7 @@ class TopMessageBanner extends StatelessWidget {
         return SizeTransition(
           sizeFactor: CurvedAnimation(parent: animation, curve: Curves.easeOut),
           axisAlignment: -1.0, // 从顶部展开
-          child: FadeTransition(
-            opacity: animation,
-            child: child,
-          ),
+          child: FadeTransition(opacity: animation, child: child),
         );
       },
       // key 很重要，确保 AnimatedSwitcher 知道何时内容发生变化
@@ -54,7 +56,11 @@ class TopMessageBanner extends StatelessWidget {
           // 移除底部 margin，让它紧贴 AppBar 或屏幕顶部
           // margin: const EdgeInsets.only(bottom: 8.0),
           decoration: BoxDecoration(
-            color: backgroundColor ?? Theme.of(context).colorScheme.secondaryContainer, // 使用主题颜色或传入的颜色
+            color:
+                backgroundColor ??
+                Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer, // 使用主题颜色或传入的颜色
             // 可以添加阴影或其他装饰
             // boxShadow: [
             //   BoxShadow(
@@ -70,7 +76,9 @@ class TopMessageBanner extends StatelessWidget {
                 child: Text(
                   message!,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSecondaryContainer, // 确保文本颜色与背景对比度良好
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSecondaryContainer, // 确保文本颜色与背景对比度良好
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -81,7 +89,8 @@ class TopMessageBanner extends StatelessWidget {
                   icon: const Icon(Icons.close, size: 20.0), // Added const
                   // color for Icon can be set via IconButton's style if needed or let Theme handle it
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(), // 移除默认的 IconButton padding
+                  constraints:
+                      const BoxConstraints(), // 移除默认的 IconButton padding
                   tooltip: '关闭消息',
                   onPressed: onDismiss,
                 ),

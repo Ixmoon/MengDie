@@ -59,7 +59,8 @@ class CodeEditorViewState extends State<CodeEditorView> {
     setState(() {
       _currentTheme = prefs.getString('editor_theme') ?? 'monokai-sublime';
       _showLineNumbers = prefs.getBool('editor_show_line_numbers') ?? true;
-      _showFoldingHandles = prefs.getBool('editor_show_folding_handles') ?? true;
+      _showFoldingHandles =
+          prefs.getBool('editor_show_folding_handles') ?? true;
       _isWordWrapEnabled = prefs.getBool('editor_word_wrap') ?? false;
     });
   }
@@ -194,7 +195,10 @@ class CodeEditorViewState extends State<CodeEditorView> {
       if (_searchResults.isNotEmpty) {
         _currentMatchIndex = 0;
         final match = _searchResults[0];
-        _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+        _controller.selection = TextSelection(
+          baseOffset: match.start,
+          extentOffset: match.end,
+        );
         _codeFieldFocusNode.requestFocus();
       }
     });
@@ -205,7 +209,10 @@ class CodeEditorViewState extends State<CodeEditorView> {
     setState(() {
       _currentMatchIndex = (_currentMatchIndex + 1) % _searchResults.length;
       final match = _searchResults[_currentMatchIndex];
-      _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+      _controller.selection = TextSelection(
+        baseOffset: match.start,
+        extentOffset: match.end,
+      );
       _codeFieldFocusNode.requestFocus();
     });
   }
@@ -213,9 +220,14 @@ class CodeEditorViewState extends State<CodeEditorView> {
   void _goToPreviousMatch() {
     if (_searchResults.isEmpty) return;
     setState(() {
-      _currentMatchIndex = (_currentMatchIndex - 1 + _searchResults.length) % _searchResults.length;
+      _currentMatchIndex =
+          (_currentMatchIndex - 1 + _searchResults.length) %
+          _searchResults.length;
       final match = _searchResults[_currentMatchIndex];
-      _controller.selection = TextSelection(baseOffset: match.start, extentOffset: match.end);
+      _controller.selection = TextSelection(
+        baseOffset: match.start,
+        extentOffset: match.end,
+      );
       _codeFieldFocusNode.requestFocus();
     });
   }
@@ -224,7 +236,11 @@ class CodeEditorViewState extends State<CodeEditorView> {
     if (_currentMatchIndex == -1 || _searchResults.isEmpty) return;
     final match = _searchResults[_currentMatchIndex];
     final replacement = _replaceController.text;
-    _controller.text = _controller.text.replaceRange(match.start, match.end, replacement);
+    _controller.text = _controller.text.replaceRange(
+      match.start,
+      match.end,
+      replacement,
+    );
     _performSearch();
   }
 
@@ -232,11 +248,17 @@ class CodeEditorViewState extends State<CodeEditorView> {
     final searchTerm = _searchController.text;
     if (searchTerm.isEmpty) return;
     final replacement = _replaceController.text;
-    _controller.text = _controller.text.replaceAll(RegExp(searchTerm, caseSensitive: false, multiLine: true), replacement);
+    _controller.text = _controller.text.replaceAll(
+      RegExp(searchTerm, caseSensitive: false, multiLine: true),
+      replacement,
+    );
     _performSearch();
   }
 
-  Future<void> _processFoldingBatches({required bool shouldFold, int batchSize = 100}) async {
+  Future<void> _processFoldingBatches({
+    required bool shouldFold,
+    int batchSize = 100,
+  }) async {
     final lineCount = _controller.code.lines.length;
     for (int i = 0; i < lineCount; i += batchSize) {
       final end = (i + batchSize > lineCount) ? lineCount : i + batchSize;
@@ -260,30 +282,59 @@ class CodeEditorViewState extends State<CodeEditorView> {
       color: theme.scaffoldBackgroundColor,
       child: Column(
         children: [
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(labelText: '搜索', isDense: true),
-                onChanged: _onSearchChanged,
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: const InputDecoration(
+                    labelText: '搜索',
+                    isDense: true,
+                  ),
+                  onChanged: _onSearchChanged,
+                ),
               ),
-            ),
-            IconButton(icon: const Icon(Icons.arrow_upward), onPressed: hasMatches ? _goToPreviousMatch : null),
-            IconButton(icon: const Icon(Icons.arrow_downward), onPressed: hasMatches ? _goToNextMatch : null),
-          ]),
+              IconButton(
+                icon: const Icon(Icons.arrow_upward),
+                onPressed: hasMatches ? _goToPreviousMatch : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.arrow_downward),
+                onPressed: hasMatches ? _goToNextMatch : null,
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
-          Row(children: [
-            Expanded(child: TextField(controller: _replaceController, decoration: const InputDecoration(labelText: '替换为', isDense: true))),
-            TextButton(onPressed: hasMatches ? _performReplace : null, child: const Text('替换')),
-            TextButton(onPressed: hasMatches ? _performReplaceAll : null, child: const Text('全部')),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _replaceController,
+                  decoration: const InputDecoration(
+                    labelText: '替换为',
+                    isDense: true,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: hasMatches ? _performReplace : null,
+                child: const Text('替换'),
+              ),
+              TextButton(
+                onPressed: hasMatches ? _performReplaceAll : null,
+                child: const Text('全部'),
+              ),
+            ],
+          ),
           if (_searchController.text.isNotEmpty)
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
-                  hasMatches ? '${_currentMatchIndex + 1} / ${_searchResults.length}' : '0 / 0',
+                  hasMatches
+                      ? '${_currentMatchIndex + 1} / ${_searchResults.length}'
+                      : '0 / 0',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
@@ -296,7 +347,9 @@ class CodeEditorViewState extends State<CodeEditorView> {
   @override
   Widget build(BuildContext context) {
     // Create a new theme data by merging the selected theme with our custom font styles.
-    final themeStyles = Map<String, TextStyle>.from(editorThemes[_currentTheme]!);
+    final themeStyles = Map<String, TextStyle>.from(
+      editorThemes[_currentTheme]!,
+    );
     final originalRootStyle = themeStyles['root'] ?? const TextStyle();
     themeStyles['root'] = originalRootStyle.copyWith(
       fontSize: 16,
@@ -318,7 +371,9 @@ class CodeEditorViewState extends State<CodeEditorView> {
                       focusNode: _codeFieldFocusNode,
                       // The base style for the TextField should have a transparent background
                       // to avoid painting over the container's background, which causes the "stripes" effect.
-                      style: themeStyles['root']?.copyWith(backgroundColor: Colors.transparent),
+                      style: themeStyles['root']?.copyWith(
+                        backgroundColor: Colors.transparent,
+                      ),
                       maxLines: null,
                       expands: true,
                       decoration: const InputDecoration(

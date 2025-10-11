@@ -18,14 +18,20 @@ class GeminiApiKeysScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+            Shadow(
+              color: Colors.black.withAlpha((255 * 0.5).round()),
+              blurRadius: 1.0,
+            ),
           ],
         ),
         title: Text(
           'Gemini API Keys',
           style: TextStyle(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+              Shadow(
+                color: Colors.black.withAlpha((255 * 0.5).round()),
+                blurRadius: 1.0,
+              ),
             ],
           ),
         ),
@@ -40,13 +46,21 @@ class GeminiApiKeysScreen extends ConsumerWidget {
                   title: const Text('确认清空'),
                   content: const Text('确定要删除所有 Gemini API Keys 吗？此操作不可撤销。'),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
                     TextButton(
                       onPressed: () {
-                        ref.read(apiKeyNotifierProvider.notifier).clearAllGeminiKeys();
+                        ref
+                            .read(apiKeyNotifierProvider.notifier)
+                            .clearAllGeminiKeys();
                         Navigator.pop(context);
                       },
-                      child: const Text('清空', style: TextStyle(color: Colors.red)),
+                      child: const Text(
+                        '清空',
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
@@ -65,9 +79,16 @@ class GeminiApiKeysScreen extends ConsumerWidget {
                     itemBuilder: (context, index) {
                       final key = keys[index];
                       return ListTile(
-                        title: Text(key.length > 4 ? '****${key.substring(key.length - 4)}' : key),
+                        title: Text(
+                          key.length > 4
+                              ? '****${key.substring(key.length - 4)}'
+                              : key,
+                        ),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.redAccent),
+                          icon: const Icon(
+                            Icons.delete,
+                            color: Colors.redAccent,
+                          ),
                           onPressed: () => apiKeyNotifier.deleteGeminiKey(key),
                         ),
                       );

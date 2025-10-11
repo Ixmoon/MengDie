@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 import 'context_config.dart';
@@ -110,33 +110,69 @@ class Chat {
     return Chat(
       id: id ?? this.id,
       title: title == _sentinel ? this.title : title as String?,
-      systemPrompt: systemPrompt == _sentinel ? this.systemPrompt : systemPrompt as String?,
+      systemPrompt: systemPrompt == _sentinel
+          ? this.systemPrompt
+          : systemPrompt as String?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      coverImageBase64: coverImageBase64 == _sentinel ? this.coverImageBase64 : coverImageBase64 as String?,
-      backgroundImagePath: backgroundImagePath == _sentinel ? this.backgroundImagePath : backgroundImagePath as String?,
-      orderIndex: orderIndex == _sentinel ? this.orderIndex : orderIndex as int?,
+      coverImageBase64: coverImageBase64 == _sentinel
+          ? this.coverImageBase64
+          : coverImageBase64 as String?,
+      backgroundImagePath: backgroundImagePath == _sentinel
+          ? this.backgroundImagePath
+          : backgroundImagePath as String?,
+      orderIndex: orderIndex == _sentinel
+          ? this.orderIndex
+          : orderIndex as int?,
       isFolder: isFolder ?? this.isFolder,
-      parentFolderId: parentFolderId == _sentinel ? this.parentFolderId : parentFolderId as int?,
-      apiConfigId: apiConfigId == _sentinel ? this.apiConfigId : apiConfigId as String?,
+      parentFolderId: parentFolderId == _sentinel
+          ? this.parentFolderId
+          : parentFolderId as int?,
+      apiConfigId: apiConfigId == _sentinel
+          ? this.apiConfigId
+          : apiConfigId as String?,
       contextConfig: contextConfig ?? this.contextConfig,
       xmlRules: xmlRules ?? this.xmlRules,
       enablePreprocessing: enablePreprocessing ?? this.enablePreprocessing,
-      preprocessingPrompt: preprocessingPrompt == _sentinel ? this.preprocessingPrompt : preprocessingPrompt as String?,
-      contextSummary: contextSummary == _sentinel ? this.contextSummary : contextSummary as String?,
-      preprocessingApiConfigId: preprocessingApiConfigId == _sentinel ? this.preprocessingApiConfigId : preprocessingApiConfigId as String?,
+      preprocessingPrompt: preprocessingPrompt == _sentinel
+          ? this.preprocessingPrompt
+          : preprocessingPrompt as String?,
+      contextSummary: contextSummary == _sentinel
+          ? this.contextSummary
+          : contextSummary as String?,
+      preprocessingApiConfigId: preprocessingApiConfigId == _sentinel
+          ? this.preprocessingApiConfigId
+          : preprocessingApiConfigId as String?,
       enableSecondaryXml: enableSecondaryXml ?? this.enableSecondaryXml,
-      secondaryXmlPrompt: secondaryXmlPrompt == _sentinel ? this.secondaryXmlPrompt : secondaryXmlPrompt as String?,
-      secondaryXmlApiConfigId: secondaryXmlApiConfigId == _sentinel ? this.secondaryXmlApiConfigId : secondaryXmlApiConfigId as String?,
-      continuePrompt: continuePrompt == _sentinel ? this.continuePrompt : continuePrompt as String?,
+      secondaryXmlPrompt: secondaryXmlPrompt == _sentinel
+          ? this.secondaryXmlPrompt
+          : secondaryXmlPrompt as String?,
+      secondaryXmlApiConfigId: secondaryXmlApiConfigId == _sentinel
+          ? this.secondaryXmlApiConfigId
+          : secondaryXmlApiConfigId as String?,
+      continuePrompt: continuePrompt == _sentinel
+          ? this.continuePrompt
+          : continuePrompt as String?,
       enableHelpMeReply: enableHelpMeReply ?? this.enableHelpMeReply,
-      helpMeReplyPrompt: helpMeReplyPrompt == _sentinel ? this.helpMeReplyPrompt : helpMeReplyPrompt as String?,
-      helpMeReplyApiConfigId: helpMeReplyApiConfigId == _sentinel ? this.helpMeReplyApiConfigId : helpMeReplyApiConfigId as String?,
-      helpMeReplyTriggerMode: helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
+      helpMeReplyPrompt: helpMeReplyPrompt == _sentinel
+          ? this.helpMeReplyPrompt
+          : helpMeReplyPrompt as String?,
+      helpMeReplyApiConfigId: helpMeReplyApiConfigId == _sentinel
+          ? this.helpMeReplyApiConfigId
+          : helpMeReplyApiConfigId as String?,
+      helpMeReplyTriggerMode:
+          helpMeReplyTriggerMode ?? this.helpMeReplyTriggerMode,
       messages: messages ?? this.messages,
-      lastSummarizedMessageId: (contextSummary == _sentinel ? this.contextSummary : contextSummary as String?)?.isEmpty ?? true
+      lastSummarizedMessageId:
+          (contextSummary == _sentinel
+                      ? this.contextSummary
+                      : contextSummary as String?)
+                  ?.isEmpty ??
+              true
           ? null
-          : (lastSummarizedMessageId == _sentinel ? this.lastSummarizedMessageId : lastSummarizedMessageId as int?),
+          : (lastSummarizedMessageId == _sentinel
+                ? this.lastSummarizedMessageId
+                : lastSummarizedMessageId as int?),
     );
   }
 

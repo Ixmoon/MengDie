@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:collection/collection.dart'; // No longer needed for lastWhereOrNull here
 
-
 import '../../domain/models/models.dart';
 import '../../app/providers/chat_state_providers.dart';
 import '../../data/llmapi/llm_models.dart'; // For LlmContent, LlmTextPart
@@ -65,7 +64,8 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
     // we use a separate state variable _isSummaryDirty for that.
     final chat = ref.read(currentChatProvider(chatId)).value;
     if (chat != null) {
-      final isDirty = _contextSummaryController.text != (chat.contextSummary ?? '');
+      final isDirty =
+          _contextSummaryController.text != (chat.contextSummary ?? '');
       if (isDirty != _isSummaryDirty) {
         setState(() {
           _isSummaryDirty = isDirty;
@@ -115,7 +115,11 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       final allMessages = await messageRepo.getMessagesForChat(chatId);
       final messageForContextCheck = allMessages.isNotEmpty
           ? allMessages.last
-          : Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("")]);
+          : Message(
+              chatId: chatId,
+              role: MessageRole.user,
+              parts: [MessagePart.text("")],
+            );
 
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chatId: chat.id,
@@ -166,7 +170,9 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       );
     }
     final chatAsyncValue = ref.watch(currentChatProvider(chatId));
-    final historyLoaded = ref.watch(chatMessagesProvider(chatId)).hasValue; // Still useful to know if base data is there
+    final historyLoaded = ref
+        .watch(chatMessagesProvider(chatId))
+        .hasValue; // Still useful to know if base data is there
 
     return Scaffold(
       appBar: AppBar(
@@ -174,280 +180,356 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
         elevation: 0,
         iconTheme: IconThemeData(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+            Shadow(
+              color: Colors.black.withAlpha((255 * 0.5).round()),
+              blurRadius: 1.0,
+            ),
           ],
         ),
         title: Text(
           '调试信息',
           style: TextStyle(
             shadows: <Shadow>[
-              Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+              Shadow(
+                color: Colors.black.withAlpha((255 * 0.5).round()),
+                blurRadius: 1.0,
+              ),
             ],
           ),
         ),
         // Refresh IconButton removed
       ),
-      body: Builder(builder: (context) {
-        // Adjusted loading condition slightly
-        if (_isLoading && _displayedApiContextParts == null && !chatAsyncValue.hasValue && _errorLoadingContext.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        if (!chatAsyncValue.hasValue && !historyLoaded && _errorLoadingContext.isEmpty) {
-            return const Center(child: Text("正在加载聊天数据..."));
-        }
-        
-        // If there's an error message, show it regardless of other states
-        if (_errorLoadingContext.isNotEmpty) {
-          return Center(child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(_errorLoadingContext, style: const TextStyle(color: Colors.red))
-          ));
-        }
-
-        final chat = chatAsyncValue.value;
-        if (chat == null) {
-          // This case should be covered by the error or loading states above if chat data is truly unavailable for context building.
-          // If we reach here, it implies chat might be null but no error was set by _loadDebugContext, which is unlikely.
-          return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: Text('聊天数据不可用。')));
-        }
-        
-        // Update controller text if the chat data has changed and there are no pending edits.
-        if (!_isSummaryDirty && _contextSummaryController.text != (chat.contextSummary ?? '')) {
-          _contextSummaryController.text = chat.contextSummary ?? '';
-        }
-        
-        if (_isLoading) { // General loading state after chat data is available but context isn't yet
+      body: Builder(
+        builder: (context) {
+          // Adjusted loading condition slightly
+          if (_isLoading &&
+              _displayedApiContextParts == null &&
+              !chatAsyncValue.hasValue &&
+              _errorLoadingContext.isEmpty) {
             return const SizedBox.shrink();
-        }
+          }
+          if (!chatAsyncValue.hasValue &&
+              !historyLoaded &&
+              _errorLoadingContext.isEmpty) {
+            return const Center(child: Text("正在加载聊天数据..."));
+          }
 
-
-        final screenState = ref.watch(chatStateNotifierProvider(chatId));
-        final mode = screenState.contextManagementMode;
-
-        final String title;
-        final String currentLabel;
-        final double progress;
-
-        if (mode == ContextManagementMode.tokens) {
-          title = '上下文状态 (Token)';
-          final keptTokens = screenState.keptTokenCount ?? 0;
-          final limitTokens = screenState.contextTokenLimit ?? 1;
-          currentLabel = '窗口: $keptTokens / $limitTokens (Tokens)';
-          progress = keptTokens / limitTokens;
-        } else { // Default to turns
-          title = '上下文状态 (轮次)';
-          final keptTurns = screenState.keptMessageCount ?? 0;
-          final limitTurns = screenState.contextTurnLimit ?? 1;
-          currentLabel = '窗口: $keptTurns / $limitTurns (消息)';
-          progress = (limitTurns > 0) ? keptTurns / limitTurns : 0.0;
-        }
-        
-        final totalCount = screenState.totalMessageCount;
-
-        return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-          children: [
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    minHeight: 6,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        currentLabel,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      Text(
-                        '总计: ${totalCount ?? 'N/A'} (消息)',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '总结锚点 (ID):',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      Text(
-                        '${chat.lastSummarizedMessageId ?? '无'}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-                      ),
-                    ],
-                  ),
-                ],
+          // If there's an error message, show it regardless of other states
+          if (_errorLoadingContext.isNotEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text(
+                  _errorLoadingContext,
+                  style: const TextStyle(color: Colors.red),
+                ),
               ),
-            ),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('手动总结设置', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  _buildManualSummarySlider(),
-                ],
+            );
+          }
+
+          final chat = chatAsyncValue.value;
+          if (chat == null) {
+            // This case should be covered by the error or loading states above if chat data is truly unavailable for context building.
+            // If we reach here, it implies chat might be null but no error was set by _loadDebugContext, which is unlikely.
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('聊天数据不可用。'),
               ),
-            ),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('计算出的合成 XML (只读)', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
-                      borderRadius: BorderRadius.circular(4),
+            );
+          }
+
+          // Update controller text if the chat data has changed and there are no pending edits.
+          if (!_isSummaryDirty &&
+              _contextSummaryController.text != (chat.contextSummary ?? '')) {
+            _contextSummaryController.text = chat.contextSummary ?? '';
+          }
+
+          if (_isLoading) {
+            // General loading state after chat data is available but context isn't yet
+            return const SizedBox.shrink();
+          }
+
+          final screenState = ref.watch(chatStateNotifierProvider(chatId));
+          final mode = screenState.contextManagementMode;
+
+          final String title;
+          final String currentLabel;
+          final double progress;
+
+          if (mode == ContextManagementMode.tokens) {
+            title = '上下文状态 (Token)';
+            final keptTokens = screenState.keptTokenCount ?? 0;
+            final limitTokens = screenState.contextTokenLimit ?? 1;
+            currentLabel = '窗口: $keptTokens / $limitTokens (Tokens)';
+            progress = keptTokens / limitTokens;
+          } else {
+            // Default to turns
+            title = '上下文状态 (轮次)';
+            final keptTurns = screenState.keptMessageCount ?? 0;
+            final limitTurns = screenState.contextTurnLimit ?? 1;
+            currentLabel = '窗口: $keptTurns / $limitTurns (消息)';
+            progress = (limitTurns > 0) ? keptTurns / limitTurns : 0.0;
+          }
+
+          final totalCount = screenState.totalMessageCount;
+
+          return ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            children: [
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      minHeight: 6,
                     ),
-                    child: SelectableText(
-                      _displayedCarriedOverXml ?? '(无合成 XML)', // Use renamed variable
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          currentLabel,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          '总计: ${totalCount ?? 'N/A'} (消息)',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '总结锚点 (ID):',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          '${chat.lastSummarizedMessageId ?? '无'}',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(fontFamily: 'monospace'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('上下文总结', style: Theme.of(context).textTheme.titleMedium),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_isSummaryDirty)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  // No need to check for chat nullability again, it's handled above.
-                                  final updatedChat = chat.copyWith(contextSummary: _contextSummaryController.text);
-                                  // Use the repository to save the chat, the stream provider will update automatically
-                                  await ref.read(chatRepositoryProvider).saveChat(updatedChat);
-                                  
-                                  // Manually clear dirty flag and show feedback
-                                  setState(() {
-                                    _isSummaryDirty = false;
-                                  });
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '手动总结设置',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildManualSummarySlider(),
+                  ],
+                ),
+              ),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '计算出的合成 XML (只读)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest.withAlpha(77),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: SelectableText(
+                        _displayedCarriedOverXml ??
+                            '(无合成 XML)', // Use renamed variable
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('上下文总结已保存。'), duration: Duration(seconds: 2)),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '上下文总结',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isSummaryDirty)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    final scaffoldMessenger =
+                                        ScaffoldMessenger.of(context);
+                                    // No need to check for chat nullability again, it's handled above.
+                                    final updatedChat = chat.copyWith(
+                                      contextSummary:
+                                          _contextSummaryController.text,
                                     );
-                                  }
-                                },
-                                child: const Text('保存'),
-                              ),
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.compress),
-                            tooltip: '手动总结',
-                            onPressed: () {
-                              // Call the new manual summarization method
-                              ref.read(chatStateNotifierProvider(chatId).notifier).manuallySummarizeHistory();
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.open_in_full),
-                            tooltip: '全屏编辑',
-                            onPressed: () async {
-                              final newSummary = await showFullScreenTextEditor(
-                                context,
-                                initialText: _contextSummaryController.text,
-                                title: '编辑上下文总结',
-                              );
-                              if (newSummary != null) {
-                                _contextSummaryController.text = newSummary;
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: TextFormField(
-                      controller: _contextSummaryController,
-                      maxLines: null, // Allows multiline
-                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        hintText: '(无上下文总结)',
-                        // The parent Container provides padding and background color.
-                        // Set filled to false and contentPadding to zero to avoid conflicts.
-                        filled: false,
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                                    // Use the repository to save the chat, the stream provider will update automatically
+                                    await ref
+                                        .read(chatRepositoryProvider)
+                                        .saveChat(updatedChat);
 
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('API 上下文预览', style: Theme.of(context).textTheme.titleMedium),
-                      // Loading indicator for this specific section is implicitly handled by overall _isLoading
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
-                      borderRadius: BorderRadius.circular(4),
+                                    if (!mounted) return;
+                                    // Manually clear dirty flag and show feedback
+                                    setState(() {
+                                      _isSummaryDirty = false;
+                                    });
+
+                                    scaffoldMessenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text('上下文总结已保存。'),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('保存'),
+                                ),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.compress),
+                              tooltip: '手动总结',
+                              onPressed: () {
+                                // Call the new manual summarization method
+                                ref
+                                    .read(
+                                      chatStateNotifierProvider(
+                                        chatId,
+                                      ).notifier,
+                                    )
+                                    .manuallySummarizeHistory();
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.open_in_full),
+                              tooltip: '全屏编辑',
+                              onPressed: () async {
+                                final newSummary =
+                                    await showFullScreenTextEditor(
+                                      context,
+                                      initialText:
+                                          _contextSummaryController.text,
+                                      title: '编辑上下文总结',
+                                    );
+                                if (newSummary != null) {
+                                  _contextSummaryController.text = newSummary;
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    child: _buildContextDisplayWidget(), // Uses renamed _displayedApiContextParts
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest.withAlpha(77),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: TextFormField(
+                        controller: _contextSummaryController,
+                        maxLines: null, // Allows multiline
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isDense: true,
+                          hintText: '(无上下文总结)',
+                          // The parent Container provides padding and background color.
+                          // Set filled to false and contentPadding to zero to avoid conflicts.
+                          filled: false,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
-          ],
-        );
-      }),
+
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'API 上下文预览',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        // Loading indicator for this specific section is implicitly handled by overall _isLoading
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest.withAlpha(77),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child:
+                          _buildContextDisplayWidget(), // Uses renamed _displayedApiContextParts
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
   Widget _buildContextDisplayWidget() {
     if (_errorLoadingContext.isNotEmpty && _displayedApiContextParts == null) {
-      return SelectableText( 
+      return SelectableText(
         "加载API上下文预览时出错: $_errorLoadingContext",
-        style: const TextStyle(color: Colors.red, fontFamily: 'monospace', fontSize: 12),
+        style: const TextStyle(
+          color: Colors.red,
+          fontFamily: 'monospace',
+          fontSize: 12,
+        ),
       );
-    } else if (_displayedApiContextParts == null || _displayedApiContextParts!.isEmpty) {
+    } else if (_displayedApiContextParts == null ||
+        _displayedApiContextParts!.isEmpty) {
       return const SelectableText(
         "(无 API 上下文内容)",
         style: TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -469,7 +551,10 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
               children: [
                 Text(
                   "--- ${content.role} ---",
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 SelectableText(

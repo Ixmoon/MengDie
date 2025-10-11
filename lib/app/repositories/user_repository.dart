@@ -51,7 +51,7 @@ class UserRepository {
     // User exists, but password was incorrect
     return null;
   }
-  
+
   /// 根据ID获取用户
   Future<User?> getUserById(int userId) async {
     final driftUser = await _userDao.getUserById(userId);
@@ -86,14 +86,18 @@ class UserRepository {
       chatIds: const Value([]),
       // 使用默认设置
       enableAutoTitleGeneration: const Value(false),
-      titleGenerationPrompt: const Value('根据对话，为本次聊天生成一个简洁的、不超过10个字的标题。（你的回复内容只能是纯标题，不能包含任何其他内容）'),
+      titleGenerationPrompt: const Value(
+        '根据对话，为本次聊天生成一个简洁的、不超过10个字的标题。（你的回复内容只能是纯标题，不能包含任何其他内容）',
+      ),
       enableResume: const Value(false),
       resumePrompt: const Value('继续生成被中断的回复，请直接从最后一个字甚至是符号后继续，不要包含任何其他内容。'),
       geminiApiKeys: const Value([]), // Provide default empty list
     );
 
-    final driftUser = await _userDao.db.into(_userDao.db.users).insertReturning(newUserCompanion, mode: InsertMode.insertOrReplace);
-    
+    final driftUser = await _userDao.db
+        .into(_userDao.db.users)
+        .insertReturning(newUserCompanion, mode: InsertMode.insertOrReplace);
+
     return UserMapper.fromDrift(driftUser);
   }
 
@@ -104,7 +108,7 @@ class UserRepository {
     final guestDriftUser = await _userDao.getUserById(0);
     if (guestDriftUser != null) {
       return UserMapper.fromDrift(guestDriftUser);
-    } 
+    }
     // 如果ID为0的用户不存在，则创建一个
     // 注意：密码字段为空字符串，因为游客不需要登录
     return await createUser('guest_user_placeholder', '', id: 0);

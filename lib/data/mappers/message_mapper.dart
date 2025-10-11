@@ -10,7 +10,9 @@ class MessageMapper {
     if (data.rawText.isNotEmpty) {
       try {
         final List<dynamic> decoded = jsonDecode(data.rawText);
-        parts = decoded.map((json) => domain.MessagePart.fromJson(json)).toList();
+        parts = decoded
+            .map((json) => domain.MessagePart.fromJson(json))
+            .toList();
       } catch (e) {
         parts = [domain.MessagePart.text(data.rawText)];
       }
@@ -33,8 +35,10 @@ class MessageMapper {
   }
 
   static drift.MessagesCompanion toCompanion(domain.Message message) {
-    final String rawText = jsonEncode(message.parts.map((p) => p.toJson()).toList());
-    
+    final String rawText = jsonEncode(
+      message.parts.map((p) => p.toJson()).toList(),
+    );
+
     return drift.MessagesCompanion(
       id: message.id == 0 ? const Value.absent() : Value(message.id),
       chatId: Value(message.chatId),

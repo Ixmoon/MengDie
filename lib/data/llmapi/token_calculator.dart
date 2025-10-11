@@ -27,9 +27,9 @@ class TokenCalculator {
   }) async {
     final encoding = _getEncoding(apiConfig.model);
     int totalTokens = 0;
-    
-    final imageCost = apiConfig.apiType == LlmType.openai 
-        ? _openAIImageTokenCost 
+
+    final imageCost = apiConfig.apiType == LlmType.openai
+        ? _openAIImageTokenCost
         : _geminiImageTokenCost;
 
     for (final message in llmContext) {

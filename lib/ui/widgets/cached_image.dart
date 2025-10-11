@@ -40,109 +40,110 @@ Uint8List _decodeImageInBackground(String base64String) {
   return base64Decode(base64String);
 }
 
-
 /// 一个 StatefulWidget，用于解码 Base64 字符串并显示图片。
 /// 它将解码后的字节缓存在其 State 中，并使用 compute 函数在后台 Isolate 中执行解码，
 /// 以避免在列表拖动等操作中因解码阻塞 UI 线程而导致闪烁或卡顿。
 class CachedImageFromBase64 extends StatefulWidget {
-	final String base64String;
-	final double? width;
-	final double? height;
-	final BoxFit? fit;
-	final int? cacheWidth;
-	final int? cacheHeight;
-	final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
+  final String base64String;
+  final double? width;
+  final double? height;
+  final BoxFit? fit;
+  final int? cacheWidth;
+  final int? cacheHeight;
+  final Widget Function(BuildContext, Object, StackTrace?)? errorBuilder;
 
-	const CachedImageFromBase64({
-		super.key,
-		required this.base64String,
-		this.width,
-		this.height,
-		this.fit,
-		this.cacheWidth,
-		this.cacheHeight,
-		this.errorBuilder,
-	});
+  const CachedImageFromBase64({
+    super.key,
+    required this.base64String,
+    this.width,
+    this.height,
+    this.fit,
+    this.cacheWidth,
+    this.cacheHeight,
+    this.errorBuilder,
+  });
 
-	@override
-	State<CachedImageFromBase64> createState() => _CachedImageFromBase64State();
+  @override
+  State<CachedImageFromBase64> createState() => _CachedImageFromBase64State();
 }
 
 class _CachedImageFromBase64State extends State<CachedImageFromBase64> {
-	Uint8List? _imageBytes;
-	Object? _error;
+  Uint8List? _imageBytes;
+  Object? _error;
   StackTrace? _stackTrace;
   bool _wasInCache = false;
 
-	@override
-	void initState() {
-		super.initState();
-		_decodeImage();
-	}
+  @override
+  void initState() {
+    super.initState();
+    _decodeImage();
+  }
 
-	@override
-	void didUpdateWidget(CachedImageFromBase64 oldWidget) {
-		super.didUpdateWidget(oldWidget);
-		// 当 Base64 字符串发生变化时，才重新解码
-		if (widget.base64String != oldWidget.base64String) {
+  @override
+  void didUpdateWidget(CachedImageFromBase64 oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 当 Base64 字符串发生变化时，才重新解码
+    if (widget.base64String != oldWidget.base64String) {
       _wasInCache = false; // 重置缓存状态
-			_decodeImage();
-		}
-	}
+      _decodeImage();
+    }
+  }
 
-	void _decodeImage() {
-	   // 清除之前的状态，准备开始解码
-	   setState(() {
-	     _imageBytes = null;
-	     _error = null;
-	     _stackTrace = null;
-	   });
+  void _decodeImage() {
+    // 清除之前的状态，准备开始解码
+    setState(() {
+      _imageBytes = null;
+      _error = null;
+      _stackTrace = null;
+    });
 
-	   if (widget.base64String.isEmpty) {
-	     return; // 如果字符串为空，则不执行任何操作
-	   }
+    if (widget.base64String.isEmpty) {
+      return; // 如果字符串为空，则不执行任何操作
+    }
 
-	   // 1. 尝试从缓存中获取
-	   final cachedBytes = _imageCache.get(widget.base64String);
-	   if (cachedBytes != null) {
-	     if (mounted) {
-	       setState(() {
-	         _imageBytes = cachedBytes;
-           _wasInCache = true; // 标记为来自缓存
-	       });
-	     }
-	     return;
-	   }
+    // 1. 尝试从缓存中获取
+    final cachedBytes = _imageCache.get(widget.base64String);
+    if (cachedBytes != null) {
+      if (mounted) {
+        setState(() {
+          _imageBytes = cachedBytes;
+          _wasInCache = true; // 标记为来自缓存
+        });
+      }
+      return;
+    }
 
-	   // 2. 如果缓存中没有，则在后台进行解码
-	   compute(_decodeImageInBackground, widget.base64String).then((bytes) {
-	     if (mounted) {
-	       // 3. 将解码后的数据存入缓存并更新状态
-	       _imageCache.set(widget.base64String, bytes);
-	       setState(() {
-	         _imageBytes = bytes;
-	       });
-	     }
-	   }).catchError((e, s) {
-	     if (mounted) {
-	       setState(() {
-	         _error = e;
-	         _stackTrace = s;
-	       });
-	     }
-	   });
-	}
+    // 2. 如果缓存中没有，则在后台进行解码
+    compute(_decodeImageInBackground, widget.base64String)
+        .then((bytes) {
+          if (mounted) {
+            // 3. 将解码后的数据存入缓存并更新状态
+            _imageCache.set(widget.base64String, bytes);
+            setState(() {
+              _imageBytes = bytes;
+            });
+          }
+        })
+        .catchError((e, s) {
+          if (mounted) {
+            setState(() {
+              _error = e;
+              _stackTrace = s;
+            });
+          }
+        });
+  }
 
-	@override
-	Widget build(BuildContext context) {
-		// 如果解码出错，并且提供了 errorBuilder，则使用它
-		if (_error != null && widget.errorBuilder != null) {
-			return widget.errorBuilder!(context, _error!, _stackTrace);
-		}
-		// 如果解码出错，但没有 errorBuilder，可以返回一个默认的错误占位符
-		if (_error != null) {
-			return const Icon(Icons.broken_image, color: Colors.grey);
-		}
+  @override
+  Widget build(BuildContext context) {
+    // 如果解码出错，并且提供了 errorBuilder，则使用它
+    if (_error != null && widget.errorBuilder != null) {
+      return widget.errorBuilder!(context, _error!, _stackTrace);
+    }
+    // 如果解码出错，但没有 errorBuilder，可以返回一个默认的错误占位符
+    if (_error != null) {
+      return const Icon(Icons.broken_image, color: Colors.grey);
+    }
 
     final imageWidget = _imageBytes != null
         ? Image.memory(
@@ -172,5 +173,5 @@ class _CachedImageFromBase64State extends State<CachedImageFromBase64> {
       duration: const Duration(milliseconds: 300),
       child: imageWidget,
     );
-	}
+  }
 }

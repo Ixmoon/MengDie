@@ -17,7 +17,9 @@ Future<Connection> connectRemote(String connectionString) async {
   final uri = Uri.parse(connectionString);
   final endpoint = Endpoint(
     host: uri.host,
-    port: uri.port == 0 ? 5432 : uri.port, // Explicitly use standard port 5432 as a fallback
+    port: uri.port == 0
+        ? 5432
+        : uri.port, // Explicitly use standard port 5432 as a fallback
     database: uri.pathSegments.first,
     username: uri.userInfo.split(':').first,
     password: uri.userInfo.contains(':') ? uri.userInfo.split(':').last : null,

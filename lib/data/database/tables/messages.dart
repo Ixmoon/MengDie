@@ -6,20 +6,26 @@ import '../type_converters.dart'; // For MessageRoleConverter
 @DataClassName('MessageData') // To avoid conflict with existing Message model
 class Messages extends Table {
   IntColumn get id => integer().autoIncrement()();
-  
+
   // Foreign key to the Chats table
-  IntColumn get chatId => integer().references(Chats, #id, onDelete: KeyAction.cascade)();
-  
-  TextColumn get rawText => text().named('raw_text')(); // Mapped from DTO, stores parts as JSON
+  IntColumn get chatId =>
+      integer().references(Chats, #id, onDelete: KeyAction.cascade)();
+
+  TextColumn get rawText =>
+      text().named('raw_text')(); // Mapped from DTO, stores parts as JSON
   TextColumn get role => text().map(const MessageRoleConverter())();
-  IntColumn get timestamp => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
-  IntColumn get updatedAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get timestamp => integer()
+      .map(const MicrosecondDateTimeConverter())
+      .clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get updatedAt => integer()
+      .map(const MicrosecondDateTimeConverter())
+      .clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   // Stores the original XML content if it was overwritten by post-processing
   TextColumn get originalXmlContent => text().nullable()();
- 
+
   // Stores the XML content from secondary generation
   TextColumn get secondaryXmlContent => text().nullable()();
- 
+
   // autoIncrement() on id column automatically makes it the primary key.
 }

@@ -25,85 +25,80 @@ import 'app/providers/repository_providers.dart';
 // --- 应用主函数 ---
 // 将 main 函数修改为 async 以便在启动前执行异步操作
 void main() async {
-	// 确保 Flutter 绑定已初始化。
-	WidgetsFlutterBinding.ensureInitialized();
+  // 确保 Flutter 绑定已初始化。
+  WidgetsFlutterBinding.ensureInitialized();
 
-	// 创建一个 ProviderContainer 以便在 runApp 之前访问 Provider。
-	final container = ProviderContainer();
+  // 创建一个 ProviderContainer 以便在 runApp 之前访问 Provider。
+  final container = ProviderContainer();
 
-	// 在应用启动时尝试自动登录。
-	// 这是实现登录持久化的关键步骤。
-	await container.read(authProvider.notifier).tryAutoLogin();
+  // 在应用启动时尝试自动登录。
+  // 这是实现登录持久化的关键步骤。
+  await container.read(authProvider.notifier).tryAutoLogin();
 
-	// 使用 Future.wait 并行初始化所有核心 Provider
-	final coreInitializers = container.read(coreAsyncInitializersProvider);
-	await Future.wait(coreInitializers.map((provider) {
-	  // 假设所有需要初始化的都是 StateNotifier 的子类，并且有一个 init 方法
-	  final notifier = container.read(provider as ProviderListenable<StateNotifier>);
-	  if (notifier is dynamic && notifier.mounted) {
-	      // A common pattern might be for notifiers to have an init() method.
-	       // We use 'dynamic' to avoid compile-time errors if not all notifiers have it,
-	       // though in our case they do.
-	      return (notifier as dynamic).init();
-	  }
-	   return Future.value(null);
-	}));
+  // 使用 Future.wait 并行初始化所有核心 Provider
+  final coreInitializers = container.read(coreAsyncInitializersProvider);
+  await Future.wait(
+    coreInitializers.map((provider) {
+      // 假设所有需要初始化的都是 StateNotifier 的子类，并且有一个 init 方法
+      final notifier = container.read(
+        provider as ProviderListenable<StateNotifier>,
+      );
+      if (notifier.mounted) {
+        // A common pattern might be for notifiers to have an init() method.
+        // We use 'dynamic' to avoid compile-time errors if not all notifiers have it,
+        // though in our case they do.
+        return (notifier as dynamic).init();
+      }
+      return Future.value(null);
+    }),
+  );
 
-	// 初始化 SyncService
-	final db = container.read(appDatabaseProvider);
-	SyncService.initialize(
-		db,
-		() => connectRemote(container.read(syncSettingsProvider).connectionString),
-		container,
-	);
+  // 初始化 SyncService
+  final db = container.read(appDatabaseProvider);
+  SyncService.initialize(
+    db,
+    () => connectRemote(container.read(syncSettingsProvider).connectionString),
+    container,
+  );
 
-	// 在应用启动时，异步执行一次全面的数据同步。
-	// 这是一个“即发即忘”的操作，不会阻塞应用的启动流程。
-	SyncService.instance.syncWithRemote().catchError((e, s) {
-	   // 在生产环境中，你可能希望将此错误记录到监控服务
-	   debugPrint('Initial sync failed: $e');
-	 });
+  // 在应用启动时，异步执行一次全面的数据同步。
+  // 这是一个“即发即忘”的操作，不会阻塞应用的启动流程。
+  SyncService.instance.syncWithRemote().catchError((e, s) {});
 
-	// 读取 ChatRepositoryProvider 以触发其构造函数中的清理逻辑。
-	// 这是一个“即发即忘”的操作，因为它在构造函数内部异步执行。
-	container.read(chatRepositoryProvider);
+  // 读取 ChatRepositoryProvider 以触发其构造函数中的清理逻辑。
+  // 这是一个“即发即忘”的操作，因为它在构造函数内部异步执行。
+  container.read(chatRepositoryProvider);
 
-
-	// 运行 Flutter 应用。
-	// 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，
-	// 确保 Provider 的状态在整个应用生命周期内保持一致。
-	runApp(
-		UncontrolledProviderScope(
-			container: container,
-			child: const MyApp(),
-		),
-	);
+  // 运行 Flutter 应用。
+  // 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，
+  // 确保 Provider 的状态在整个应用生命周期内保持一致。
+  runApp(UncontrolledProviderScope(container: container, child: const MyApp()));
 }
 
 // --- 应用根 Widget ---
 // MyApp 是一个 ConsumerWidget，可以响应 Riverpod Provider 的状态变化。
 class MyApp extends ConsumerWidget {
-	const MyApp({super.key});
+  const MyApp({super.key});
 
-	@override
-	Widget build(BuildContext context, WidgetRef ref) {
-		// 监听路由和主题 Provider。
-		final router = ref.watch(routerProvider);
-		final themeModeSetting = ref.watch(themeModeProvider);
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 监听路由和主题 Provider。
+    final router = ref.watch(routerProvider);
+    final themeModeSetting = ref.watch(themeModeProvider);
 
-		// The database is now initialized by appDatabaseProvider.
-		// We assume it's ready when repositories need it.
-		// No need for the .when() clause for database loading here.
-		return MaterialApp.router(
-			title: '梦蝶', // 应用标题
-			theme: AppTheme.lightTheme, // 应用浅色主题
-			darkTheme: AppTheme.darkTheme, // 应用深色主题
-			// 使用从模型层添加的 getter，将业务逻辑从 UI 组件中移除。
-			themeMode: themeModeSetting.toThemeMode,
-			// 配置路由：使用从 routerProvider 获取的 GoRouter 实例。
-			routerConfig: router,
-			// 在调试模式下不显示右上角的 DEBUG 标志。
-			debugShowCheckedModeBanner: false,
-		);
-	}
+    // The database is now initialized by appDatabaseProvider.
+    // We assume it's ready when repositories need it.
+    // No need for the .when() clause for database loading here.
+    return MaterialApp.router(
+      title: '梦蝶', // 应用标题
+      theme: AppTheme.lightTheme, // 应用浅色主题
+      darkTheme: AppTheme.darkTheme, // 应用深色主题
+      // 使用从模型层添加的 getter，将业务逻辑从 UI 组件中移除。
+      themeMode: themeModeSetting.toThemeMode,
+      // 配置路由：使用从 routerProvider 获取的 GoRouter 实例。
+      routerConfig: router,
+      // 在调试模式下不显示右上角的 DEBUG 标志。
+      debugShowCheckedModeBanner: false,
+    );
+  }
 }

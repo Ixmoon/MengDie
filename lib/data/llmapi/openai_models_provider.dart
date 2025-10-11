@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
+
 import 'llm_models.dart';
 import 'llm_service/openai_service.dart'; // Updated import
 import '../../domain/models/api_config.dart';
@@ -32,7 +33,10 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
 
   void selectConfig(ApiConfig? config) {
     if (config == null) {
-      state = state.copyWith(selectedConfigId: null, models: const AsyncValue.data([]));
+      state = state.copyWith(
+        selectedConfigId: null,
+        models: const AsyncValue.data([]),
+      );
     } else {
       state = state.copyWith(selectedConfigId: config.id);
       fetchModels(config);
@@ -44,8 +48,13 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
   }
 
   Future<void> fetchModels(ApiConfig config) async {
-    if (config.baseUrl == null || config.baseUrl!.isEmpty || config.apiKey == null || config.apiKey!.isEmpty) {
-      state = state.copyWith(models: AsyncValue.error('API基础URL或密钥未设置。', StackTrace.current));
+    if (config.baseUrl == null ||
+        config.baseUrl!.isEmpty ||
+        config.apiKey == null ||
+        config.apiKey!.isEmpty) {
+      state = state.copyWith(
+        models: AsyncValue.error('API基础URL或密钥未设置。', StackTrace.current),
+      );
       return;
     }
     state = state.copyWith(models: const AsyncValue.loading());
@@ -61,8 +70,11 @@ class OpenAIModelsNotifier extends StateNotifier<OpenAIModelsState> {
   }
 }
 
-final openAIModelsProvider = StateNotifierProvider.autoDispose<OpenAIModelsNotifier, OpenAIModelsState>((ref) {
-  // Now depends on the globally provided OpenAIService
-  final apiService = ref.watch(openaiServiceProvider);
-  return OpenAIModelsNotifier(apiService);
-});
+final openAIModelsProvider =
+    StateNotifierProvider.autoDispose<OpenAIModelsNotifier, OpenAIModelsState>((
+      ref,
+    ) {
+      // Now depends on the globally provided OpenAIService
+      final apiService = ref.watch(openaiServiceProvider);
+      return OpenAIModelsNotifier(apiService);
+    });

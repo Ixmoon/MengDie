@@ -15,10 +15,14 @@ class Users extends Table {
   TextColumn get uuid => text().clientDefault(() => const Uuid().v4())();
 
   /// 记录创建时间的时间戳。
-  IntColumn get createdAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get createdAt => integer()
+      .map(const MicrosecondDateTimeConverter())
+      .clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   /// 记录最后更新时间的时间戳。
-  IntColumn get updatedAt => integer().map(const MicrosecondDateTimeConverter()).clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
+  IntColumn get updatedAt => integer()
+      .map(const MicrosecondDateTimeConverter())
+      .clientDefault(() => DateTime.now().toUtc().microsecondsSinceEpoch)();
 
   /// 用户名，必须是唯一的。
   TextColumn get username => text().unique()();
@@ -51,5 +55,6 @@ class Users extends Table {
   TextColumn get resumeApiConfigId => text().nullable()();
 
   /// Gemini API 密钥列表
-  TextColumn get geminiApiKeys => text().map(const StringListConverter()).nullable()();
+  TextColumn get geminiApiKeys =>
+      text().map(const StringListConverter()).nullable()();
 }

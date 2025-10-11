@@ -16,7 +16,8 @@ class AuthState {
   const AuthState({this.currentUser, this.isGuestMode = false});
 
   /// 创建一个表示游客模式的初始状态。
-  factory AuthState.initial() => const AuthState(isGuestMode: false, currentUser: null);
+  factory AuthState.initial() =>
+      const AuthState(isGuestMode: false, currentUser: null);
 }
 
 /// 认证状态通知器
@@ -36,9 +37,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ///
   /// 在应用启动时调用，检查是否存在最后登录的用户。
   Future<void> tryAutoLogin() async {
-    final lastUserId = await _ref.read(userRepositoryProvider).getLastLoggedInUserId();
+    final lastUserId = await _ref
+        .read(userRepositoryProvider)
+        .getLastLoggedInUserId();
     if (lastUserId != null) {
-      final user = await _ref.read(userRepositoryProvider).getUserById(lastUserId);
+      final user = await _ref
+          .read(userRepositoryProvider)
+          .getUserById(lastUserId);
       if (user != null) {
         state = AuthState(currentUser: user, isGuestMode: user.id == 0);
         SettingsService.instance.currentUserId = user.id;
@@ -54,7 +59,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// [password] 密码。
   /// 成功登录后更新状态，失败则抛出异常。
   Future<void> login(String username, String password) async {
-    final user = await _ref.read(userRepositoryProvider).authenticate(username, password);
+    final user = await _ref
+        .read(userRepositoryProvider)
+        .authenticate(username, password);
     if (user != null) {
       state = AuthState(currentUser: user, isGuestMode: false);
       await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(user.id);
@@ -104,7 +111,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// [password] 密码。
   /// 成功注册后，自动为新用户登录，并持久化其ID。
   Future<void> register(String username, String password) async {
-    final newUser = await _ref.read(userRepositoryProvider).createUser(username, password);
+    final newUser = await _ref
+        .read(userRepositoryProvider)
+        .createUser(username, password);
     state = AuthState(currentUser: newUser, isGuestMode: false);
     await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(newUser.id);
     SettingsService.instance.currentUserId = newUser.id;
@@ -117,9 +126,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   ///
   /// 从数据库加载或创建 ID 为 0 的游客用户，并将其设为当前用户，同时持久化其ID。
   Future<void> enterGuestMode() async {
-    final guestUser = await _ref.read(userRepositoryProvider).getOrCreateGuestUser();
+    final guestUser = await _ref
+        .read(userRepositoryProvider)
+        .getOrCreateGuestUser();
     state = AuthState(currentUser: guestUser, isGuestMode: true);
-    await _ref.read(userRepositoryProvider).saveLastLoggedInUserId(guestUser.id);
+    await _ref
+        .read(userRepositoryProvider)
+        .saveLastLoggedInUserId(guestUser.id);
     SettingsService.instance.currentUserId = guestUser.id;
   }
 
@@ -129,9 +142,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 用来确保UI状态与数据库保持同步。
   Future<void> refreshCurrentUserState() async {
     if (state.currentUser != null) {
-      final updatedUser = await _ref.read(userRepositoryProvider).getUserById(state.currentUser!.id);
+      final updatedUser = await _ref
+          .read(userRepositoryProvider)
+          .getUserById(state.currentUser!.id);
       if (updatedUser != null) {
-        state = AuthState(currentUser: updatedUser, isGuestMode: updatedUser.id == 0);
+        state = AuthState(
+          currentUser: updatedUser,
+          isGuestMode: updatedUser.id == 0,
+        );
         SettingsService.instance.currentUserId = updatedUser.id;
       }
     }

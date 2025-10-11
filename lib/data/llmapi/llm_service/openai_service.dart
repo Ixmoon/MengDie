@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 
@@ -40,8 +39,11 @@ class OpenAIService implements BaseLlmService {
       llmContext: llmContext,
       stream: true,
     );
-    
-    return _requestHandler.executeStream(payload, textExtractor: _extractTextFromChunk);
+
+    return _requestHandler.executeStream(
+      payload,
+      textExtractor: _extractTextFromChunk,
+    );
   }
 
   @override
@@ -59,8 +61,11 @@ class OpenAIService implements BaseLlmService {
       llmContext: llmContext,
       stream: false,
     );
-    
-    return _requestHandler.executeOnce(payload, responseParser: _parseOpenAIResponse);
+
+    return _requestHandler.executeOnce(
+      payload,
+      responseParser: _parseOpenAIResponse,
+    );
   }
 
   @override
@@ -82,7 +87,11 @@ class OpenAIService implements BaseLlmService {
         .map((part) => part.text)
         .join('\n');
     if (prompt.isEmpty) {
-      return Future.value(const LlmImageResponse.error("Image generation requires a text prompt."));
+      return Future.value(
+        const LlmImageResponse.error(
+          "Image generation requires a text prompt.",
+        ),
+      );
     }
 
     final payload = OpenAIImagePayload(
@@ -90,7 +99,7 @@ class OpenAIService implements BaseLlmService {
       generationParams: {'n': n}, // Pass n via generationParams
       prompt: prompt,
     );
-    
+
     return _requestHandler.executeImage(payload);
   }
 
@@ -103,29 +112,32 @@ class OpenAIService implements BaseLlmService {
   Future<int> countTokens({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
-    bool useRemoteCounter = false, // Parameter is present to match the interface, but not used.
+    bool useRemoteCounter =
+        false, // Parameter is present to match the interface, but not used.
   }) {
     // OpenAI calculation is always local via tiktoken.
-    return TokenCalculator.countTokens(llmContext: llmContext, apiConfig: apiConfig);
+    return TokenCalculator.countTokens(
+      llmContext: llmContext,
+      apiConfig: apiConfig,
+    );
   }
 
   // --- Helpers ---
   String _extractTextFromChunk(Map<String, dynamic> json) {
-      final choices = json['choices'] as List?;
-      if (choices != null && choices.isNotEmpty) {
-
-          // ===> 在这里添加新代码 <===
-          final finishReason = choices.first['finish_reason'] as String?;
-          // OpenAI 的正常结束标志是 'stop'
-          if (finishReason != null && finishReason != 'stop') {
-              return ""; // Return empty string, the logic will be in the request handler.
-          }
-          // ^^^ --------------------------------- ^^^
-
-          final delta = choices.first['delta'] as Map<String, dynamic>?;
-          return delta?['content'] as String? ?? '';
+    final choices = json['choices'] as List?;
+    if (choices != null && choices.isNotEmpty) {
+      // ===> 在这里添加新代码 <===
+      final finishReason = choices.first['finish_reason'] as String?;
+      // OpenAI 的正常结束标志是 'stop'
+      if (finishReason != null && finishReason != 'stop') {
+        return ""; // Return empty string, the logic will be in the request handler.
       }
-      return '';
+      // ^^^ --------------------------------- ^^^
+
+      final delta = choices.first['delta'] as Map<String, dynamic>?;
+      return delta?['content'] as String? ?? '';
+    }
+    return '';
   }
 
   LlmResponse _parseOpenAIResponse(Map<String, dynamic> data) {
@@ -172,10 +184,8 @@ class OpenAIService implements BaseLlmService {
         throw Exception('Failed to load models: Status ${response.statusCode}');
       }
     } on DioException catch (e) {
-      debugPrint('Error fetching OpenAI models: $e');
       throw Exception('Failed to fetch models: ${e.message}');
     } catch (e) {
-      debugPrint('An unexpected error occurred: $e');
       throw Exception('An unexpected error occurred while fetching models.');
     }
   }
@@ -221,7 +231,7 @@ class OpenAIChatPayload extends OpenAIPayload {
 
   @override
   String buildUrl() => _buildApiUrl('chat/completions');
-  
+
   @override
   Map<String, dynamic> buildBody() {
     final requestBody = <String, dynamic>{
@@ -231,11 +241,16 @@ class OpenAIChatPayload extends OpenAIPayload {
     };
 
     final config = <String, dynamic>{};
-    if (generationParams['temperature'] != null) config['temperature'] = generationParams['temperature'];
-    if (generationParams['topP'] != null) config['top_p'] = generationParams['topP'];
-    if (generationParams['maxOutputTokens'] != null) config['max_tokens'] = generationParams['maxOutputTokens'];
-    if (generationParams['stopSequences'] != null) config['stop'] = generationParams['stopSequences'];
-    if (generationParams['reasoning_effort'] != null) config['reasoning_effort'] = generationParams['reasoning_effort'];
+    if (generationParams['temperature'] != null)
+      config['temperature'] = generationParams['temperature'];
+    if (generationParams['topP'] != null)
+      config['top_p'] = generationParams['topP'];
+    if (generationParams['maxOutputTokens'] != null)
+      config['max_tokens'] = generationParams['maxOutputTokens'];
+    if (generationParams['stopSequences'] != null)
+      config['stop'] = generationParams['stopSequences'];
+    if (generationParams['reasoning_effort'] != null)
+      config['reasoning_effort'] = generationParams['reasoning_effort'];
 
     requestBody.addAll(config);
 
@@ -260,7 +275,9 @@ class OpenAIChatPayload extends OpenAIPayload {
     }
 
     // First, extract system prompt if it exists.
-    final systemPrompt = llmContext!.firstWhereOrNull((c) => c.role == "system");
+    final systemPrompt = llmContext!.firstWhereOrNull(
+      (c) => c.role == "system",
+    );
     if (systemPrompt != null) {
       final systemText = systemPrompt.parts
           .whereType<LlmTextPart>()
@@ -273,7 +290,7 @@ class OpenAIChatPayload extends OpenAIPayload {
 
     // Process the rest of the messages (user and model).
     final messages = llmContext!.where((c) => c.role != "system").toList();
-    
+
     for (final currentMsg in messages) {
       final role = currentMsg.role == 'model' ? 'assistant' : currentMsg.role;
 
@@ -285,7 +302,9 @@ class OpenAIChatPayload extends OpenAIPayload {
         // 1. Add the text part as an assistant message
         if (textParts.isNotEmpty) {
           final assistantContent = _convertParts(textParts);
-          final messageContent = (assistantContent.length == 1 && assistantContent.first['type'] == 'text')
+          final messageContent =
+              (assistantContent.length == 1 &&
+                  assistantContent.first['type'] == 'text')
               ? assistantContent.first['text']
               : assistantContent;
           openAIMessages.add({"role": "assistant", "content": messageContent});
@@ -294,13 +313,15 @@ class OpenAIChatPayload extends OpenAIPayload {
         // 2. Add the image part as a new user message to circumvent API limitations
         if (imageParts.isNotEmpty) {
           final userContent = _convertParts(imageParts);
-           openAIMessages.add({"role": "user", "content": userContent});
+          openAIMessages.add({"role": "user", "content": userContent});
         }
-      } else { // role == 'user'
+      } else {
+        // role == 'user'
         // Standard handling for user messages
         final contentParts = _convertParts(currentMsg.parts);
         if (contentParts.isNotEmpty) {
-          final messageContent = (contentParts.length == 1 && contentParts.first['type'] == 'text')
+          final messageContent =
+              (contentParts.length == 1 && contentParts.first['type'] == 'text')
               ? contentParts.first['text']
               : contentParts;
           openAIMessages.add({"role": "user", "content": messageContent});
@@ -318,12 +339,21 @@ class OpenAIChatPayload extends OpenAIPayload {
       if (part is LlmTextPart) {
         contentParts.add({"type": "text", "text": part.text});
       } else if (part is LlmDataPart) {
-        contentParts.add({"type": "image_url", "image_url": {"url": "data:${part.mimeType};base64,${part.base64Data}"}});
+        contentParts.add({
+          "type": "image_url",
+          "image_url": {
+            "url": "data:${part.mimeType};base64,${part.base64Data}",
+          },
+        });
       } else if (part is LlmAudioPart) {
-         contentParts.add({"type": "input_audio", "input_audio": {"data": part.base64Data, "format": part.mimeType.split('/').last}});
-      } else if (part is LlmFilePart) {
-         debugPrint("Warning: LlmFilePart is currently not supported by OpenAIService.");
-      }
+        contentParts.add({
+          "type": "input_audio",
+          "input_audio": {
+            "data": part.base64Data,
+            "format": part.mimeType.split('/').last,
+          },
+        });
+      } else if (part is LlmFilePart) {}
     }
     return contentParts;
   }

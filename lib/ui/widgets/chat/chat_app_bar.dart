@@ -57,16 +57,22 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
       elevation: 0,
       iconTheme: IconThemeData(
         shadows: <Shadow>[
-          Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+          Shadow(
+            color: Colors.black.withAlpha((255 * 0.5).round()),
+            blurRadius: 1.0,
+          ),
         ],
       ),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back),
         tooltip: '返回列表',
-        onPressed: onBackButtonPressed ?? () { // 修改：优先使用自定义回调
-          ref.read(activeChatIdProvider.notifier).state = null;
-          context.go('/list');
-        },
+        onPressed:
+            onBackButtonPressed ??
+            () {
+              // 修改：优先使用自定义回调
+              ref.read(activeChatIdProvider.notifier).state = null;
+              context.go('/list');
+            },
       ),
       title: Text(
         chat.title ?? '聊天',
@@ -74,7 +80,10 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+            Shadow(
+              color: Colors.black.withAlpha((255 * 0.5).round()),
+              blurRadius: 1.0,
+            ),
           ],
         ),
       ),
@@ -98,48 +107,124 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
           tooltip: '更多选项',
           onPressed: () async {
             final renderBox = context.findRenderObject() as RenderBox;
-            final position = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+            final position =
+                renderBox.localToGlobal(Offset.zero) & renderBox.size;
 
             final String? result = await showMenu<String>(
               context: context,
-              position: RelativeRect.fromLTRB(position.right, position.top, position.right, position.bottom),
+              position: RelativeRect.fromLTRB(
+                position.right,
+                position.top,
+                position.right,
+                position.bottom,
+              ),
               items: <PopupMenuEntry<String>>[
-                _buildPopupMenuItem(value: 'settings', icon: Icons.tune, label: '聊天设置'),
+                _buildPopupMenuItem(
+                  value: 'settings',
+                  icon: Icons.tune,
+                  label: '聊天设置',
+                ),
                 const PopupMenuDivider(),
-                _buildPopupMenuItem(value: 'setCoverImage', icon: Icons.photo_library_outlined, label: '设置封面'),
+                _buildPopupMenuItem(
+                  value: 'setCoverImage',
+                  icon: Icons.photo_library_outlined,
+                  label: '设置封面',
+                ),
                 _buildPopupMenuItem(
                   value: 'exportCoverImage',
                   icon: Icons.upload_file_outlined,
                   label: '导出封面',
-                  enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+                  enabled:
+                      chat.coverImageBase64 != null &&
+                      chat.coverImageBase64!.isNotEmpty,
                 ),
                 _buildPopupMenuItem(
                   value: 'removeCoverImage',
                   icon: Icons.delete_outline,
                   label: '移除封面',
-                  enabled: chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty,
+                  enabled:
+                      chat.coverImageBase64 != null &&
+                      chat.coverImageBase64!.isNotEmpty,
                 ),
                 const PopupMenuDivider(),
-                _buildPopupMenuItem(value: 'toggleOutputMode', icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble, label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出'),
-                _buildPopupMenuItem(value: 'toggleBubbleTransparency', icon: chatState.isBubbleTransparent ? Icons.opacity : Icons.opacity_outlined, label: chatState.isBubbleTransparent ? '切换为不透明气泡' : '切换为半透明气泡'),
-                _buildPopupMenuItem(value: 'toggleBubbleWidth', icon: chatState.isBubbleHalfWidth ? Icons.width_normal : Icons.width_wide, label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡'),
-                _buildPopupMenuItem(value: 'toggleMessageListHeight', icon: chatState.isAutoHeightEnabled ? Icons.dynamic_feed : Icons.height, label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高'),
-                _buildPopupMenuItem(value: 'toggleHighlightQuotes', icon: chatState.highlightQuotes ? Icons.format_quote : Icons.format_quote_outlined, label: chatState.highlightQuotes ? '关闭引号高亮' : '开启引号高亮'),
+                _buildPopupMenuItem(
+                  value: 'toggleOutputMode',
+                  icon: chatState.isStreamMode
+                      ? Icons.stream
+                      : Icons.chat_bubble,
+                  label: chatState.isStreamMode ? '切换为一次性输出' : '切换为流式输出',
+                ),
+                _buildPopupMenuItem(
+                  value: 'toggleBubbleTransparency',
+                  icon: chatState.isBubbleTransparent
+                      ? Icons.opacity
+                      : Icons.opacity_outlined,
+                  label: chatState.isBubbleTransparent
+                      ? '切换为不透明气泡'
+                      : '切换为半透明气泡',
+                ),
+                _buildPopupMenuItem(
+                  value: 'toggleBubbleWidth',
+                  icon: chatState.isBubbleHalfWidth
+                      ? Icons.width_normal
+                      : Icons.width_wide,
+                  label: chatState.isBubbleHalfWidth ? '切换为全宽气泡' : '切换为半宽气泡',
+                ),
+                _buildPopupMenuItem(
+                  value: 'toggleMessageListHeight',
+                  icon: chatState.isAutoHeightEnabled
+                      ? Icons.dynamic_feed
+                      : Icons.height,
+                  label: chatState.isAutoHeightEnabled ? '关闭智能半高' : '开启智能半高',
+                ),
+                _buildPopupMenuItem(
+                  value: 'toggleHighlightQuotes',
+                  icon: chatState.highlightQuotes
+                      ? Icons.format_quote
+                      : Icons.format_quote_outlined,
+                  label: chatState.highlightQuotes ? '关闭引号高亮' : '开启引号高亮',
+                ),
                 const PopupMenuDivider(),
-                _buildPopupMenuItem(value: 'exportChat', icon: Icons.file_download_outlined, label: '导出到文件'),
-                _buildPopupMenuItem(value: 'exportAsTemplate', icon: Icons.flip_to_front_outlined, label: '另存为模板'),
-                _buildPopupMenuItem(value: 'exportAsChat', icon: Icons.control_point_duplicate_outlined, label: '克隆为新聊天'),
+                _buildPopupMenuItem(
+                  value: 'exportChat',
+                  icon: Icons.file_download_outlined,
+                  label: '导出到文件',
+                ),
+                _buildPopupMenuItem(
+                  value: 'exportAsTemplate',
+                  icon: Icons.flip_to_front_outlined,
+                  label: '另存为模板',
+                ),
+                _buildPopupMenuItem(
+                  value: 'exportAsChat',
+                  icon: Icons.control_point_duplicate_outlined,
+                  label: '克隆为新聊天',
+                ),
                 const PopupMenuDivider(),
-                _buildPopupMenuItem(value: 'add_user_message', icon: Icons.add_comment_outlined, label: '添加用户消息'),
-                _buildPopupMenuItem(value: 'add_model_message', icon: Icons.add_comment_outlined, label: '添加模型消息'),
+                _buildPopupMenuItem(
+                  value: 'add_user_message',
+                  icon: Icons.add_comment_outlined,
+                  label: '添加用户消息',
+                ),
+                _buildPopupMenuItem(
+                  value: 'add_model_message',
+                  icon: Icons.add_comment_outlined,
+                  label: '添加模型消息',
+                ),
                 const PopupMenuDivider(),
-                _buildPopupMenuItem(value: 'debug', icon: Icons.bug_report_outlined, label: '调试页面'),
+                _buildPopupMenuItem(
+                  value: 'debug',
+                  icon: Icons.bug_report_outlined,
+                  label: '调试页面',
+                ),
               ],
             );
 
             if (result == null || !context.mounted) return;
 
-            final notifier = ref.read(chatStateNotifierProvider(chatId).notifier);
+            final notifier = ref.read(
+              chatStateNotifierProvider(chatId).notifier,
+            );
             switch (result) {
               case 'settings':
                 context.push('/chat/settings');
@@ -172,33 +257,59 @@ class ChatAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 notifier.toggleHighlightQuotes();
                 break;
               case 'exportChat':
-                notifier.showTopMessage('正在准备导出文件...', backgroundColor: Colors.blueGrey, duration: const Duration(days: 1));
+                notifier.showTopMessage(
+                  '正在准备导出文件...',
+                  backgroundColor: Colors.blueGrey,
+                  duration: const Duration(days: 1),
+                );
                 try {
-                  final finalExportPath = await ref.read(chatExportImportServiceProvider).exportChat(chat.id);
+                  final finalExportPath = await ref
+                      .read(chatExportImportServiceProvider)
+                      .exportChat(chat.id);
                   if (!context.mounted) return;
                   if (finalExportPath != null) {
-                    notifier.showTopMessage('聊天已成功导出到: $finalExportPath', backgroundColor: Colors.green, duration: const Duration(seconds: 4));
+                    notifier.showTopMessage(
+                      '聊天已成功导出到: $finalExportPath',
+                      backgroundColor: Colors.green,
+                      duration: const Duration(seconds: 4),
+                    );
                   } else if (!kIsWeb) {
-                    notifier.showTopMessage('导出操作已取消或未能成功完成。', backgroundColor: Colors.orange, duration: const Duration(seconds: 3));
+                    notifier.showTopMessage(
+                      '导出操作已取消或未能成功完成。',
+                      backgroundColor: Colors.orange,
+                      duration: const Duration(seconds: 3),
+                    );
                   }
                 } catch (e) {
-                  debugPrint("导出聊天时发生错误: $e");
                   if (context.mounted) {
-                    notifier.showTopMessage('导出失败: $e', backgroundColor: Colors.red);
+                    notifier.showTopMessage(
+                      '导出失败: $e',
+                      backgroundColor: Colors.red,
+                    );
                   }
                 } finally {
-                  if (context.mounted && ref.read(chatStateNotifierProvider(chat.id)).topMessageText == '正在准备导出文件...') {
+                  if (context.mounted &&
+                      ref
+                              .read(chatStateNotifierProvider(chat.id))
+                              .topMessageText ==
+                          '正在准备导出文件...') {
                     notifier.clearTopMessage();
                   }
                 }
                 break;
               case 'exportAsTemplate':
                 // 关键修复：upToMessageId: null 表示复制所有消息
-                await notifier.duplicateChat(upToMessageId: null, asTemplate: true);
+                await notifier.duplicateChat(
+                  upToMessageId: null,
+                  asTemplate: true,
+                );
                 break;
               case 'exportAsChat':
                 // 用户反馈：克隆聊天应该不包含消息，所以 upToMessageId: 0
-                await notifier.duplicateChat(upToMessageId: 0, asTemplate: false);
+                await notifier.duplicateChat(
+                  upToMessageId: 0,
+                  asTemplate: false,
+                );
                 break;
               case 'add_user_message':
                 onAddMessageAtEnd(MessageRole.user);

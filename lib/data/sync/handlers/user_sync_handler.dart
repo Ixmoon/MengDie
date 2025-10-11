@@ -14,15 +14,28 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
 
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
-    final rows = await (db.selectOnly(db.users)
-          ..where(db.users.id.isNotValue(0)) // Always exclude guest user
-          ..addColumns([db.users.uuid, db.users.createdAt, db.users.updatedAt]))
-        .get();
-    return rows.map((row) => SyncMeta(
-      id: row.read(db.users.uuid)!,
-      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.users.createdAt)!),
-      updatedAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.users.updatedAt)!)
-    )).toList();
+    final rows =
+        await (db.selectOnly(db.users)
+              ..where(db.users.id.isNotValue(0)) // Always exclude guest user
+              ..addColumns([
+                db.users.uuid,
+                db.users.createdAt,
+                db.users.updatedAt,
+              ]))
+            .get();
+    return rows
+        .map(
+          (row) => SyncMeta(
+            id: row.read(db.users.uuid)!,
+            createdAt: const MicrosecondDateTimeConverter().fromSql(
+              row.read(db.users.createdAt)!,
+            ),
+            updatedAt: const MicrosecondDateTimeConverter().fromSql(
+              row.read(db.users.updatedAt)!,
+            ),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -30,21 +43,28 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     // For users, we fetch all remote metas regardless of local IDs,
     // as we need to know about new users created on other devices.
     // The `localIds` parameter is ignored here.
-    final rows = await remoteConnection!.execute('SELECT uuid, created_at, updated_at FROM users');
-    return rows.map((row) => SyncMeta(
-      id: row[0] as String,
-      createdAt: row[1] as DateTime,
-      updatedAt: row[2] as DateTime
-    )).toList();
+    final rows = await remoteConnection!.execute(
+      'SELECT uuid, created_at, updated_at FROM users',
+    );
+    return rows
+        .map(
+          (row) => SyncMeta(
+            id: row[0] as String,
+            createdAt: row[1] as DateTime,
+            updatedAt: row[2] as DateTime,
+          ),
+        )
+        .toList();
   }
 
   @override
   Future<void> push(List<dynamic> ids) async {
     if (ids.isEmpty) return;
-    final usersToPush = await (db.select(db.users)
-          ..where((t) => t.uuid.isIn(ids.cast<String>()))
-          ..where((t) => t.id.isNotValue(0)))
-        .get();
+    final usersToPush =
+        await (db.select(db.users)
+              ..where((t) => t.uuid.isIn(ids.cast<String>()))
+              ..where((t) => t.id.isNotValue(0)))
+            .get();
     if (usersToPush.isEmpty) return;
 
     await _batchPushUsers(remoteConnection!, usersToPush);
@@ -53,7 +73,10 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   @override
   Future<void> pull(List<dynamic> ids) async {
     if (ids.isEmpty) return;
-    final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM users WHERE uuid = ANY(@ids)'), parameters: {'ids': ids});
+    final rows = await remoteConnection!.execute(
+      Sql.named('SELECT * FROM users WHERE uuid = ANY(@ids)'),
+      parameters: {'ids': ids},
+    );
     final usersToPull = rows
         .map((r) {
           final map = r.toColumnMap();
@@ -72,7 +95,9 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
             'enableResume': map['enable_resume'],
             'resumePrompt': map['resume_prompt'],
             'resumeApiConfigId': map['resume_api_config_id'],
-            'geminiApiKeys': const StringListConverter().fromSql(map['gemini_api_keys']),
+            'geminiApiKeys': const StringListConverter().fromSql(
+              map['gemini_api_keys'],
+            ),
           };
           return DriftUser.fromJson(camelCaseMap);
         })
@@ -81,12 +106,19 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     if (usersToPull.isEmpty) return;
 
     await db.batch((batch) {
-      batch.insertAll(db.users, usersToPull.map((u) => u.toCompanion(true)), mode: InsertMode.insertOrReplace);
+      batch.insertAll(
+        db.users,
+        usersToPull.map((u) => u.toCompanion(true)),
+        mode: InsertMode.insertOrReplace,
+      );
     });
   }
 
   @override
-  Future<Map<dynamic, dynamic>> resolveConflicts(List<SyncMeta> localMetas, List<SyncMeta> remoteMetas) async {
+  Future<Map<dynamic, dynamic>> resolveConflicts(
+    List<SyncMeta> localMetas,
+    List<SyncMeta> remoteMetas,
+  ) async {
     final localIdMap = {for (var meta in localMetas) meta.id: meta};
     final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
     final conflictingUuids = <String>{};
@@ -114,26 +146,33 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     }
     return idChangeMap;
   }
-  
+
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
     // For users, the key is the UUID.
     final uuidsToDelete = keys;
-    await remoteConnection!.execute(Sql.named('DELETE FROM users WHERE uuid = ANY(@ids)'), parameters: {'ids': uuidsToDelete});
+    await remoteConnection!.execute(
+      Sql.named('DELETE FROM users WHERE uuid = ANY(@ids)'),
+      parameters: {'ids': uuidsToDelete},
+    );
   }
 
   // ============== CONFLICT RESOLUTION HELPER ==============
 
   Future<Map<int, int>?> _resolveUserConflict(String oldUuid) async {
-    final user = await (db.select(db.users)..where((tbl) => tbl.uuid.equals(oldUuid))).getSingleOrNull();
+    final user = await (db.select(
+      db.users,
+    )..where((tbl) => tbl.uuid.equals(oldUuid))).getSingleOrNull();
     if (user == null) {
       return null;
     }
     final oldId = user.id;
 
     // Create a new user record with a new auto-incremented ID
-    final newUserCompanion = user.toCompanion(false).copyWith(id: const Value.absent());
+    final newUserCompanion = user
+        .toCompanion(false)
+        .copyWith(id: const Value.absent());
     final newUser = await db.into(db.users).insertReturning(newUserCompanion);
     final newId = newUser.id;
 
@@ -150,7 +189,10 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   // ============== BATCH PUSH HELPER ==============
 
   // Private batch push helper, moved from SyncService
-  Future<void> _batchPushUsers(Connection remoteConnection, List<DriftUser> users) async {
+  Future<void> _batchPushUsers(
+    Connection remoteConnection,
+    List<DriftUser> users,
+  ) async {
     await remoteConnection.execute(
       Sql.named('''
         INSERT INTO users (
@@ -188,18 +230,60 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
       parameters: {
         'ids': TypedValue(Type.integerArray, users.map((u) => u.id).toList()),
         'uuids': TypedValue(Type.textArray, users.map((u) => u.uuid).toList()),
-        'created_ats': TypedValue(Type.timestampArray, users.map((u) => u.createdAt).toList()),
-        'updated_ats': TypedValue(Type.timestampArray, users.map((u) => u.updatedAt).toList()),
-        'usernames': TypedValue(Type.textArray, users.map((u) => u.username).toList()),
-        'password_hashes': TypedValue(Type.textArray, users.map((u) => u.passwordHash).toList()),
-        'chat_ids_list': TypedValue(Type.textArray, users.map((u) => const IntListConverter().toSql(u.chatIds ?? [])).toList()),
-        'enable_auto_title_generations': TypedValue(Type.booleanArray, users.map((u) => u.enableAutoTitleGeneration).toList()),
-        'title_generation_prompts': TypedValue(Type.textArray, users.map((u) => u.titleGenerationPrompt).toList()),
-        'title_generation_api_config_ids': TypedValue(Type.textArray, users.map((u) => u.titleGenerationApiConfigId).toList()),
-        'enable_resumes': TypedValue(Type.booleanArray, users.map((u) => u.enableResume).toList()),
-        'resume_prompts': TypedValue(Type.textArray, users.map((u) => u.resumePrompt).toList()),
-        'resume_api_config_ids': TypedValue(Type.textArray, users.map((u) => u.resumeApiConfigId).toList()),
-        'gemini_api_keys_list': TypedValue(Type.textArray, users.map((u) => const StringListConverter().toSql(u.geminiApiKeys ?? [])).toList()),
+        'created_ats': TypedValue(
+          Type.timestampArray,
+          users.map((u) => u.createdAt).toList(),
+        ),
+        'updated_ats': TypedValue(
+          Type.timestampArray,
+          users.map((u) => u.updatedAt).toList(),
+        ),
+        'usernames': TypedValue(
+          Type.textArray,
+          users.map((u) => u.username).toList(),
+        ),
+        'password_hashes': TypedValue(
+          Type.textArray,
+          users.map((u) => u.passwordHash).toList(),
+        ),
+        'chat_ids_list': TypedValue(
+          Type.textArray,
+          users
+              .map((u) => const IntListConverter().toSql(u.chatIds ?? []))
+              .toList(),
+        ),
+        'enable_auto_title_generations': TypedValue(
+          Type.booleanArray,
+          users.map((u) => u.enableAutoTitleGeneration).toList(),
+        ),
+        'title_generation_prompts': TypedValue(
+          Type.textArray,
+          users.map((u) => u.titleGenerationPrompt).toList(),
+        ),
+        'title_generation_api_config_ids': TypedValue(
+          Type.textArray,
+          users.map((u) => u.titleGenerationApiConfigId).toList(),
+        ),
+        'enable_resumes': TypedValue(
+          Type.booleanArray,
+          users.map((u) => u.enableResume).toList(),
+        ),
+        'resume_prompts': TypedValue(
+          Type.textArray,
+          users.map((u) => u.resumePrompt).toList(),
+        ),
+        'resume_api_config_ids': TypedValue(
+          Type.textArray,
+          users.map((u) => u.resumeApiConfigId).toList(),
+        ),
+        'gemini_api_keys_list': TypedValue(
+          Type.textArray,
+          users
+              .map(
+                (u) => const StringListConverter().toSql(u.geminiApiKeys ?? []),
+              )
+              .toList(),
+        ),
       },
     );
   }

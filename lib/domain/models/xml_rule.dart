@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../enums.dart';
 

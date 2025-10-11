@@ -33,7 +33,7 @@ class ChatListBody extends StatelessWidget {
   final void Function(int) onReorderEnd;
   final void Function(Chat) onItemTap;
   final DragWidgetBuilderV2? dragWidgetBuilder;
-  
+
   const ChatListBody({
     super.key,
     required this.mode,
@@ -96,19 +96,23 @@ class ChatListBody extends StatelessWidget {
       onReorderStart: onReorderStart,
       itemBuilder: (context, index) {
         if (inFolder && index == 0) {
-          return const MoveUpTarget(key: ValueKey('move-up-target-list'), isListView: true);
+          return const MoveUpTarget(
+            key: ValueKey('move-up-target-list'),
+            isListView: true,
+          );
         }
         final chatIndex = inFolder ? index - 1 : index;
         final chat = displayChats[chatIndex];
-        
-        final bool shouldHide = isMultiSelectMode &&
-                                draggedItemId != null &&
-                                selectedItemIds.contains(chat.id);
+
+        final bool shouldHide =
+            isMultiSelectMode &&
+            draggedItemId != null &&
+            selectedItemIds.contains(chat.id);
 
         if (shouldHide) {
           return SizedBox.shrink(key: ValueKey(chat.id));
         }
-        
+
         return ReorderableDelayedDragStartListener(
           key: ValueKey(chat.id),
           index: index,
@@ -127,7 +131,9 @@ class ChatListBody extends StatelessWidget {
     final inFolder = currentFolderId != null;
     final List<Chat> displayChats;
     if (isMultiSelectMode && draggedItemId != null) {
-      displayChats = chats.where((chat) => !selectedItemIds.contains(chat.id)).toList();
+      displayChats = chats
+          .where((chat) => !selectedItemIds.contains(chat.id))
+          .toList();
     } else {
       displayChats = chats;
     }
@@ -146,7 +152,10 @@ class ChatListBody extends StatelessWidget {
       dragWidgetBuilderV2: dragWidgetBuilder,
       itemBuilder: (context, index) {
         if (inFolder && index == 0) {
-          return const MoveUpTarget(key: ValueKey('move-up-target-grid'), isListView: false);
+          return const MoveUpTarget(
+            key: ValueKey('move-up-target-grid'),
+            isListView: false,
+          );
         }
         final chatIndex = inFolder ? index - 1 : index;
         final chat = displayChats[chatIndex];

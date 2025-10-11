@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../domain/enums.dart';
 import '../../../domain/models/message.dart';
- 
- @immutable
+
+@immutable
 class ChatScreenState {
-  final bool isLoading; // Master lock for the entire process (send -> all background tasks done)
-  final bool isPrimaryResponseLoading; // Lock for the direct user-facing response (stream/single)
+  final bool
+  isLoading; // Master lock for the entire process (send -> all background tasks done)
+  final bool
+  isPrimaryResponseLoading; // Lock for the direct user-facing response (stream/single)
   final String? errorMessage; // For critical errors, might still be useful
   final String? topMessageText; // For general informational messages
   final Color? topMessageColor; // Color for the top message banner
@@ -18,16 +20,23 @@ class ChatScreenState {
   final bool isAutoHeightEnabled; // New state for the feature toggle
   final bool highlightQuotes; // New state for highlighting quotes
   final int? totalTokens;
-  final List<List<String>>? helpMeReplySuggestions; // Changed to a list of lists for pagination
+  final List<List<String>>?
+  helpMeReplySuggestions; // Changed to a list of lists for pagination
   final int helpMeReplyPageIndex; // To track the current page of suggestions
   final bool isProcessingInBackground; // New state for background tasks
-  final bool isSummarizing; // New state to indicate a summarization task is running.
-  final bool isGeneratingSuggestions; // New state specifically for the "Help Me Reply" feature
-  final bool isCancelled; // Flag to indicate if the current generation has been cancelled.
-  final Message? streamingMessage; // Holds the message being streamed, for UI display only
-  final bool isStreamingMessageVisible; // Controls the visibility of the streaming message in the UI
+  final bool
+  isSummarizing; // New state to indicate a summarization task is running.
+  final bool
+  isGeneratingSuggestions; // New state specifically for the "Help Me Reply" feature
+  final bool
+  isCancelled; // Flag to indicate if the current generation has been cancelled.
+  final Message?
+  streamingMessage; // Holds the message being streamed, for UI display only
+  final bool
+  isStreamingMessageVisible; // Controls the visibility of the streaming message in the UI
   final bool isImageGenerationMode;
-  final String? carriedOverXml; // Holds the synthesized XML for the latest user message
+  final String?
+  carriedOverXml; // Holds the synthesized XML for the latest user message
   // New fields for context debugging
   final int? keptMessageCount;
   final int? totalMessageCount;
@@ -35,9 +44,9 @@ class ChatScreenState {
   final int? keptTokenCount;
   final int? contextTokenLimit;
   final ContextManagementMode? contextManagementMode;
- 
-   const ChatScreenState({
-     this.isLoading = false,
+
+  const ChatScreenState({
+    this.isLoading = false,
     this.isPrimaryResponseLoading = false,
     this.generationStartTime,
     this.errorMessage,
@@ -68,15 +77,16 @@ class ChatScreenState {
     this.contextTokenLimit,
     this.contextManagementMode,
   });
- 
-   ChatScreenState copyWith({
-     bool? isLoading,
+
+  ChatScreenState copyWith({
+    bool? isLoading,
     bool? isPrimaryResponseLoading,
     String? errorMessage,
     bool clearError = false, // If true, sets errorMessage to null
     String? topMessageText,
     Color? topMessageColor,
-    bool clearTopMessage = false, // If true, sets topMessageText and topMessageColor to null
+    bool clearTopMessage =
+        false, // If true, sets topMessageText and topMessageColor to null
     DateTime? generationStartTime,
     bool clearGenerationStartTime = false,
     bool? isStreaming,
@@ -112,35 +122,68 @@ class ChatScreenState {
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
-      isPrimaryResponseLoading: isPrimaryResponseLoading ?? this.isPrimaryResponseLoading,
+      isPrimaryResponseLoading:
+          isPrimaryResponseLoading ?? this.isPrimaryResponseLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      topMessageText: clearTopMessage ? null : (topMessageText ?? this.topMessageText),
-      topMessageColor: clearTopMessage ? null : (topMessageColor ?? this.topMessageColor),
-      generationStartTime: clearGenerationStartTime ? null : (generationStartTime ?? this.generationStartTime),
+      topMessageText: clearTopMessage
+          ? null
+          : (topMessageText ?? this.topMessageText),
+      topMessageColor: clearTopMessage
+          ? null
+          : (topMessageColor ?? this.topMessageColor),
+      generationStartTime: clearGenerationStartTime
+          ? null
+          : (generationStartTime ?? this.generationStartTime),
       isStreaming: clearStreaming ? false : (isStreaming ?? this.isStreaming),
       isStreamMode: isStreamMode ?? this.isStreamMode,
       isBubbleTransparent: isBubbleTransparent ?? this.isBubbleTransparent,
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
-      isMessageListHalfHeight: isMessageListHalfHeight ?? this.isMessageListHalfHeight,
+      isMessageListHalfHeight:
+          isMessageListHalfHeight ?? this.isMessageListHalfHeight,
       isAutoHeightEnabled: isAutoHeightEnabled ?? this.isAutoHeightEnabled,
       highlightQuotes: highlightQuotes ?? this.highlightQuotes,
       totalTokens: clearTotalTokens ? null : (totalTokens ?? this.totalTokens),
-      helpMeReplySuggestions: clearHelpMeReplySuggestions ? null : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
-      helpMeReplyPageIndex: clearHelpMeReplySuggestions ? 0 : (helpMeReplyPageIndex ?? this.helpMeReplyPageIndex),
-      isProcessingInBackground: isProcessingInBackground ?? this.isProcessingInBackground,
+      helpMeReplySuggestions: clearHelpMeReplySuggestions
+          ? null
+          : (helpMeReplySuggestions ?? this.helpMeReplySuggestions),
+      helpMeReplyPageIndex: clearHelpMeReplySuggestions
+          ? 0
+          : (helpMeReplyPageIndex ?? this.helpMeReplyPageIndex),
+      isProcessingInBackground:
+          isProcessingInBackground ?? this.isProcessingInBackground,
       isSummarizing: isSummarizing ?? this.isSummarizing,
-      isGeneratingSuggestions: isGeneratingSuggestions ?? this.isGeneratingSuggestions,
+      isGeneratingSuggestions:
+          isGeneratingSuggestions ?? this.isGeneratingSuggestions,
       isCancelled: isCancelled ?? this.isCancelled,
-      streamingMessage: clearStreamingMessage ? null : streamingMessage ?? this.streamingMessage,
-      isStreamingMessageVisible: isStreamingMessageVisible ?? (clearStreamingMessage ? false : this.isStreamingMessageVisible),
-      isImageGenerationMode: isImageGenerationMode ?? this.isImageGenerationMode,
-      carriedOverXml: clearCarriedOverXml ? null : carriedOverXml ?? this.carriedOverXml,
-      keptMessageCount: clearContextDebugInfo ? null : keptMessageCount ?? this.keptMessageCount,
-      totalMessageCount: clearContextDebugInfo ? null : totalMessageCount ?? this.totalMessageCount,
-      contextTurnLimit: clearContextDebugInfo ? null : contextTurnLimit ?? this.contextTurnLimit,
-      keptTokenCount: clearContextDebugInfo ? null : keptTokenCount ?? this.keptTokenCount,
-      contextTokenLimit: clearContextDebugInfo ? null : contextTokenLimit ?? this.contextTokenLimit,
-      contextManagementMode: clearContextDebugInfo ? null : contextManagementMode ?? this.contextManagementMode,
+      streamingMessage: clearStreamingMessage
+          ? null
+          : streamingMessage ?? this.streamingMessage,
+      isStreamingMessageVisible:
+          isStreamingMessageVisible ??
+          (clearStreamingMessage ? false : this.isStreamingMessageVisible),
+      isImageGenerationMode:
+          isImageGenerationMode ?? this.isImageGenerationMode,
+      carriedOverXml: clearCarriedOverXml
+          ? null
+          : carriedOverXml ?? this.carriedOverXml,
+      keptMessageCount: clearContextDebugInfo
+          ? null
+          : keptMessageCount ?? this.keptMessageCount,
+      totalMessageCount: clearContextDebugInfo
+          ? null
+          : totalMessageCount ?? this.totalMessageCount,
+      contextTurnLimit: clearContextDebugInfo
+          ? null
+          : contextTurnLimit ?? this.contextTurnLimit,
+      keptTokenCount: clearContextDebugInfo
+          ? null
+          : keptTokenCount ?? this.keptTokenCount,
+      contextTokenLimit: clearContextDebugInfo
+          ? null
+          : contextTokenLimit ?? this.contextTokenLimit,
+      contextManagementMode: clearContextDebugInfo
+          ? null
+          : contextManagementMode ?? this.contextManagementMode,
     );
   }
 }

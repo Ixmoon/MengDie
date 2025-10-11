@@ -32,20 +32,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        await ref.read(authProvider.notifier).login(
-              _usernameController.text,
-              _passwordController.text,
-            );
-       // 登录成功后，在后台触发自动同步和用户设置拉取
-       // We don't await these futures to avoid blocking the UI.
-       SyncService.instance.syncWithRemote();
+        await ref
+            .read(authProvider.notifier)
+            .login(_usernameController.text, _passwordController.text);
+        // 登录成功后，在后台触发自动同步和用户设置拉取
+        // We don't await these futures to avoid blocking the UI.
+        SyncService.instance.syncWithRemote();
 
-       if (mounted) context.go('/list');
+        if (mounted) context.go('/list');
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('登录失败: ${e.toString()}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('登录失败: ${e.toString()}')));
         }
       } finally {
         if (mounted) {
@@ -59,19 +58,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       try {
-        await ref.read(authProvider.notifier).register(
-              _usernameController.text,
-              _passwordController.text,
-            );
-       // 注册成功后，同样触发后台同步
-       SyncService.instance.syncWithRemote();
-       
-       if (mounted) context.go('/list');
+        await ref
+            .read(authProvider.notifier)
+            .register(_usernameController.text, _passwordController.text);
+        // 注册成功后，同样触发后台同步
+        SyncService.instance.syncWithRemote();
+
+        if (mounted) context.go('/list');
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('注册失败: ${e.toString()}')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('注册失败: ${e.toString()}')));
         }
       } finally {
         if (mounted) {
@@ -82,15 +80,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _enterGuestMode() async {
-   setState(() => _isLoading = true);
-   try {
-     await ref.read(authProvider.notifier).enterGuestMode();
-     if (mounted) context.go('/list');
-   } finally {
-     if (mounted) {
-       setState(() => _isLoading = false);
-     }
-   }
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(authProvider.notifier).enterGuestMode();
+      if (mounted) context.go('/list');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _syncUsers() async {
@@ -106,9 +104,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       connectionString = newConnectionString;
       // Update and persist the new settings
-      ref.read(syncSettingsProvider.notifier).updateSettings(
-        syncSettings.copyWith(connectionString: connectionString, isEnabled: true)
-      );
+      ref
+          .read(syncSettingsProvider.notifier)
+          .updateSettings(
+            syncSettings.copyWith(
+              connectionString: connectionString,
+              isEnabled: true,
+            ),
+          );
       // Give a moment for the provider to update before sync service reads it
       await Future.delayed(const Duration(milliseconds: 50));
     }
@@ -117,15 +120,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       await SyncService.instance.syncAllUsers();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('用户数据同步完成')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('用户数据同步完成')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('同步失败: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('同步失败: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
@@ -179,16 +182,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 TextFormField(
                   controller: _usernameController,
                   decoration: const InputDecoration(labelText: '用户名'),
-                  validator: (value) =>
-                      value!.isEmpty ? '请输入用户名' : null,
+                  validator: (value) => value!.isEmpty ? '请输入用户名' : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
                   decoration: const InputDecoration(labelText: '密码'),
                   obscureText: true,
-                  validator: (value) =>
-                      value!.isEmpty ? '请输入密码' : null,
+                  validator: (value) => value!.isEmpty ? '请输入密码' : null,
                 ),
                 const SizedBox(height: 24),
                 if (_isLoading)
@@ -218,7 +219,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         label: const Text('同步远程用户数据'),
                         onPressed: _syncUsers,
                         style: TextButton.styleFrom(
-                          foregroundColor: Theme.of(context).colorScheme.secondary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.secondary,
                         ),
                       ),
                     ],

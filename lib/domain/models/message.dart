@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../enums.dart';
 
@@ -28,7 +28,11 @@ class MessagePart {
   }
 
   // Factory constructor for image part
-  factory MessagePart.image({required String mimeType, required String base64Data, String? fileName}) {
+  factory MessagePart.image({
+    required String mimeType,
+    required String base64Data,
+    String? fileName,
+  }) {
     return MessagePart(
       type: MessagePartType.image,
       mimeType: mimeType,
@@ -38,7 +42,11 @@ class MessagePart {
   }
 
   // Factory constructor for file part
-  factory MessagePart.file({required String mimeType, required String base64Data, required String fileName}) {
+  factory MessagePart.file({
+    required String mimeType,
+    required String base64Data,
+    required String fileName,
+  }) {
     return MessagePart(
       type: MessagePartType.file,
       mimeType: mimeType,
@@ -48,7 +56,11 @@ class MessagePart {
   }
 
   // Factory constructor for audio part
-  factory MessagePart.audio({required String mimeType, required String base64Data, required String fileName}) {
+  factory MessagePart.audio({
+    required String mimeType,
+    required String base64Data,
+    required String fileName,
+  }) {
     return MessagePart(
       type: MessagePartType.audio,
       mimeType: mimeType,
@@ -58,7 +70,10 @@ class MessagePart {
   }
 
   // Factory constructor for a generated image part
-  factory MessagePart.generatedImage({required String base64Data, String? prompt}) {
+  factory MessagePart.generatedImage({
+    required String base64Data,
+    String? prompt,
+  }) {
     // Generated images are typically PNG, but we store them as base64.
     // The 'prompt' can be stored in the 'text' field for convenience.
     return MessagePart(
@@ -69,11 +84,11 @@ class MessagePart {
     );
   }
 
-  factory MessagePart.fromJson(Map<String, dynamic> json) => _$MessagePartFromJson(json);
+  factory MessagePart.fromJson(Map<String, dynamic> json) =>
+      _$MessagePartFromJson(json);
 
   Map<String, dynamic> toJson() => _$MessagePartToJson(this);
 }
-
 
 // --- 消息模型 ---
 @JsonSerializable(explicitToJson: true)
@@ -98,11 +113,17 @@ class Message {
     this.updatedAt,
     this.originalXmlContent,
     this.secondaryXmlContent,
-  })  : timestamp = timestamp ?? DateTime.now(),
-        modelsText = parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
+  }) : timestamp = timestamp ?? DateTime.now(),
+       modelsText = parts
+           .where((p) => p.type == MessagePartType.text)
+           .map((p) => p.text ?? '')
+           .join('\n');
 
   String get rawText {
-    return parts.where((p) => p.type == MessagePartType.text).map((p) => p.text ?? '').join('\n');
+    return parts
+        .where((p) => p.type == MessagePartType.text)
+        .map((p) => p.text ?? '')
+        .join('\n');
   }
 
   Message copyWith({
@@ -124,12 +145,17 @@ class Message {
       role: role ?? this.role,
       timestamp: timestamp ?? this.timestamp,
       updatedAt: updatedAt ?? this.updatedAt,
-      originalXmlContent: clearOriginalXml ? null : originalXmlContent ?? this.originalXmlContent,
-      secondaryXmlContent: clearSecondaryXml ? null : secondaryXmlContent ?? this.secondaryXmlContent,
+      originalXmlContent: clearOriginalXml
+          ? null
+          : originalXmlContent ?? this.originalXmlContent,
+      secondaryXmlContent: clearSecondaryXml
+          ? null
+          : secondaryXmlContent ?? this.secondaryXmlContent,
     );
   }
 
-  factory Message.fromJson(Map<String, dynamic> json) => _$MessageFromJson(json);
+  factory Message.fromJson(Map<String, dynamic> json) =>
+      _$MessageFromJson(json);
 
   Map<String, dynamic> toJson() => _$MessageToJson(this);
 }

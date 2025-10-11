@@ -3,7 +3,6 @@
 
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
 
 // 导入本地模型、服务和新的抽象数据模型
 import '../../domain/models/models.dart';
@@ -11,7 +10,6 @@ import 'llm_service/gemini_service.dart';
 import 'llm_service/openai_service.dart';
 import 'llm_models.dart'; // 新增：导入通用数据模型
 import 'llm_service/base_llm_service.dart';
-
 
 // --- LLM Service Provider ---
 final llmServiceProvider = Provider<LlmService>((ref) {
@@ -28,7 +26,6 @@ final llmServiceProvider = Provider<LlmService>((ref) {
   return LlmService(ref, services);
 });
 
-
 // --- LLM Service Implementation ---
 // This service acts as a facade, providing a generic interface
 // for interacting with different LLMs.
@@ -42,21 +39,29 @@ class LlmService {
   LlmType? _activeServiceType;
 
   LlmService(this._ref, this._services);
+
   /// 【私有方法】根据传入的 ApiConfig 对象准备生成参数。
   /// 这个方法现在是纯粹的功能性辅助方法，不再包含任何配置解析逻辑。
   Map<String, dynamic> _prepareGenerationParams(ApiConfig apiConfig) {
     return {
-      if (apiConfig.useCustomTemperature && apiConfig.temperature != null) 'temperature': apiConfig.temperature,
-      if (apiConfig.useCustomTopP && apiConfig.topP != null) 'topP': apiConfig.topP,
-      if (apiConfig.useCustomTopK && apiConfig.topK != null) 'topK': apiConfig.topK,
-      if (apiConfig.maxOutputTokens != null) 'maxOutputTokens': apiConfig.maxOutputTokens,
-      if (apiConfig.stopSequences != null && apiConfig.stopSequences!.isNotEmpty) 'stopSequences': apiConfig.stopSequences,
-      
+      if (apiConfig.useCustomTemperature && apiConfig.temperature != null)
+        'temperature': apiConfig.temperature,
+      if (apiConfig.useCustomTopP && apiConfig.topP != null)
+        'topP': apiConfig.topP,
+      if (apiConfig.useCustomTopK && apiConfig.topK != null)
+        'topK': apiConfig.topK,
+      if (apiConfig.maxOutputTokens != null)
+        'maxOutputTokens': apiConfig.maxOutputTokens,
+      if (apiConfig.stopSequences != null &&
+          apiConfig.stopSequences!.isNotEmpty)
+        'stopSequences': apiConfig.stopSequences,
+
       // --- Provider-specific settings ---
       // These are passed through and handled by the individual services.
 
       // OpenAI-specific
-      if (apiConfig.enableReasoningEffort == true && apiConfig.reasoningEffort != null)
+      if (apiConfig.enableReasoningEffort == true &&
+          apiConfig.reasoningEffort != null)
         'reasoning_effort': apiConfig.reasoningEffort!.toApiValue,
 
       // Gemini-specific
@@ -76,11 +81,12 @@ class LlmService {
     generationParams['includeThoughts'] = requestThoughts;
 
     _activeServiceType = apiConfig.apiType;
-    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
 
     final service = _services[apiConfig.apiType];
     if (service == null) {
-      return Stream.value(LlmStreamChunk.error("Unsupported API type: ${apiConfig.apiType}", ''));
+      return Stream.value(
+        LlmStreamChunk.error("Unsupported API type: ${apiConfig.apiType}", ''),
+      );
     }
 
     try {
@@ -90,8 +96,12 @@ class LlmService {
         generationParams: generationParams,
       );
     } catch (e) {
-      debugPrint("Error setting up ${apiConfig.apiType} stream: $e");
-      return Stream.value(LlmStreamChunk.error("Failed to start ${apiConfig.apiType} stream: $e", ''));
+      return Stream.value(
+        LlmStreamChunk.error(
+          "Failed to start ${apiConfig.apiType} stream: $e",
+          '',
+        ),
+      );
     }
   }
 
@@ -107,7 +117,6 @@ class LlmService {
     generationParams['includeThoughts'] = requestThoughts;
 
     _activeServiceType = apiConfig.apiType;
-    debugPrint("LlmService: Set active service to $_activeServiceType for potential cancellation.");
 
     final service = _services[apiConfig.apiType];
     if (service == null) {
@@ -121,7 +130,6 @@ class LlmService {
         generationParams: generationParams,
       );
     } catch (e) {
-      debugPrint("Error during ${apiConfig.apiType} sendMessageOnce: $e");
       return LlmResponse.error("${apiConfig.apiType} API Error: $e");
     }
   }
@@ -136,10 +144,11 @@ class LlmService {
     required ApiConfig apiConfig, // 直接接收配置对象
     bool useRemoteCounter = false,
   }) async {
-
     final service = _services[apiConfig.apiType];
     if (service == null) {
-      throw Exception("LlmService.countTokens Error: Unsupported API type: ${apiConfig.apiType}");
+      throw Exception(
+        "LlmService.countTokens Error: Unsupported API type: ${apiConfig.apiType}",
+      );
     }
     return await service.countTokens(
       llmContext: llmContext,
@@ -156,10 +165,15 @@ class LlmService {
   }) async {
     final service = _services[apiConfig.apiType];
     if (service == null) {
-      return LlmImageResponse.error("Unsupported API type: ${apiConfig.apiType}");
+      return LlmImageResponse.error(
+        "Unsupported API type: ${apiConfig.apiType}",
+      );
     }
-    if (apiConfig.apiType != LlmType.openai && apiConfig.apiType != LlmType.gemini) {
-        return LlmImageResponse.error("Image generation is only supported for OpenAI and Gemini compatible APIs.");
+    if (apiConfig.apiType != LlmType.openai &&
+        apiConfig.apiType != LlmType.gemini) {
+      return LlmImageResponse.error(
+        "Image generation is only supported for OpenAI and Gemini compatible APIs.",
+      );
     }
 
     try {
@@ -169,7 +183,6 @@ class LlmService {
         n: n,
       );
     } catch (e) {
-      debugPrint("Error during ${apiConfig.apiType} generateImage: $e");
       return LlmImageResponse.error("${apiConfig.apiType} API Error: $e");
     }
   }
@@ -178,14 +191,11 @@ class LlmService {
   // Future<List<String>> listAvailableModels(LlmType type, {OpenAIAPIConfig? openAIConfig}) async { ... }
   /// Cancels the ongoing request on the currently active service.
   Future<void> cancelActiveRequest() async {
-    debugPrint("LlmService: Received cancellation request for active service: $_activeServiceType");
     if (_activeServiceType == null) {
-      debugPrint("LlmService: Cancellation request ignored, no active service.");
       return;
     }
 
     if (_activeServiceType == null) {
-      debugPrint("LlmService: Cancellation request ignored, no active service.");
       return;
     }
 
@@ -195,7 +205,6 @@ class LlmService {
     }
     // Reset the active service type after cancellation to prevent dangling state
     _activeServiceType = null;
-    debugPrint("LlmService: Active service has been cancelled and reset.");
   }
 }
 

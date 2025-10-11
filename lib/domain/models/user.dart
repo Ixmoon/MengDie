@@ -123,12 +123,18 @@ class User {
       passwordHash: passwordHash ?? this.passwordHash,
       chatIds: chatIds ?? this.chatIds,
       geminiApiKeys: geminiApiKeys ?? this.geminiApiKeys,
-      enableAutoTitleGeneration: enableAutoTitleGeneration ?? this.enableAutoTitleGeneration,
-      titleGenerationPrompt: titleGenerationPrompt ?? this.titleGenerationPrompt,
-      titleGenerationApiConfigId: clearTitleGenerationApiConfigId ? null : titleGenerationApiConfigId ?? this.titleGenerationApiConfigId,
+      enableAutoTitleGeneration:
+          enableAutoTitleGeneration ?? this.enableAutoTitleGeneration,
+      titleGenerationPrompt:
+          titleGenerationPrompt ?? this.titleGenerationPrompt,
+      titleGenerationApiConfigId: clearTitleGenerationApiConfigId
+          ? null
+          : titleGenerationApiConfigId ?? this.titleGenerationApiConfigId,
       enableResume: enableResume ?? this.enableResume,
       resumePrompt: resumePrompt ?? this.resumePrompt,
-      resumeApiConfigId: clearResumeApiConfigId ? null : resumeApiConfigId ?? this.resumeApiConfigId,
+      resumeApiConfigId: clearResumeApiConfigId
+          ? null
+          : resumeApiConfigId ?? this.resumeApiConfigId,
     );
   }
 

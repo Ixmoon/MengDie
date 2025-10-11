@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart'; // for debugPrint
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/models/message.dart';
@@ -24,8 +23,14 @@ class MessageRepository {
   MessageRepository(this._messageDao, this._chatDao);
 
   // --- 数据库操作 ---
-  Future<List<Message>> getMessagesForChat(int chatId, {int? afterMessageId}) async {
-    final messageDataList = await _messageDao.getMessagesForChat(chatId, afterMessageId: afterMessageId);
+  Future<List<Message>> getMessagesForChat(
+    int chatId, {
+    int? afterMessageId,
+  }) async {
+    final messageDataList = await _messageDao.getMessagesForChat(
+      chatId,
+      afterMessageId: afterMessageId,
+    );
     return messageDataList.map(MessageMapper.fromData).toList();
   }
 
@@ -46,12 +51,14 @@ class MessageRepository {
 
   Future<List<Message>> getLastNMessagesForChat(int chatId, int n) async {
     if (n <= 0) return [];
-    final messageDataList = await _messageDao.getLastNMessagesForChat(chatId, n);
+    final messageDataList = await _messageDao.getLastNMessagesForChat(
+      chatId,
+      n,
+    );
     return messageDataList.map(MessageMapper.fromData).toList();
   }
 
   Future<int> saveMessage(Message message) async {
-    debugPrint("MessageRepository: 保存消息 ID: ${message.id} (Chat ID: ${message.chatId}) (Drift)...");
     final companion = MessageMapper.toCompanion(message);
     final newId = await _messageDao.saveOrUpdateMessage(companion);
     // After saving a message, "touch" the parent chat to update its timestamp.
@@ -61,7 +68,6 @@ class MessageRepository {
 
   Future<void> saveMessages(List<Message> messages) async {
     if (messages.isEmpty) return;
-    debugPrint("MessageRepository: 批量保存 ${messages.length} 条消息 (Chat ID: ${messages.firstOrNull?.chatId}) (Drift)...");
     final companions = messages.map(MessageMapper.toCompanion).toList();
     await _messageDao.saveMessages(companions);
 
@@ -73,7 +79,6 @@ class MessageRepository {
   }
 
   Future<bool> deleteMessage(int messageId) async {
-    debugPrint("MessageRepository: 删除消息 ID: $messageId (Drift)...");
     // First, get the message to find its chat ID.
     final message = await getMessageById(messageId);
     if (message == null) {
@@ -90,7 +95,6 @@ class MessageRepository {
   }
 
   Future<int> insertMessage(Message message, int index) async {
-    debugPrint("MessageRepository: 插入消息 at index: $index (Chat ID: ${message.chatId})...");
     final companion = MessageMapper.toCompanion(message);
     final newId = await _messageDao.insertMessageAt(companion, index);
     await _chatDao.touchChat(message.chatId);
@@ -99,7 +103,6 @@ class MessageRepository {
 
   // --- 数据库监听流 ---
   Stream<List<Message>> watchMessagesForChat(int chatId) {
-    debugPrint("MessageRepository: 监听聊天 ID: $chatId 的消息变化 (Drift)...");
     return _messageDao
         .watchMessagesForChat(chatId)
         .map((list) => list.map(MessageMapper.fromData).toList());

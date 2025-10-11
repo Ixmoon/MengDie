@@ -15,7 +15,6 @@ import 'repository_providers.dart';
 //    这些设置从当前登录用户的数据库记录中加载，并在修改后写回数据库。
 //    对于游客模式，它会提供一套临时的默认设置。
 
-
 // --- 同步设置 (设备级) ---
 
 const String _syncEnabledKey = 'sync_enabled';
@@ -28,10 +27,7 @@ class SyncSettings {
 
   SyncSettings({this.isEnabled = false, this.connectionString = ''});
 
-  SyncSettings copyWith({
-    bool? isEnabled,
-    String? connectionString,
-  }) {
+  SyncSettings copyWith({bool? isEnabled, String? connectionString}) {
     return SyncSettings(
       isEnabled: isEnabled ?? this.isEnabled,
       connectionString: connectionString ?? this.connectionString,
@@ -49,21 +45,27 @@ class SyncSettingsNotifier extends StateNotifier<SyncSettings> {
     _prefs = await SharedPreferences.getInstance();
     final isEnabled = _prefs?.getBool(_syncEnabledKey) ?? false;
     final connectionString = _prefs?.getString(_syncConnectionStringKey) ?? '';
-    state = SyncSettings(isEnabled: isEnabled, connectionString: connectionString);
+    state = SyncSettings(
+      isEnabled: isEnabled,
+      connectionString: connectionString,
+    );
   }
 
   Future<void> updateSettings(SyncSettings newSettings) async {
     state = newSettings;
     await _prefs?.setBool(_syncEnabledKey, newSettings.isEnabled);
-    await _prefs?.setString(_syncConnectionStringKey, newSettings.connectionString);
+    await _prefs?.setString(
+      _syncConnectionStringKey,
+      newSettings.connectionString,
+    );
   }
 }
 
 /// 提供 SyncSettingsNotifier 实例的全局 Provider
-final syncSettingsProvider = StateNotifierProvider<SyncSettingsNotifier, SyncSettings>((ref) {
-  return SyncSettingsNotifier();
-});
-
+final syncSettingsProvider =
+    StateNotifierProvider<SyncSettingsNotifier, SyncSettings>((ref) {
+      return SyncSettingsNotifier();
+    });
 
 // --- 主题设置 (设备级) ---
 
@@ -88,7 +90,9 @@ class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
     final themeModeString = prefs.getString(_themeModeKey);
     if (themeModeString != null) {
       try {
-        state = ThemeModeSetting.values.firstWhere((e) => e.toString() == themeModeString);
+        state = ThemeModeSetting.values.firstWhere(
+          (e) => e.toString() == themeModeString,
+        );
       } catch (e) {
         state = ThemeModeSetting.system;
       }
@@ -110,10 +114,10 @@ class ThemeModeNotifier extends StateNotifier<ThemeModeSetting> {
 }
 
 /// 提供 ThemeModeNotifier 实例的全局 Provider。
-final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
-  return ThemeModeNotifier();
-});
-
+final themeModeProvider =
+    StateNotifierProvider<ThemeModeNotifier, ThemeModeSetting>((ref) {
+      return ThemeModeNotifier();
+    });
 
 // --- 全局应用设置 (用户级) ---
 
@@ -152,9 +156,10 @@ class GlobalSettingsNotifier extends StateNotifier<User> {
 ///
 /// 这个 Provider 负责管理应用范围内的用户设置，无论是登录用户还是游客。
 /// UI 可以通过 watch 这个 provider 来获取最新的设置，并通过其 notifier 来更新设置。
-final globalSettingsProvider = StateNotifierProvider<GlobalSettingsNotifier, User>((ref) {
-  return GlobalSettingsNotifier(ref);
-});
+final globalSettingsProvider =
+    StateNotifierProvider<GlobalSettingsNotifier, User>((ref) {
+      return GlobalSettingsNotifier(ref);
+    });
 
 /// 全局设置操作的封装
 ///
@@ -184,7 +189,8 @@ class GlobalSettingsActions {
         enableAutoTitleGeneration: newSettings.enableAutoTitleGeneration,
         titleGenerationPrompt: newSettings.titleGenerationPrompt,
         titleGenerationApiConfigId: newSettings.titleGenerationApiConfigId,
-        clearTitleGenerationApiConfigId: newSettings.titleGenerationApiConfigId == null,
+        clearTitleGenerationApiConfigId:
+            newSettings.titleGenerationApiConfigId == null,
         enableResume: newSettings.enableResume,
         resumePrompt: newSettings.resumePrompt,
         resumeApiConfigId: newSettings.resumeApiConfigId,
@@ -194,7 +200,6 @@ class GlobalSettingsActions {
     }
   }
 }
-
 
 // --- 全局总结比例设置 (设备级) ---
 
@@ -220,6 +225,7 @@ class SummaryRatioNotifier extends StateNotifier<double> {
   }
 }
 
-final summaryRatioProvider = StateNotifierProvider<SummaryRatioNotifier, double>((ref) {
-  return SummaryRatioNotifier();
-});
+final summaryRatioProvider =
+    StateNotifierProvider<SummaryRatioNotifier, double>((ref) {
+      return SummaryRatioNotifier();
+    });

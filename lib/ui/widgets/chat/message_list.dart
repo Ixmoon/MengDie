@@ -8,7 +8,6 @@ import '../../../app/providers/chat_state_providers.dart';
 import '../../../app/providers/settings_providers.dart';
 import '../message_bubble.dart';
 
-
 class MessageList extends ConsumerStatefulWidget {
   final int chatId;
   final ScrollController scrollController;
@@ -34,7 +33,10 @@ class MessageList extends ConsumerStatefulWidget {
 class _MessageListState extends ConsumerState<MessageList> {
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(widget.chatId), (previous, next) {
+    ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(widget.chatId), (
+      previous,
+      next,
+    ) {
       if (previous == next) return;
 
       if (next is! AsyncData || !next.hasValue || next.requireValue.isEmpty) {
@@ -43,8 +45,10 @@ class _MessageListState extends ConsumerState<MessageList> {
 
       final chatState = ref.read(chatStateNotifierProvider(widget.chatId));
       if (chatState.isLoading) return;
-      
-      ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
+
+      ref
+          .read(chatStateNotifierProvider(widget.chatId).notifier)
+          .calculateAndStoreTokenCount();
     });
 
     final messagesAsync = ref.watch(chatMessagesProvider(widget.chatId));
@@ -52,22 +56,28 @@ class _MessageListState extends ConsumerState<MessageList> {
 
     return messagesAsync.when(
       data: (dbMessages) {
-        if ((chatState.totalTokens ?? 0) == 0 && !chatState.isLoading && dbMessages.isNotEmpty) {
+        if ((chatState.totalTokens ?? 0) == 0 &&
+            !chatState.isLoading &&
+            dbMessages.isNotEmpty) {
           final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
           if (apiConfigs.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                ref.read(chatStateNotifierProvider(widget.chatId).notifier).calculateAndStoreTokenCount();
+                ref
+                    .read(chatStateNotifierProvider(widget.chatId).notifier)
+                    .calculateAndStoreTokenCount();
               }
             });
           }
         }
-        
+
         final streamingMessage = chatState.streamingMessage;
         final List<Message> allMessages;
 
         if (chatState.isStreamingMessageVisible && streamingMessage != null) {
-          final tempMessages = dbMessages.where((m) => m.id != streamingMessage.id).toList();
+          final tempMessages = dbMessages
+              .where((m) => m.id != streamingMessage.id)
+              .toList();
           tempMessages.add(streamingMessage);
           allMessages = tempMessages;
         } else {
@@ -75,7 +85,9 @@ class _MessageListState extends ConsumerState<MessageList> {
         }
 
         // 查找最新的用户消息ID
-        final latestUserMessageId = allMessages.lastWhereOrNull((m) => m.role == MessageRole.user)?.id;
+        final latestUserMessageId = allMessages
+            .lastWhereOrNull((m) => m.role == MessageRole.user)
+            ?.id;
 
         return ListView.builder(
           reverse: true,
@@ -85,7 +97,10 @@ class _MessageListState extends ConsumerState<MessageList> {
           itemBuilder: (context, index) {
             final message = allMessages[allMessages.length - 1 - index];
             final isLastMessage = index == 0;
-            final isThisMessageStreaming = chatState.isStreaming && streamingMessage != null && message.id == streamingMessage.id;
+            final isThisMessageStreaming =
+                chatState.isStreaming &&
+                streamingMessage != null &&
+                message.id == streamingMessage.id;
             final isLatestUserMessage = message.id == latestUserMessageId;
 
             // Create a column of MessageBubble widgets, one for each part of the message.
@@ -101,7 +116,9 @@ class _MessageListState extends ConsumerState<MessageList> {
                 secondaryXmlContent: message.secondaryXmlContent,
               );
               return MessageBubble(
-                key: ValueKey("${message.id}_${message.parts.indexOf(part)}_${chatState.isBubbleTransparent}_${chatState.isBubbleHalfWidth}_${chatState.highlightQuotes}"),
+                key: ValueKey(
+                  "${message.id}_${message.parts.indexOf(part)}_${chatState.isBubbleTransparent}_${chatState.isBubbleHalfWidth}_${chatState.highlightQuotes}",
+                ),
                 message: singlePartMessage,
                 xmlRules: widget.xmlRules,
                 isStreaming: isThisMessageStreaming,
@@ -109,27 +126,37 @@ class _MessageListState extends ConsumerState<MessageList> {
                 isHalfWidth: chatState.isBubbleHalfWidth,
                 highlightQuotes: chatState.highlightQuotes,
                 onTap: () => widget.onMessageTap(message, part, allMessages),
-                totalTokens: isLastMessage && part == message.parts.last && !isThisMessageStreaming
+                totalTokens:
+                    isLastMessage &&
+                        part == message.parts.last &&
+                        !isThisMessageStreaming
                     ? chatState.totalTokens
                     : null,
                 // 将合成的XML和标记传递给最新的用户消息
-                carriedOverXml: isLatestUserMessage ? widget.carriedOverXml : null,
+                carriedOverXml: isLatestUserMessage
+                    ? widget.carriedOverXml
+                    : null,
               );
             }).toList();
-            
+
             Widget buildActionButtons() {
-              final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+              final chatState = ref.watch(
+                chatStateNotifierProvider(widget.chatId),
+              );
               // Action buttons should only appear after the last message if it's from the model and not loading.
-              final canPerformAction = isLastMessage &&
-                                     allMessages.isNotEmpty &&
-                                     allMessages.last.role == MessageRole.model &&
-                                     !chatState.isLoading;
+              final canPerformAction =
+                  isLastMessage &&
+                  allMessages.isNotEmpty &&
+                  allMessages.last.role == MessageRole.model &&
+                  !chatState.isLoading;
 
               if (!canPerformAction) return const SizedBox.shrink();
 
               final chat = ref.watch(currentChatProvider(widget.chatId)).value;
               final globalSettings = ref.watch(globalSettingsProvider);
-              final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+              final notifier = ref.read(
+                chatStateNotifierProvider(widget.chatId).notifier,
+              );
 
               if (chat == null) return const SizedBox.shrink();
 
@@ -142,8 +169,13 @@ class _MessageListState extends ConsumerState<MessageList> {
                   label: const Text('续写'),
                   onPressed: notifier.continueGeneration,
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                   ),
                 ),
               );
@@ -153,13 +185,21 @@ class _MessageListState extends ConsumerState<MessageList> {
                 buttons.add(const SizedBox(width: 8));
                 buttons.add(
                   FilledButton.tonalIcon(
-                    icon: const Icon(Icons.replay_circle_filled_rounded, size: 16),
+                    icon: const Icon(
+                      Icons.replay_circle_filled_rounded,
+                      size: 16,
+                    ),
                     label: const Text('中断恢复'),
                     onPressed: notifier.resumeGeneration,
-                     style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
                       ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
                   ),
                 );
               }
@@ -174,9 +214,16 @@ class _MessageListState extends ConsumerState<MessageList> {
                       label: const Text('取消'),
                       onPressed: () => notifier.cancelGeneration(),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        backgroundColor: Colors.red.withAlpha((255 * 0.1).round()),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        backgroundColor: Colors.red.withAlpha(
+                          (255 * 0.1).round(),
+                        ),
                         foregroundColor: Colors.red.shade700,
                       ),
                     ),
@@ -195,15 +242,21 @@ class _MessageListState extends ConsumerState<MessageList> {
                               builder: (dialogContext) => _HelpMeReplyDialog(
                                 chatId: widget.chatId,
                                 initialSuggestions: suggestions,
-                                onSuggestionSelected: widget.onSuggestionSelected,
+                                onSuggestionSelected:
+                                    widget.onSuggestionSelected,
                               ),
                             );
                           },
                         );
                       },
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
                       ),
                     ),
                   );
@@ -231,10 +284,7 @@ class _MessageListState extends ConsumerState<MessageList> {
             if (isLastMessage) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  messageColumn,
-                  buildActionButtons(),
-                ],
+                children: [messageColumn, buildActionButtons()],
               );
             }
             return messageColumn;
@@ -246,7 +296,6 @@ class _MessageListState extends ConsumerState<MessageList> {
     );
   }
 }
-
 
 class _HelpMeReplyDialog extends ConsumerStatefulWidget {
   final int chatId;
@@ -263,7 +312,8 @@ class _HelpMeReplyDialog extends ConsumerStatefulWidget {
   ConsumerState<_HelpMeReplyDialog> createState() => _HelpMeReplyDialogState();
 }
 
-class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with SingleTickerProviderStateMixin {
+class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _animationController;
 
   @override
@@ -284,10 +334,13 @@ class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with Sin
   @override
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
-    final notifier = ref.read(chatStateNotifierProvider(widget.chatId).notifier);
+    final notifier = ref.read(
+      chatStateNotifierProvider(widget.chatId).notifier,
+    );
     final allSuggestionPages = chatState.helpMeReplySuggestions ?? [];
     final pageIndex = chatState.helpMeReplyPageIndex;
-    final currentSuggestions = (allSuggestionPages.isNotEmpty && pageIndex < allSuggestionPages.length)
+    final currentSuggestions =
+        (allSuggestionPages.isNotEmpty && pageIndex < allSuggestionPages.length)
         ? allSuggestionPages[pageIndex]
         : <String>[];
     final totalPages = allSuggestionPages.length;
@@ -312,13 +365,17 @@ class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with Sin
         ),
         child: ListView(
           shrinkWrap: true,
-          children: currentSuggestions.map((s) => ListTile(
-            title: Text(s),
-            onTap: () {
-              widget.onSuggestionSelected(s);
-              Navigator.of(context).pop();
-            },
-          )).toList(),
+          children: currentSuggestions
+              .map(
+                (s) => ListTile(
+                  title: Text(s),
+                  onTap: () {
+                    widget.onSuggestionSelected(s);
+                    Navigator.of(context).pop();
+                  },
+                ),
+              )
+              .toList(),
         ),
       );
     }
@@ -336,18 +393,22 @@ class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with Sin
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left),
-                    onPressed: (isGenerating || pageIndex <= 0) ? null : () => notifier.changeHelpMeReplyPage(-1),
+                    onPressed: (isGenerating || pageIndex <= 0)
+                        ? null
+                        : () => notifier.changeHelpMeReplyPage(-1),
                   ),
                   Text('${pageIndex + 1}/$totalPages'),
                   IconButton(
                     icon: const Icon(Icons.chevron_right),
-                    onPressed: (isGenerating || pageIndex >= totalPages - 1) ? null : () => notifier.changeHelpMeReplyPage(1),
+                    onPressed: (isGenerating || pageIndex >= totalPages - 1)
+                        ? null
+                        : () => notifier.changeHelpMeReplyPage(1),
                   ),
                 ],
               )
             else
               const SizedBox(),
-            
+
             Row(
               children: [
                 RotationTransition(
@@ -355,13 +416,14 @@ class _HelpMeReplyDialogState extends ConsumerState<_HelpMeReplyDialog> with Sin
                   child: IconButton(
                     icon: const Icon(Icons.refresh),
                     tooltip: '获取新选项',
-                    onPressed: isGenerating ? null : () {
-                      notifier.generateHelpMeReply(
-                        forceRefresh: true,
-                        onSuggestionsReady: (suggestions) {
-                        },
-                      );
-                    },
+                    onPressed: isGenerating
+                        ? null
+                        : () {
+                            notifier.generateHelpMeReply(
+                              forceRefresh: true,
+                              onSuggestionsReady: (suggestions) {},
+                            );
+                          },
                   ),
                 ),
                 TextButton(

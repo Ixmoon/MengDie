@@ -11,24 +11,32 @@ import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
 
 mixin MessageOperations on StateNotifier<ChatScreenState> {
-    // Abstract dependencies to be implemented by the main class
-    Ref get ref;
-    int get chatId;
-    @override
-    bool get mounted;
+  // Abstract dependencies to be implemented by the main class
+  Ref get ref;
+  int get chatId;
+  @override
+  bool get mounted;
 
-    // Abstract methods that this mixin depends on
-    void clearHelpMeReplySuggestions();
-    void showTopMessage(String text, {Color? backgroundColor, Duration duration = const Duration(seconds: 3)});
+  // Abstract methods that this mixin depends on
+  void clearHelpMeReplySuggestions();
+  void showTopMessage(
+    String text, {
+    Color? backgroundColor,
+    Duration duration = const Duration(seconds: 3),
+  });
 
-    Future<void> deleteMessage(int messageId) async {
+  Future<void> deleteMessage(int messageId) async {
     if (!mounted) return;
     try {
       final messageRepo = ref.read(messageRepositoryProvider);
       final deleted = await messageRepo.deleteMessage(messageId);
       if (mounted) {
         if (deleted) {
-          showTopMessage('消息已删除', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+          showTopMessage(
+            '消息已删除',
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          );
           clearHelpMeReplySuggestions(); // Clear suggestions as they might be based on the deleted message
 
           final chatRepo = ref.read(chatRepositoryProvider);
@@ -37,15 +45,18 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
             final contextXmlService = ref.read(contextXmlServiceProvider);
             final tempContext = await contextXmlService.buildApiRequestContext(
               chatId: chatId,
-              currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
+              currentUserMessage: Message(
+                chatId: chatId,
+                role: MessageRole.user,
+                parts: [MessagePart.text("check scope")],
+              ),
             );
-            final bool isMessageInSummarizedScope = tempContext.droppedMessages.any((m) => m.id == messageId);
+            final bool isMessageInSummarizedScope = tempContext.droppedMessages
+                .any((m) => m.id == messageId);
 
             if (isMessageInSummarizedScope) {
               await chatRepo.saveChat(chat.copyWith(contextSummary: null));
               showTopMessage("被删除的消息在摘要范围内，已清除上下文摘要。");
-            } else {
-              debugPrint("ChatStateNotifier($chatId): 被删除的消息不在摘要范围内，保留上下文摘要。");
             }
           }
         } else {
@@ -53,18 +64,22 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
         }
       }
     } catch (e) {
-      debugPrint("Notifier 删除消息时出错: $e");
       if (mounted) {
         showTopMessage('删除消息出错: $e', backgroundColor: Colors.red);
       }
     }
   }
 
-  Future<void> editMessage(int messageId, {String? newText, List<MessagePart>? newParts, Message? updatedMessage}) async {
+  Future<void> editMessage(
+    int messageId, {
+    String? newText,
+    List<MessagePart>? newParts,
+    Message? updatedMessage,
+  }) async {
     if (!mounted) return;
     try {
       final messageRepo = ref.read(messageRepositoryProvider);
-      
+
       Message? messageToSave = updatedMessage;
 
       if (messageToSave == null) {
@@ -76,22 +91,27 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
         if (newParts != null) {
           messageToSave = message.copyWith(parts: newParts);
         } else if (newText != null) {
-          final updatedParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
+          final updatedParts = message.parts
+              .where((p) => p.type != MessagePartType.text)
+              .toList();
           updatedParts.insert(0, MessagePart.text(newText));
           messageToSave = message.copyWith(parts: updatedParts);
         } else {
           return; // Nothing to update
         }
       }
-      
+
       await messageRepo.saveMessage(messageToSave);
 
       if (mounted) {
-        showTopMessage('消息已更新', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+        showTopMessage(
+          '消息已更新',
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        );
         clearHelpMeReplySuggestions();
       }
     } catch (e) {
-      debugPrint("Notifier 更新消息时出错: $e");
       if (mounted) {
         showTopMessage('保存编辑失败: $e', backgroundColor: Colors.red);
       }
@@ -112,7 +132,12 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
       await repo.duplicateChat(chatId, upToMessageId: null, asTemplate: true);
       if (!mounted) return;
       showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
-      ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+      ref.invalidate(
+        chatListProvider((
+          parentFolderId: null,
+          mode: ChatListMode.templateManagement,
+        )),
+      );
     } catch (e) {
       if (mounted) {
         showTopMessage('另存为模板失败: $e', backgroundColor: Colors.red);
@@ -125,7 +150,11 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
     try {
       final repo = ref.read(chatRepositoryProvider);
       // 用户反馈：克隆聊天应该不包含消息，所以 upToMessageId: 0
-      final newChatId = await repo.duplicateChat(chatId, upToMessageId: 0, asTemplate: false);
+      final newChatId = await repo.duplicateChat(
+        chatId,
+        upToMessageId: 0,
+        asTemplate: false,
+      );
       if (!mounted) return null;
       showTopMessage('已成功克隆为新聊天', backgroundColor: Colors.green);
       return newChatId;
@@ -148,11 +177,14 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
       );
       final newId = await messageRepo.insertMessage(newMessage, index);
       if (mounted) {
-        showTopMessage('消息已插入', backgroundColor: Colors.green, duration: const Duration(seconds: 2));
+        showTopMessage(
+          '消息已插入',
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        );
       }
       return newId;
     } catch (e) {
-      debugPrint("Notifier 插入消息时出错: $e");
       if (mounted) {
         showTopMessage('插入消息失败: $e', backgroundColor: Colors.red);
       }

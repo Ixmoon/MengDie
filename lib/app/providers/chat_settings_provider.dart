@@ -1,20 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:meta/meta.dart';
 
 import '../../domain/models/chat.dart';
 import '../repositories/chat_repository.dart';
 import 'repository_providers.dart';
-
 
 @immutable
 class ChatSettingsState {
   final AsyncValue<Chat> initialChat;
   final Chat? updatedChat; // Holds the state being edited
 
-  const ChatSettingsState({
-    required this.initialChat,
-    this.updatedChat,
-  });
+  const ChatSettingsState({required this.initialChat, this.updatedChat});
 
   // When editing, we use updatedChat. When displaying initial data, we use initialChat.
   Chat? get chatForDisplay => updatedChat ?? (initialChat.valueOrNull);
@@ -33,9 +29,9 @@ class ChatSettingsState {
 class ChatSettingsNotifier extends StateNotifier<ChatSettingsState> {
   final ChatRepository _chatRepository;
   final int _chatId;
-  
+
   ChatSettingsNotifier(this._chatRepository, this._chatId)
-      : super(const ChatSettingsState(initialChat: AsyncValue.loading())) {
+    : super(const ChatSettingsState(initialChat: AsyncValue.loading())) {
     _loadInitialChat();
   }
 
@@ -70,7 +66,8 @@ class ChatSettingsNotifier extends StateNotifier<ChatSettingsState> {
   }
 }
 
-final chatSettingsProvider = StateNotifierProvider.autoDispose.family<ChatSettingsNotifier, ChatSettingsState, int>((ref, chatId) {
-  final chatRepository = ref.watch(chatRepositoryProvider);
-  return ChatSettingsNotifier(chatRepository, chatId);
-});
+final chatSettingsProvider = StateNotifierProvider.autoDispose
+    .family<ChatSettingsNotifier, ChatSettingsState, int>((ref, chatId) {
+      final chatRepository = ref.watch(chatRepositoryProvider);
+      return ChatSettingsNotifier(chatRepository, chatId);
+    });

@@ -15,7 +15,9 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
 
   Future<List<int>> _getChatIdsForCurrentUser() async {
     if (userId == 0) return [];
-    final user = await (db.select(db.users)..where((u) => u.id.equals(userId))).getSingleOrNull();
+    final user = await (db.select(
+      db.users,
+    )..where((u) => u.id.equals(userId))).getSingleOrNull();
     return user?.chatIds ?? [];
   }
 
@@ -24,16 +26,33 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     final chatIds = await _getChatIdsForCurrentUser();
     if (chatIds.isEmpty) return [];
 
-    final query = db.selectOnly(db.messages)..where(db.messages.chatId.isIn(chatIds));
-    final rows = await (query..addColumns([db.messages.id, db.messages.timestamp, db.messages.updatedAt])).get();
-    
-    return rows.map((row) => SyncMeta(
-      id: row.read(db.messages.id)!,
-      createdAt: const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.timestamp)!),
-      updatedAt: row.read(db.messages.updatedAt) != null
-          ? const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.updatedAt)!)
-          : const MicrosecondDateTimeConverter().fromSql(row.read(db.messages.timestamp)!)
-    )).toList();
+    final query = db.selectOnly(db.messages)
+      ..where(db.messages.chatId.isIn(chatIds));
+    final rows =
+        await (query..addColumns([
+              db.messages.id,
+              db.messages.timestamp,
+              db.messages.updatedAt,
+            ]))
+            .get();
+
+    return rows
+        .map(
+          (row) => SyncMeta(
+            id: row.read(db.messages.id)!,
+            createdAt: const MicrosecondDateTimeConverter().fromSql(
+              row.read(db.messages.timestamp)!,
+            ),
+            updatedAt: row.read(db.messages.updatedAt) != null
+                ? const MicrosecondDateTimeConverter().fromSql(
+                    row.read(db.messages.updatedAt)!,
+                  )
+                : const MicrosecondDateTimeConverter().fromSql(
+                    row.read(db.messages.timestamp)!,
+                  ),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -44,7 +63,7 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     // We need to fetch messages that belong to the user's chats.
     // The `localIds` (which are message IDs) is not sufficient alone.
     // We must ensure we only fetch messages from chats owned by the current user.
-    
+
     String whereClause;
     Map<String, dynamic> parameters;
 
@@ -59,19 +78,17 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     }
 
     final rows = await remoteConnection!.execute(
-      Sql.named('SELECT id, "timestamp", updated_at FROM messages $whereClause'),
+      Sql.named(
+        'SELECT id, "timestamp", updated_at FROM messages $whereClause',
+      ),
       parameters: parameters,
     );
-    
+
     return rows.map((row) {
       final id = row[0] as int;
       final createdAt = row[1] as DateTime;
       final updatedAt = row[2] is DateTime ? row[2] as DateTime : createdAt;
-      return SyncMeta(
-        id: id,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-      );
+      return SyncMeta(id: id, createdAt: createdAt, updatedAt: updatedAt);
     }).toList();
   }
 
@@ -79,7 +96,9 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
   Future<void> push(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final messageIds = ids.cast<int>();
-    final messagesToPush = await (db.select(db.messages)..where((t) => t.id.isIn(messageIds))).get();
+    final messagesToPush = await (db.select(
+      db.messages,
+    )..where((t) => t.id.isIn(messageIds))).get();
     if (messagesToPush.isEmpty) return;
 
     await _batchPushMessages(remoteConnection!, messagesToPush);
@@ -90,7 +109,10 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     if (ids.isEmpty) return;
     final messageIds = ids.cast<int>();
 
-    final rows = await remoteConnection!.execute(Sql.named('SELECT * FROM messages WHERE id = ANY(@ids)'), parameters: {'ids': messageIds});
+    final rows = await remoteConnection!.execute(
+      Sql.named('SELECT * FROM messages WHERE id = ANY(@ids)'),
+      parameters: {'ids': messageIds},
+    );
     final messagesToPull = rows.map((row) {
       final map = row.toColumnMap();
       final now = DateTime.now().toUtc();
@@ -100,7 +122,7 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
         rawText: map['raw_text'],
         role: const MessageRoleConverter().fromSql(map['role']),
         timestamp: map['timestamp'] ?? now,
-        updatedAt: map['updated_at'] ?? map['timestamp'] ?? now,
+        updatedAt: map['updated_at'] ?? map['timestamp'],
         originalXmlContent: map['original_xml_content'],
         secondaryXmlContent: map['secondary_xml_content'],
       );
@@ -108,12 +130,19 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     if (messagesToPull.isEmpty) return;
 
     await db.batch((batch) {
-      batch.insertAll(db.messages, messagesToPull.map((m) => m.toCompanion(true)), mode: InsertMode.insertOrReplace);
+      batch.insertAll(
+        db.messages,
+        messagesToPull.map((m) => m.toCompanion(true)),
+        mode: InsertMode.insertOrReplace,
+      );
     });
   }
 
   @override
-  Future<Map<dynamic, dynamic>> resolveConflicts(List<SyncMeta> localMetas, List<SyncMeta> remoteMetas) async {
+  Future<Map<dynamic, dynamic>> resolveConflicts(
+    List<SyncMeta> localMetas,
+    List<SyncMeta> remoteMetas,
+  ) async {
     final localIdMap = {for (var meta in localMetas) meta.id: meta};
     final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
     final conflictingIds = <int>{};
@@ -149,29 +178,41 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    final messageIdsToDelete = keys.map((key) {
-      try {
-        // Assuming the key format is (id, createdAt)
-        return int.tryParse(key.substring(1, key.indexOf(','))) ?? -1;
-      } catch (e) {
-        return -1;
-      }
-    }).where((id) => id != -1).toList();
+    final messageIdsToDelete = keys
+        .map((key) {
+          try {
+            // Assuming the key format is (id, createdAt)
+            return int.tryParse(key.substring(1, key.indexOf(','))) ?? -1;
+          } catch (_) {
+            return -1;
+          }
+        })
+        .where((id) => id != -1)
+        .toList();
 
     if (messageIdsToDelete.isNotEmpty) {
-      await remoteConnection!.execute(Sql.named('DELETE FROM messages WHERE id = ANY(@ids)'), parameters: {'ids': messageIdsToDelete});
+      await remoteConnection!.execute(
+        Sql.named('DELETE FROM messages WHERE id = ANY(@ids)'),
+        parameters: {'ids': messageIdsToDelete},
+      );
     }
   }
 
   Future<int?> _resolveMessageConflict(int oldId) async {
-    final message = await (db.select(db.messages)..where((tbl) => tbl.id.equals(oldId))).getSingleOrNull();
+    final message = await (db.select(
+      db.messages,
+    )..where((tbl) => tbl.id.equals(oldId))).getSingleOrNull();
     if (message == null) {
       return null;
     }
 
     // 1. Create a new message with a new ID
-    final newMessageCompanion = message.toCompanion(false).copyWith(id: const Value.absent());
-    final newMessage = await db.into(db.messages).insertReturning(newMessageCompanion);
+    final newMessageCompanion = message
+        .toCompanion(false)
+        .copyWith(id: const Value.absent());
+    final newMessage = await db
+        .into(db.messages)
+        .insertReturning(newMessageCompanion);
     final newId = newMessage.id;
 
     // 2. **LINKED UPDATE**: Update all foreign key references in other tables.
@@ -188,7 +229,10 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     return newId;
   }
 
-  Future<void> _batchPushMessages(Connection remoteConnection, List<MessageData> messages) async {
+  Future<void> _batchPushMessages(
+    Connection remoteConnection,
+    List<MessageData> messages,
+  ) async {
     if (messages.isEmpty) return;
 
     await remoteConnection.execute(
@@ -211,15 +255,39 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
           chat_id = EXCLUDED.chat_id;
       '''),
       parameters: {
-        'ids': TypedValue(Type.integerArray, messages.map((m) => m.id).toList()),
-        'chat_ids': TypedValue(Type.integerArray, messages.map((m) => m.chatId).toList()),
-        'roles': TypedValue(Type.textArray, messages.map((m) => m.role.name).toList()),
-        'raw_texts': TypedValue(Type.textArray, messages.map((m) => m.rawText).toList()),
-        'timestamps': TypedValue(Type.timestampArray, messages.map((m) => m.timestamp).toList()),
-        'updated_ats': TypedValue(Type.timestampArray, messages.map((m) => m.updatedAt ?? m.timestamp).toList()),
-        'original_xml_contents': TypedValue(Type.textArray, messages.map((m) => m.originalXmlContent).toList()),
-        'secondary_xml_contents': TypedValue(Type.textArray, messages.map((m) => m.secondaryXmlContent).toList()),
-      }
+        'ids': TypedValue(
+          Type.integerArray,
+          messages.map((m) => m.id).toList(),
+        ),
+        'chat_ids': TypedValue(
+          Type.integerArray,
+          messages.map((m) => m.chatId).toList(),
+        ),
+        'roles': TypedValue(
+          Type.textArray,
+          messages.map((m) => m.role.name).toList(),
+        ),
+        'raw_texts': TypedValue(
+          Type.textArray,
+          messages.map((m) => m.rawText).toList(),
+        ),
+        'timestamps': TypedValue(
+          Type.timestampArray,
+          messages.map((m) => m.timestamp).toList(),
+        ),
+        'updated_ats': TypedValue(
+          Type.timestampArray,
+          messages.map((m) => m.updatedAt).toList(),
+        ),
+        'original_xml_contents': TypedValue(
+          Type.textArray,
+          messages.map((m) => m.originalXmlContent).toList(),
+        ),
+        'secondary_xml_contents': TypedValue(
+          Type.textArray,
+          messages.map((m) => m.secondaryXmlContent).toList(),
+        ),
+      },
     );
   }
 }

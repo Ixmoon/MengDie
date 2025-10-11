@@ -17,7 +17,6 @@ import 'mixins/background_tasks.dart';
 import 'mixins/special_actions.dart';
 import '../chat_state_providers.dart';
 
-
 class ChatStateNotifier extends StateNotifier<ChatScreenState>
     with
         UiStateManager,
@@ -25,155 +24,161 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
         GenerationLogic,
         BackgroundTasks,
         SpecialActions {
-    @override
-    final Ref ref;
+  @override
+  final Ref ref;
 
-    @override
-    final int chatId;
+  @override
+  final int chatId;
 
-    // --- Properties that belong to the Notifier itself ---
-    @override
-    StreamSubscription<LlmStreamChunk>? llmStreamSubscription;
+  // --- Properties that belong to the Notifier itself ---
+  @override
+  StreamSubscription<LlmStreamChunk>? llmStreamSubscription;
 
-    @override
-    bool isFinalizing = false;
+  @override
+  bool isFinalizing = false;
 
-    ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState());
+  ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState());
 
-    // --- Method Implementations to satisfy Mixin contracts ---
+  // --- Method Implementations to satisfy Mixin contracts ---
 
-    @override
-    ApiConfig getEffectiveApiConfig({String? specificConfigId}) {
-        final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
-        if (allConfigs.isEmpty) {
-            throw Exception("无法获取有效API配置：全局API配置列表为空。");
-        }
-        final chat = ref.read(currentChatProvider(chatId)).value;
-        if (specificConfigId != null) {
-            final config = allConfigs.firstWhereOrNull((c) => c.id == specificConfigId);
-            if (config != null) return config;
-        }
-        if (chat?.apiConfigId != null) {
-            final config = allConfigs.firstWhereOrNull((c) => c.id == chat!.apiConfigId);
-            if (config != null) return config;
-        }
-        return allConfigs.first;
+  @override
+  ApiConfig getEffectiveApiConfig({String? specificConfigId}) {
+    final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+    if (allConfigs.isEmpty) {
+      throw Exception("无法获取有效API配置：全局API配置列表为空。");
+    }
+    final chat = ref.read(currentChatProvider(chatId)).value;
+    if (specificConfigId != null) {
+      final config = allConfigs.firstWhereOrNull(
+        (c) => c.id == specificConfigId,
+      );
+      if (config != null) return config;
+    }
+    if (chat?.apiConfigId != null) {
+      final config = allConfigs.firstWhereOrNull(
+        (c) => c.id == chat!.apiConfigId,
+      );
+      if (config != null) return config;
+    }
+    return allConfigs.first;
+  }
+
+  @override
+  String? getEffectiveApiConfigId({String? specificConfigId}) {
+    try {
+      return getEffectiveApiConfig(specificConfigId: specificConfigId).id;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> calculateAndStoreTokenCount() async {
+    if (!mounted) return;
+
+    final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+    if (apiConfigs.isEmpty) {
+      if (mounted && state.totalTokens != null) {
+        state = state.copyWith(clearTotalTokens: true);
+      }
+      return;
     }
 
-    @override
-    String? getEffectiveApiConfigId({String? specificConfigId}) {
-        try {
-            return getEffectiveApiConfig(specificConfigId: specificConfigId).id;
-        } catch (e) {
-            return null;
-        }
+    final chat = ref.read(currentChatProvider(chatId)).value;
+    final messages = ref.read(chatMessagesProvider(chatId)).value;
+
+    if (chat == null || messages == null || messages.isEmpty) {
+      if (mounted) state = state.copyWith(clearTotalTokens: true);
+      return;
     }
-    
-    Future<void> calculateAndStoreTokenCount() async {
-      if (!mounted) return;
 
-      final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
-      if (apiConfigs.isEmpty) {
-        if (mounted && state.totalTokens != null) {
-          state = state.copyWith(clearTotalTokens: true);
-        }
-        return;
+    try {
+      final llmService = ref.read(llmServiceProvider);
+      final contextXmlService = ref.read(contextXmlServiceProvider);
+
+      final apiRequestContext = await contextXmlService.buildApiRequestContext(
+        chatId: chatId,
+        currentUserMessage: messages.last,
+      );
+
+      final apiConfig = getEffectiveApiConfig();
+      final count = await llmService.countTokens(
+        llmContext: apiRequestContext.contextParts,
+        apiConfig: apiConfig,
+      );
+
+      if (mounted) {
+        state = state.copyWith(totalTokens: count > 0 ? count : null);
       }
-
-      final chat = ref.read(currentChatProvider(chatId)).value;
-      final messages = ref.read(chatMessagesProvider(chatId)).value;
-
-      if (chat == null || messages == null || messages.isEmpty) {
-        if (mounted) state = state.copyWith(clearTotalTokens: true);
-        return;
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(clearTotalTokens: true);
       }
+    }
+  }
 
-      try {
-        final llmService = ref.read(llmServiceProvider);
-        final contextXmlService = ref.read(contextXmlServiceProvider);
-        
-        final apiRequestContext = await contextXmlService.buildApiRequestContext(
-          chatId: chatId,
-          currentUserMessage: messages.last,
-        );
-        
+  @override
+  void dispose() {
+    llmStreamSubscription?.cancel();
+    stopUpdateTimer(); // from UiStateManager
+    topMessageTimer?.cancel(); // from UiStateManager
+    super.dispose();
+  }
+
+  /// 更新用于调试界面的上下文信息，同时处理轮次和Token模式。
+  @override
+  Future<void> updateContextDebugInfo() async {
+    if (!mounted) return;
+    final chat = ref.read(currentChatProvider(chatId)).value;
+    if (chat == null) {
+      state = state.copyWith(clearContextDebugInfo: true);
+      return;
+    }
+
+    try {
+      final contextXmlService = ref.read(contextXmlServiceProvider);
+      final messageRepo = ref.read(messageRepositoryProvider);
+      final llmService = ref.read(llmServiceProvider);
+      final allMessages = await messageRepo.getMessagesForChat(chatId);
+
+      final Message messageForContextCheck = allMessages.isNotEmpty
+          ? allMessages.last
+          : Message(
+              chatId: chatId,
+              role: MessageRole.user,
+              parts: [MessagePart.text("")],
+            );
+
+      final contextInfo = await contextXmlService.buildApiRequestContext(
+        chatId: chatId,
+        currentUserMessage: messageForContextCheck,
+      );
+
+      int? currentTokens;
+      // 如果是Token模式，则计算当前窗口的Token数量
+      if (chat.contextConfig.mode == ContextManagementMode.tokens) {
         final apiConfig = getEffectiveApiConfig();
-        final count = await llmService.countTokens(
-          llmContext: apiRequestContext.contextParts,
+        currentTokens = await llmService.countTokens(
+          llmContext: contextInfo.contextParts,
           apiConfig: apiConfig,
         );
-
-        if (mounted) {
-          state = state.copyWith(totalTokens: count > 0 ? count : null);
-          debugPrint("ChatStateNotifier($chatId): Token count updated to $count");
-        }
-      } catch (e) {
-        debugPrint("ChatStateNotifier($chatId): Error calculating token count: $e");
-        if (mounted) {
-          state = state.copyWith(clearTotalTokens: true);
-        }
-      }
-    }
-
-    @override
-    void dispose() {
-        llmStreamSubscription?.cancel();
-        stopUpdateTimer(); // from UiStateManager
-        topMessageTimer?.cancel(); // from UiStateManager
-        super.dispose();
-    }
-
-    /// 更新用于调试界面的上下文信息，同时处理轮次和Token模式。
-    Future<void> updateContextDebugInfo() async {
-      if (!mounted) return;
-      final chat = ref.read(currentChatProvider(chatId)).value;
-      if (chat == null) {
-        state = state.copyWith(clearContextDebugInfo: true);
-        return;
       }
 
-      try {
-        final contextXmlService = ref.read(contextXmlServiceProvider);
-        final messageRepo = ref.read(messageRepositoryProvider);
-        final llmService = ref.read(llmServiceProvider);
-        final allMessages = await messageRepo.getMessagesForChat(chatId);
-
-        final Message messageForContextCheck = allMessages.isNotEmpty
-            ? allMessages.last
-            : Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("")]);
-
-        final contextInfo = await contextXmlService.buildApiRequestContext(
-          chatId: chatId,
-          currentUserMessage: messageForContextCheck,
+      if (mounted) {
+        state = state.copyWith(
+          keptMessageCount: contextInfo.keptMessages.length,
+          totalMessageCount: allMessages.length,
+          contextTurnLimit: chat.contextConfig.maxTurns * 2,
+          keptTokenCount: currentTokens,
+          contextTokenLimit: chat.contextConfig.maxContextTokens,
+          contextManagementMode: chat.contextConfig.mode,
         );
-
-        int? currentTokens;
-        // 如果是Token模式，则计算当前窗口的Token数量
-        if (chat.contextConfig.mode == ContextManagementMode.tokens) {
-          final apiConfig = getEffectiveApiConfig();
-          currentTokens = await llmService.countTokens(
-            llmContext: contextInfo.contextParts,
-            apiConfig: apiConfig,
-          );
-        }
-
-        if (mounted) {
-          state = state.copyWith(
-            keptMessageCount: contextInfo.keptMessages.length,
-            totalMessageCount: allMessages.length,
-            contextTurnLimit: chat.contextConfig.maxTurns * 2,
-            keptTokenCount: currentTokens,
-            contextTokenLimit: chat.contextConfig.maxContextTokens,
-            contextManagementMode: chat.contextConfig.mode,
-          );
-        }
-      } catch (e) {
-        debugPrint("ChatStateNotifier($chatId): Error updating context debug info: $e");
-        if (mounted) {
-          state = state.copyWith(clearContextDebugInfo: true);
-        }
+      }
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(clearContextDebugInfo: true);
       }
     }
+  }
 
   /// 统一的聊天衍生操作入口，由UI层调用。
   ///
@@ -201,19 +206,23 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
         final tempContext = await contextXmlService.buildApiRequestContext(
           chatId: chatId,
           // 使用一个虚拟的当前消息来获取历史状态
-          currentUserMessage: Message(chatId: chatId, role: MessageRole.user, parts: [MessagePart.text("check scope")])
+          currentUserMessage: Message(
+            chatId: chatId,
+            role: MessageRole.user,
+            parts: [MessagePart.text("check scope")],
+          ),
         );
-        
+
         // 检查分叉点是否在被丢弃（即已总结）的消息中。
-        final isForkingFromSummarized = tempContext.droppedMessages.any((m) => m.id == upToMessageId);
-        
+        final isForkingFromSummarized = tempContext.droppedMessages.any(
+          (m) => m.id == upToMessageId,
+        );
+
         // 如果分叉点不在已总结的部分，则不应清除总结，让新对话继承它。
         if (!isForkingFromSummarized) {
           shouldClearSummary = false;
         }
-        debugPrint("ChatStateNotifier($chatId): 分叉检查 - 分叉点 $upToMessageId 是否在总结区? $isForkingFromSummarized. 是否清除总结? $shouldClearSummary.");
       }
-
 
       final newChatId = await chatRepo.duplicateChat(
         chatId,
@@ -226,23 +235,35 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
       if (asTemplate) {
         showTopMessage('已成功另存为模板', backgroundColor: Colors.green);
         // 手动刷新模板列表
-        ref.invalidate(chatListProvider((parentFolderId: null, mode: ChatListMode.templateManagement)));
+        ref.invalidate(
+          chatListProvider((
+            parentFolderId: null,
+            mode: ChatListMode.templateManagement,
+          )),
+        );
         return;
       }
 
       // 对于分叉和克隆，执行页面跳转。
       // 关键：先显示消息，再触发跳转。
-      showTopMessage(upToMessageId == 0 ? '已成功克隆为新聊天' : '已创建分叉对话', backgroundColor: Colors.green);
-      
+      showTopMessage(
+        upToMessageId == 0 ? '已成功克隆为新聊天' : '已创建分叉对话',
+        backgroundColor: Colors.green,
+      );
+
       // 强制刷新当前文件夹的聊天列表，确保新聊天在数据源中。
       // 这是解决跳转问题的关键步骤。
-      await ref.refresh(chatListProvider((parentFolderId: originalChat.parentFolderId, mode: ChatListMode.normal)).future);
+      // ignore: unused_result
+      await ref.refresh(
+        chatListProvider((
+          parentFolderId: originalChat.parentFolderId,
+          mode: ChatListMode.normal,
+        )).future,
+      );
 
       // 安全地触发页面跳转
       ref.read(activeChatIdProvider.notifier).state = newChatId;
-
     } catch (e) {
-      debugPrint("Notifier duplicateChat 时出错: $e");
       if (mounted) {
         showTopMessage('操作失败: $e', backgroundColor: Colors.red);
       }

@@ -34,13 +34,19 @@ class ChatGridItem extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final firstModelMessageAsync = ref.watch(firstModelMessageProvider(chat.id));
+    final firstModelMessageAsync = ref.watch(
+      firstModelMessageProvider(chat.id),
+    );
 
     Widget displayWidget;
     if (chat.isFolder) {
       displayWidget = Container(
         color: Colors.amber.shade100,
-        child: Icon(Icons.folder_outlined, color: Colors.amber.shade800, size: 50),
+        child: Icon(
+          Icons.folder_outlined,
+          color: Colors.amber.shade800,
+          size: 50,
+        ),
       );
     } else {
       if (chat.coverImageBase64 != null && chat.coverImageBase64!.isNotEmpty) {
@@ -57,7 +63,11 @@ class ChatGridItem extends ConsumerWidget {
       } else {
         displayWidget = Container(
           color: Colors.grey.shade300,
-          child: const Icon(Icons.chat_bubble_outline, color: Colors.grey, size: 40),
+          child: const Icon(
+            Icons.chat_bubble_outline,
+            color: Colors.grey,
+            size: 40,
+          ),
         );
       }
     }
@@ -74,11 +84,16 @@ class ChatGridItem extends ConsumerWidget {
               Text(
                 chat.title ?? (chat.isFolder ? '未命名文件夹' : '无标题'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (!chat.isFolder && chat.updatedAt.millisecondsSinceEpoch >= 1000)
+              if (!chat.isFolder &&
+                  chat.updatedAt.millisecondsSinceEpoch >= 1000)
                 firstModelMessageAsync.when(
                   data: (message) {
                     final previewText = generatePreviewText(message, chat);
@@ -88,14 +103,25 @@ class ChatGridItem extends ConsumerWidget {
                       child: Text(
                         previewText,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade300),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade300,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     );
                   },
-                  loading: () => const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  error: (e, s) => const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                  loading: () => const SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  error: (e, s) => const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 14,
+                  ),
                 ),
             ],
           ),
@@ -112,9 +138,16 @@ class ChatGridItem extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: Colors.black.withAlpha((255 * 0.3).round()),
                   borderRadius: BorderRadius.circular(8.0),
-                  border: Border.all(color: Theme.of(context).primaryColor, width: 2),
+                  border: Border.all(
+                    color: Theme.of(context).primaryColor,
+                    width: 2,
+                  ),
                 ),
-                child: Icon(Icons.check_circle, color: Colors.white.withAlpha((255 * 0.8).round()), size: 30),
+                child: Icon(
+                  Icons.check_circle,
+                  color: Colors.white.withAlpha((255 * 0.8).round()),
+                  size: 30,
+                ),
               ),
           ],
         ),

@@ -23,8 +23,10 @@ class ChatScreenData {
 ///
 /// By centralizing this logic, the UI widget (`ChatScreen`) becomes much simpler,
 /// declarative, and robust against race conditions or transient data states.
-final chatScreenDataProvider =
-    Provider.autoDispose.family<AsyncValue<ChatScreenData>, int>((ref, chatId) {
+final chatScreenDataProvider = Provider.autoDispose.family<AsyncValue<ChatScreenData>, int>((
+  ref,
+  chatId,
+) {
   // Watch the data stream for the currently active chat.
   final chatAsync = ref.watch(currentChatProvider(chatId));
 
@@ -42,9 +44,12 @@ final chatScreenDataProvider =
 
       // Once we have the chat data, we determine the correct mode (normal chat or template)
       // and then watch the data stream for its sibling chats.
-      final mode = chat.isTemplate ? ChatListMode.templateManagement : ChatListMode.normal;
+      final mode = chat.isTemplate
+          ? ChatListMode.templateManagement
+          : ChatListMode.normal;
       final siblingChatsAsync = ref.watch(
-          chatListProvider((parentFolderId: chat.parentFolderId, mode: mode)));
+        chatListProvider((parentFolderId: chat.parentFolderId, mode: mode)),
+      );
 
       // Reactively handle the states of the sibling chats stream.
       return siblingChatsAsync.when(
@@ -65,11 +70,13 @@ final chatScreenDataProvider =
           }
 
           // If all data is present and consistent, return the combined data object.
-          return AsyncValue.data(ChatScreenData(
-            currentChat: chat,
-            siblingChats: chats,
-            currentIndex: currentIndex,
-          ));
+          return AsyncValue.data(
+            ChatScreenData(
+              currentChat: chat,
+              siblingChats: chats,
+              currentIndex: currentIndex,
+            ),
+          );
         },
         // If sibling chats are loading, the entire screen state is considered loading.
         loading: () => const AsyncValue.loading(),

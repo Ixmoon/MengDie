@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 import 'package:json_annotation/json_annotation.dart';
 import '../enums.dart';
 
@@ -10,7 +10,8 @@ class ContextConfig {
   final ContextManagementMode mode;
   final int maxTurns;
   final int? maxContextTokens;
-  final int? predictedTurnTokens; // New field for proactive summarization trigger
+  final int?
+  predictedTurnTokens; // New field for proactive summarization trigger
 
   const ContextConfig({
     this.mode = ContextManagementMode.turns,

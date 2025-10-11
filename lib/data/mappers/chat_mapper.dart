@@ -5,7 +5,6 @@ import '../../domain/enums.dart' as domain_enums;
 
 import '../database/app_database.dart' as drift;
 
-
 class ChatMapper {
   static domain.Chat fromData(drift.ChatData data) {
     return domain.Chat(
@@ -35,11 +34,16 @@ class ChatMapper {
       enableHelpMeReply: data.enableHelpMeReply ?? false,
       helpMeReplyPrompt: data.helpMeReplyPrompt,
       helpMeReplyApiConfigId: data.helpMeReplyApiConfigId,
-      helpMeReplyTriggerMode: data.helpMeReplyTriggerMode ?? domain_enums.HelpMeReplyTriggerMode.manual,
+      helpMeReplyTriggerMode:
+          data.helpMeReplyTriggerMode ??
+          domain_enums.HelpMeReplyTriggerMode.manual,
     );
   }
 
-  static drift.ChatsCompanion toCompanion(domain.Chat chat, {bool forInsert = false}) {
+  static drift.ChatsCompanion toCompanion(
+    domain.Chat chat, {
+    bool forInsert = false,
+  }) {
     // The `updatedAt` field is now managed by the DAO layer.
     return drift.ChatsCompanion(
       id: forInsert ? const Value.absent() : Value(chat.id),

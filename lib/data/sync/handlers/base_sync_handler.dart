@@ -29,14 +29,17 @@ abstract class BaseSyncHandler<T> {
   /// This method identifies records with the same ID but different creation
   /// timestamps and modifies the local record to resolve the conflict.
   /// Returns a map of {oldId: newId} for all changed local records.
-  Future<Map<dynamic, dynamic>> resolveConflicts(List<SyncMeta> localMetas, List<SyncMeta> remoteMetas);
+  Future<Map<dynamic, dynamic>> resolveConflicts(
+    List<SyncMeta> localMetas,
+    List<SyncMeta> remoteMetas,
+  );
 
   /// Pushes a list of local entities to the remote database.
   Future<void> push(List<dynamic> ids);
 
   /// Pulls a list of remote entities to the local database.
   Future<void> pull(List<dynamic> ids);
-  
+
   /// Deletes entities from the remote database based on a list of keys.
   Future<void> deleteRemotely(List<String> keys);
 }

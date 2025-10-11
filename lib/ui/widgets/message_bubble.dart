@@ -21,7 +21,8 @@ class MessageBubble extends StatelessWidget {
   final bool isHalfWidth; // 新增：气泡是否只占一半宽度
   final bool highlightQuotes; // 新增：是否高亮引号内容
   final int? totalTokens; // Add totalTokens to display the token count
-  final String? carriedOverXml; // The synthesized XML context for the latest user message
+  final String?
+  carriedOverXml; // The synthesized XML context for the latest user message
   const MessageBubble({
     super.key,
     required this.message,
@@ -37,16 +38,21 @@ class MessageBubble extends StatelessWidget {
 
   // --- 私有辅助方法 ---
 
-  MarkdownStyleSheet _getMarkdownStyleSheet(BuildContext context, Color textColor) {
+  MarkdownStyleSheet _getMarkdownStyleSheet(
+    BuildContext context,
+    Color textColor,
+  ) {
     return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
       p: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
       code: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontFamily: 'monospace',
-            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(128),
-          ),
+        fontFamily: 'monospace',
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withAlpha(128),
+      ),
       blockquote: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: textColor.withOpacity(0.85),
-          ),
+        color: textColor.withAlpha((255 * 0.85).round()),
+      ),
       blockquoteDecoration: BoxDecoration(
         color: Colors.transparent,
         border: Border(
@@ -62,7 +68,6 @@ class MessageBubble extends StatelessWidget {
   /// 获取带引号高亮的 Markdown 扩展配置
   List<md.InlineSyntax> _getMarkdownInlineSyntaxes() {
     if (highlightQuotes) {
-      // debugPrint('[MessageBubble] highlightQuotes enabled — injecting QuoteHighlightSyntax');
       return [QuoteHighlightSyntax()];
     }
     return [];
@@ -89,10 +94,11 @@ class MessageBubble extends StatelessWidget {
         title += ' (${attr.name.local}: ${attr.value})';
       }
       buffer.write('$indent* **$title:**');
-      
+
       // 检查它是否只包含一个文本节点（简单标签）
-      final textOnlyChild = node.children.length == 1 && node.children.first is XmlText;
-      final textContent = node.text.trim();
+      final textOnlyChild =
+          node.children.length == 1 && node.children.first is XmlText;
+      final textContent = node.value?.trim() ?? '';
 
       if (textOnlyChild && textContent.isNotEmpty) {
         // 如果是简单标签，将文本内容放在同一行
@@ -120,12 +126,17 @@ class MessageBubble extends StatelessWidget {
 
   /// 根据XML规则解析并渲染文本内容为一系列Widget。
   /// 此方法通过清理、高亮错误和自动闭合未完成的标签来健壮地支持流式传输。
-  List<Widget> _renderTextContent(BuildContext context, String textContent, List<XmlRule> rules, Color textColor, bool isStreaming) {
+  List<Widget> _renderTextContent(
+    BuildContext context,
+    String textContent,
+    List<XmlRule> rules,
+    Color textColor,
+    bool isStreaming,
+  ) {
     var inputText = textContent.trim();
     if (!inputText.contains('<') && !inputText.contains('```')) {
       if (inputText.isEmpty) return [];
       final mdData = inputText.replaceAll('\n', '  \n');
-      // debugPrint('[MessageBubble] Rendering MarkdownBody (inlineSyntaxes=${_getMarkdownInlineSyntaxes().length}) dataPreview="${mdData.length>120?mdData.substring(0,120)+'...':mdData}"');
       return [
         MarkdownBody(
           data: mdData,
@@ -133,7 +144,7 @@ class MessageBubble extends StatelessWidget {
           styleSheet: _getMarkdownStyleSheet(context, textColor),
           inlineSyntaxes: _getMarkdownInlineSyntaxes(),
           builders: _getMarkdownBuilders(textColor),
-        )
+        ),
       ];
     }
 
@@ -173,7 +184,9 @@ class MessageBubble extends StatelessWidget {
             tagStack.removeLast();
             cleanedBuffer.write(tagString);
           } else {
-            final escapedTag = tagString.replaceAll('<', '<').replaceAll('>', '>');
+            final escapedTag = tagString
+                .replaceAll('<', '<')
+                .replaceAll('>', '>');
             cleanedBuffer.write('$errorStartMarker$escapedTag$errorEndMarker');
           }
         } else if (isSelfClosing) {
@@ -188,7 +201,7 @@ class MessageBubble extends StatelessWidget {
       }
     }
     cleanedBuffer.write(stableText.substring(lastIndex));
-    
+
     var processedText = cleanedBuffer.toString();
 
     if (tagStack.isNotEmpty) {
@@ -202,38 +215,69 @@ class MessageBubble extends StatelessWidget {
 
       for (final node in document.rootElement.children) {
         if (node is XmlText) {
-          widgets.addAll(_buildTextWidgetsWithErrors(context, node.value, textColor, errorStartMarker, errorEndMarker, isStreaming));
+          widgets.addAll(
+            _buildTextWidgetsWithErrors(
+              context,
+              node.value,
+              textColor,
+              errorStartMarker,
+              errorEndMarker,
+              isStreaming,
+            ),
+          );
         } else if (node is XmlElement) {
           final tagNameLower = node.name.local.toLowerCase();
-          final rule = rules.firstWhereOrNull((r) => r.tagName?.toLowerCase() == tagNameLower);
+          final rule = rules.firstWhereOrNull(
+            (r) => r.tagName?.toLowerCase() == tagNameLower,
+          );
 
           if (rule?.action == XmlAction.content) {
-            widgets.addAll(_renderTextContent(context, node.innerXml, rules, textColor, isStreaming));
+            widgets.addAll(
+              _renderTextContent(
+                context,
+                node.innerXml,
+                rules,
+                textColor,
+                isStreaming,
+              ),
+            );
           } else {
-            final markdownContent = node.children.map((child) => _buildMarkdownFromXmlNode(child, 0)).join();
+            final markdownContent = node.children
+                .map((child) => _buildMarkdownFromXmlNode(child, 0))
+                .join();
             if (markdownContent.trim().isNotEmpty) {
               widgets.add(
                 Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
                     initiallyExpanded: isStreaming,
                     tilePadding: EdgeInsets.zero,
                     title: Text(
                       node.name.local,
-                      style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                        fontSize: 14,
+                      ),
                     ),
                     children: [
                       Align(
                         alignment: Alignment.centerLeft,
                         child: () {
                           final mdData = markdownContent;
-                          // debugPrint('[MessageBubble] Rendering MarkdownBody (from XML element) dataPreview="${mdData.length>120?mdData.substring(0,120)+'...':mdData}"');
                           return MarkdownBody(
                             data: mdData,
                             selectable: false,
-                            styleSheet: _getMarkdownStyleSheet(context, textColor.withOpacity(0.85)),
+                            styleSheet: _getMarkdownStyleSheet(
+                              context,
+                              textColor.withAlpha((255 * 0.85).round()),
+                            ),
                             inlineSyntaxes: _getMarkdownInlineSyntaxes(),
-                            builders: _getMarkdownBuilders(textColor.withOpacity(0.85)),
+                            builders: _getMarkdownBuilders(
+                              textColor.withAlpha((255 * 0.85).round()),
+                            ),
                           );
                         }(),
                       ),
@@ -245,30 +289,50 @@ class MessageBubble extends StatelessWidget {
           }
         }
       }
-      
+
       // --- 步骤 4: 追加之前隔离的不完整标签作为普通文本 ---
       if (partialTag != null) {
         widgets.add(
           Text(
             partialTag,
-            style: TextStyle(color: textColor.withOpacity(0.7)), // 以稍浅的颜色显示
+            style: TextStyle(
+              color: textColor.withAlpha((255 * 0.7).round()),
+            ), // 以稍浅的颜色显示
           ),
         );
       }
-      
+
       return widgets;
     } catch (e) {
-      // debugPrint("MessageBubble: 即使在清理后XML解析仍然失败。回退。错误: $e");
-      final fallbackWidgets = _buildTextWidgetsWithErrors(context, processedText, textColor, errorStartMarker, errorEndMarker, isStreaming);
+      final fallbackWidgets = _buildTextWidgetsWithErrors(
+        context,
+        processedText,
+        textColor,
+        errorStartMarker,
+        errorEndMarker,
+        isStreaming,
+      );
       if (partialTag != null) {
-        fallbackWidgets.add(Text(partialTag, style: TextStyle(color: textColor.withOpacity(0.7))));
+        fallbackWidgets.add(
+          Text(
+            partialTag,
+            style: TextStyle(color: textColor.withAlpha((255 * 0.7).round())),
+          ),
+        );
       }
       return fallbackWidgets;
     }
   }
 
   /// 将可能包含错误标记和代码块的文本构建成一个Widget列表。
-  List<Widget> _buildTextWidgetsWithErrors(BuildContext context, String text, Color textColor, String errorStartMarker, String errorEndMarker, bool isStreaming) {
+  List<Widget> _buildTextWidgetsWithErrors(
+    BuildContext context,
+    String text,
+    Color textColor,
+    String errorStartMarker,
+    String errorEndMarker,
+    bool isStreaming,
+  ) {
     final List<Widget> widgets = [];
     final codeBlockRegex = RegExp(r'```(\w*)((?:\s*\n)?[\s\S]*?)```');
     int lastIndex = 0;
@@ -277,7 +341,15 @@ class MessageBubble extends StatelessWidget {
       // 1. 处理代码块之前的部分
       if (match.start > lastIndex) {
         final precedingText = text.substring(lastIndex, match.start);
-        widgets.addAll(_splitTextByErrors(context, precedingText, textColor, errorStartMarker, errorEndMarker));
+        widgets.addAll(
+          _splitTextByErrors(
+            context,
+            precedingText,
+            textColor,
+            errorStartMarker,
+            errorEndMarker,
+          ),
+        );
       }
 
       // 2. 添加代码块本身
@@ -291,7 +363,11 @@ class MessageBubble extends StatelessWidget {
             tilePadding: EdgeInsets.zero,
             title: Text(
               language.isNotEmpty ? language : '代码块',
-              style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: textColor,
+                fontSize: 14,
+              ),
             ),
             children: [
               Align(
@@ -299,7 +375,10 @@ class MessageBubble extends StatelessWidget {
                 child: MarkdownBody(
                   data: codeBlockContent,
                   selectable: false,
-                  styleSheet: _getMarkdownStyleSheet(context, textColor.withOpacity(0.85)),
+                  styleSheet: _getMarkdownStyleSheet(
+                    context,
+                    textColor.withAlpha((255 * 0.85).round()),
+                  ),
                 ),
               ),
             ],
@@ -312,16 +391,35 @@ class MessageBubble extends StatelessWidget {
     // 3. 处理最后一个代码块之后的部分
     if (lastIndex < text.length) {
       final remainingText = text.substring(lastIndex);
-      widgets.addAll(_splitTextByErrors(context, remainingText, textColor, errorStartMarker, errorEndMarker));
+      widgets.addAll(
+        _splitTextByErrors(
+          context,
+          remainingText,
+          textColor,
+          errorStartMarker,
+          errorEndMarker,
+        ),
+      );
     }
-    
+
     return widgets;
   }
 
   /// 将纯文本（无代码块）按错误标记分割成Markdown和高亮Text Widget。
-  List<Widget> _splitTextByErrors(BuildContext context, String text, Color textColor, String errorStartMarker, String errorEndMarker) {
+  List<Widget> _splitTextByErrors(
+    BuildContext context,
+    String text,
+    Color textColor,
+    String errorStartMarker,
+    String errorEndMarker,
+  ) {
     final List<Widget> widgets = [];
-    final errorRegex = RegExp(RegExp.escape(errorStartMarker) + r'(.*?)' + RegExp.escape(errorEndMarker), dotAll: true);
+    final errorRegex = RegExp(
+      RegExp.escape(errorStartMarker) +
+          r'(.*?)' +
+          RegExp.escape(errorEndMarker),
+      dotAll: true,
+    );
     int lastIndex = 0;
 
     for (final match in errorRegex.allMatches(text)) {
@@ -330,7 +428,6 @@ class MessageBubble extends StatelessWidget {
         final normalPart = text.substring(lastIndex, match.start).trim();
         if (normalPart.isNotEmpty) {
           final mdData = normalPart.replaceAll('\n', '  \n');
-          // debugPrint('[MessageBubble] splitTextByErrors: rendering normalPart preview="${mdData.length>120?mdData.substring(0,120)+'...':mdData}"');
           widgets.add(
             MarkdownBody(
               data: mdData,
@@ -338,7 +435,7 @@ class MessageBubble extends StatelessWidget {
               styleSheet: _getMarkdownStyleSheet(context, textColor),
               inlineSyntaxes: _getMarkdownInlineSyntaxes(),
               builders: _getMarkdownBuilders(textColor),
-            )
+            ),
           );
         }
       }
@@ -350,7 +447,7 @@ class MessageBubble extends StatelessWidget {
             errorPart,
             style: TextStyle(
               color: Colors.orange, // 错误高亮颜色
-              backgroundColor: Colors.orange.withOpacity(0.15),
+              backgroundColor: Colors.orange.withAlpha((255 * 0.15).round()),
               fontFamily: 'monospace',
             ),
           ),
@@ -364,7 +461,6 @@ class MessageBubble extends StatelessWidget {
       final remainingPart = text.substring(lastIndex).trim();
       if (remainingPart.isNotEmpty) {
         final mdData = remainingPart.replaceAll('\n', '  \n');
-        // debugPrint('[MessageBubble] splitTextByErrors: rendering remainingPart preview="${mdData.length>120?mdData.substring(0,120)+'...':mdData}"');
         widgets.add(
           MarkdownBody(
             data: mdData,
@@ -372,102 +468,57 @@ class MessageBubble extends StatelessWidget {
             styleSheet: _getMarkdownStyleSheet(context, textColor),
             inlineSyntaxes: _getMarkdownInlineSyntaxes(),
             builders: _getMarkdownBuilders(textColor),
-          )
+          ),
         );
       }
     }
     return widgets;
   }
 
-  /// 构建可以高亮引号内容的RichText。
-  Widget _buildRichTextWithQuotes(BuildContext context, String text, Color textColor) {
-    if (!highlightQuotes) {
-      return MarkdownBody(data: text.replaceAll('\n', '  \n'), selectable: false, styleSheet: _getMarkdownStyleSheet(context, textColor));
-    }
-
-    // 支持中英文双引号，且支持未闭合情况
-    final List<TextSpan> spans = [];
-    final quoteRegex = RegExp(r'([“"])([^”"]*)([”"])?', dotAll: true);
-    int lastIndex = 0;
-    bool inQuote = false;
-    String? openQuote;
-
-    for (final match in quoteRegex.allMatches(text)) {
-      final start = match.start;
-      final end = match.end;
-      // 添加引号前的部分
-      if (start > lastIndex) {
-        spans.add(TextSpan(text: text.substring(lastIndex, start)));
-      }
-      final open = match.group(1);
-      final content = match.group(2);
-      final close = match.group(3);
-
-      if (open != null) {
-        inQuote = true;
-        openQuote = open;
-        // 引号本身
-        spans.add(TextSpan(text: open, style: TextStyle(color: textColor)));
-      }
-      if (inQuote && content != null && content.isNotEmpty) {
-        // 内容部分高亮
-        spans.add(TextSpan(text: content, style: const TextStyle(color: Colors.deepOrange)));
-      }
-      if (close != null) {
-        // 闭合引号
-        spans.add(TextSpan(text: close, style: TextStyle(color: textColor)));
-        inQuote = false;
-        openQuote = null;
-      }
-      lastIndex = end;
-    }
-    // 处理末尾未闭合引号的情况
-    if (lastIndex < text.length) {
-      if (inQuote) {
-        spans.add(TextSpan(text: text.substring(lastIndex), style: const TextStyle(color: Colors.deepOrange)));
-      } else {
-        spans.add(TextSpan(text: text.substring(lastIndex)));
-      }
-    }
-
-    return RichText(
-      text: TextSpan(
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: textColor),
-        children: spans,
-      ),
+  Widget _buildTextPart(
+    BuildContext context,
+    Color textColor,
+    bool isUser,
+    bool isStreaming,
+  ) {
+    final textContent = message.modelsText.isEmpty && isStreaming && !isUser
+        ? "..."
+        : message.modelsText;
+    final widgets = _renderTextContent(
+      context,
+      textContent,
+      xmlRules,
+      textColor,
+      isStreaming,
     );
-  }
-
-  Widget _buildTextPart(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
-    final textContent = message.modelsText.isEmpty && isStreaming && !isUser ? "..." : message.modelsText;
-    final widgets = _renderTextContent(context, textContent, xmlRules, textColor, isStreaming);
     if (widgets.isEmpty) return const SizedBox.shrink();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween),
         ...widgets,
       ],
     );
   }
 
-  Widget _buildNonTextPart(BuildContext context, MessagePart part, Color textColor) {
+  Widget _buildNonTextPart(
+    BuildContext context,
+    MessagePart part,
+    Color textColor,
+  ) {
     switch (part.type) {
       case MessagePartType.image:
       case MessagePartType.generatedImage:
         if (part.base64Data != null) {
           return ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxHeight: 400,
-            ),
+            constraints: const BoxConstraints(maxHeight: 400),
             child: CachedImageFromBase64(
               base64String: part.base64Data!,
               fit: BoxFit.contain,
-              cacheHeight: (400 * MediaQuery.of(context).devicePixelRatio).round(),
+              cacheHeight: (400 * MediaQuery.of(context).devicePixelRatio)
+                  .round(),
             ),
           );
         }
@@ -507,9 +558,16 @@ class MessageBubble extends StatelessWidget {
     }
   }
 
-  Widget _buildMessageContent(BuildContext context, Color textColor, bool isUser, bool isStreaming) {
+  Widget _buildMessageContent(
+    BuildContext context,
+    Color textColor,
+    bool isUser,
+    bool isStreaming,
+  ) {
     final hasText = message.modelsText.isNotEmpty;
-    final nonTextParts = message.parts.where((p) => p.type != MessagePartType.text).toList();
+    final nonTextParts = message.parts
+        .where((p) => p.type != MessagePartType.text)
+        .toList();
     final originalXml = message.originalXmlContent;
     final secondaryXml = message.secondaryXmlContent;
 
@@ -525,22 +583,36 @@ class MessageBubble extends StatelessWidget {
               _buildTextPart(context, textColor, isUser, isStreaming),
             ...nonTextParts.map((part) {
               return Padding(
-                padding: const EdgeInsets.only(top:0),
+                padding: const EdgeInsets.only(top: 0),
                 child: _buildNonTextPart(context, part, textColor),
               );
             }),
             if (originalXml != null && originalXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '原生XML内容', originalXml, textColor, isStreaming, MessagePartType.text),
+              _buildXmlExpansionTile(
+                context,
+                '原生XML内容',
+                originalXml,
+                textColor,
+                isStreaming,
+                MessagePartType.text,
+              ),
             if (secondaryXml != null && secondaryXml.isNotEmpty)
-              _buildXmlExpansionTile(context, '再生XML内容', secondaryXml, textColor, isStreaming, MessagePartType.text),
+              _buildXmlExpansionTile(
+                context,
+                '再生XML内容',
+                secondaryXml,
+                textColor,
+                isStreaming,
+                MessagePartType.text,
+              ),
             if (totalTokens != null && totalTokens! > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   "Tokens: $totalTokens",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: textColor.withAlpha(179),
-                      ),
+                    color: textColor.withAlpha(179),
+                  ),
                 ),
               ),
           ],
@@ -549,7 +621,14 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildXmlExpansionTile(BuildContext context, String title, String xmlContent, Color textColor, bool isStreaming, MessagePartType partType) {
+  Widget _buildXmlExpansionTile(
+    BuildContext context,
+    String title,
+    String xmlContent,
+    Color textColor,
+    bool isStreaming,
+    MessagePartType partType,
+  ) {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -560,7 +639,11 @@ class MessageBubble extends StatelessWidget {
           children: [
             Text(
               title,
-              style: TextStyle(fontWeight: FontWeight.bold, color: textColor.withOpacity(0.7), fontSize: 12),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: textColor.withAlpha((255 * 0.7).round()),
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -577,9 +660,14 @@ class MessageBubble extends StatelessWidget {
                 return MarkdownBody(
                   data: markdownContent,
                   selectable: false,
-                  styleSheet: _getMarkdownStyleSheet(context, textColor.withOpacity(0.85)),
+                  styleSheet: _getMarkdownStyleSheet(
+                    context,
+                    textColor.withAlpha((255 * 0.85).round()),
+                  ),
                   inlineSyntaxes: _getMarkdownInlineSyntaxes(),
-                  builders: _getMarkdownBuilders(textColor.withOpacity(0.85)),
+                  builders: _getMarkdownBuilders(
+                    textColor.withAlpha((255 * 0.85).round()),
+                  ),
                 );
               } catch (e) {
                 // 如果解析失败，则回退到原始的代码块显示
@@ -600,9 +688,6 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Print the timestamp to verify its precision.
-    debugPrint('Message ID: ${message.id}, Timestamp: ${message.timestamp}');
-    
     bool isUser = message.role == MessageRole.user;
     var alignment = isUser
         ? (isHalfWidth ? Alignment.topRight : Alignment.centerRight)
@@ -631,7 +716,9 @@ class MessageBubble extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12.0),
             side: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withAlpha((255 * 0.2).round()),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withAlpha((255 * 0.2).round()),
               width: 0.8,
             ),
           ),
@@ -643,10 +730,17 @@ class MessageBubble extends StatelessWidget {
             padding: const EdgeInsets.all(10.0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(
-                minHeight: 24, // Ensure a minimum tappable height for empty messages
-                minWidth: 48, // Ensure a minimum tappable width for empty messages
+                minHeight:
+                    24, // Ensure a minimum tappable height for empty messages
+                minWidth:
+                    48, // Ensure a minimum tappable width for empty messages
               ),
-              child: _buildMessageContent(context, textColor, isUser, isStreaming),
+              child: _buildMessageContent(
+                context,
+                textColor,
+                isUser,
+                isStreaming,
+              ),
             ),
           ),
         ),
@@ -665,7 +759,9 @@ class MessageBubble extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12.0),
               side: BorderSide(
-                color: Theme.of(context).colorScheme.outline.withAlpha((255 * 0.1).round()),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withAlpha((255 * 0.1).round()),
                 width: 0.8,
               ),
             ),
@@ -675,7 +771,14 @@ class MessageBubble extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: Padding(
               padding: const EdgeInsets.all(10.0),
-              child: _buildXmlExpansionTile(context, '合成XML', carriedOverXml!, textColor, isStreaming, MessagePartType.text),
+              child: _buildXmlExpansionTile(
+                context,
+                '合成XML',
+                carriedOverXml!,
+                textColor,
+                isStreaming,
+                MessagePartType.text,
+              ),
             ),
           ),
         ),
@@ -684,14 +787,10 @@ class MessageBubble extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          xmlBubble,
-          messageCard,
-        ],
+        children: [xmlBubble, messageCard],
       );
     }
 
     return messageCard;
   }
 }
-

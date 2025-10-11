@@ -62,7 +62,10 @@ class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
     String title;
     switch (mode) {
       case ChatListMode.normal:
-        title = currentFolderId != null ? (currentFolderAsync.whenData((folder) => folder?.title).value ?? '文件夹') : '梦蝶';
+        title = currentFolderId != null
+            ? (currentFolderAsync.whenData((folder) => folder?.title).value ??
+                  '文件夹')
+            : '梦蝶';
         break;
       case ChatListMode.templateSelection:
         title = '从模板新建';
@@ -79,7 +82,9 @@ class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
               tooltip: '返回',
               onPressed: () {
                 if (currentFolderId != null) {
-                  final parentId = currentFolderAsync.whenData((folder) => folder?.parentFolderId).value;
+                  final parentId = currentFolderAsync
+                      .whenData((folder) => folder?.parentFolderId)
+                      .value;
                   ref.read(currentFolderIdProvider.notifier).state = parentId;
                 } else if (mode != ChatListMode.normal) {
                   context.pop();
@@ -93,7 +98,10 @@ class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
         title,
         style: TextStyle(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+            Shadow(
+              color: Colors.black.withAlpha((255 * 0.5).round()),
+              blurRadius: 1.0,
+            ),
           ],
         ),
       ),
@@ -108,7 +116,8 @@ class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
           tooltip: isGridView ? '切换到列表视图' : '切换到网格视图',
           onPressed: onToggleViewMode,
         ),
-        if (mode == ChatListMode.normal || mode == ChatListMode.templateManagement)
+        if (mode == ChatListMode.normal ||
+            mode == ChatListMode.templateManagement)
           IconButton(
             icon: const Icon(Icons.file_download_outlined),
             tooltip: mode == ChatListMode.normal ? '导入聊天' : '导入模板',
@@ -137,7 +146,10 @@ class ChatListAppBar extends ConsumerWidget implements PreferredSizeWidget {
         '已选择 $selectedItemCount 项',
         style: TextStyle(
           shadows: <Shadow>[
-            Shadow(color: Colors.black.withAlpha((255 * 0.5).round()), blurRadius: 1.0)
+            Shadow(
+              color: Colors.black.withAlpha((255 * 0.5).round()),
+              blurRadius: 1.0,
+            ),
           ],
         ),
       ),
