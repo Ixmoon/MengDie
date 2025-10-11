@@ -85,6 +85,18 @@ class ApiConfig {
     );
   }
 
+  factory ApiConfig.empty() {
+    final now = DateTime.now();
+    return ApiConfig(
+      id: '',
+      name: '',
+      apiType: LlmType.gemini,
+      model: '',
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -110,5 +122,57 @@ class ApiConfig {
       'tool_choice': toolChoice,
       'use_default_safety_settings': useDefaultSafetySettings,
     };
+  }
+
+  ApiConfig copyWith({
+    String? id,
+    String? name,
+    LlmType? apiType,
+    String? model,
+    String? apiKey,
+    String? baseUrl,
+    bool? useCustomTemperature,
+    double? temperature,
+    bool? useCustomTopP,
+    double? topP,
+    bool? useCustomTopK,
+    int? topK,
+    int? maxOutputTokens,
+    List<String>? stopSequences,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? enableReasoningEffort,
+    OpenAIReasoningEffort? reasoningEffort,
+    int? thinkingBudget,
+    String? toolConfig,
+    String? toolChoice,
+    bool? useDefaultSafetySettings,
+  }) {
+    return ApiConfig(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      apiType: apiType ?? this.apiType,
+      model: model ?? this.model,
+      apiKey: apiKey ?? this.apiKey,
+      baseUrl: baseUrl ?? this.baseUrl,
+      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
+      temperature: temperature ?? this.temperature,
+      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+      topP: topP ?? this.topP,
+      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+      topK: topK ?? this.topK,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      stopSequences: stopSequences ?? this.stopSequences,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      enableReasoningEffort:
+          enableReasoningEffort ?? this.enableReasoningEffort,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      thinkingBudget: thinkingBudget ?? this.thinkingBudget,
+      toolConfig: toolConfig ?? this.toolConfig,
+      toolChoice: toolChoice ?? this.toolChoice,
+      useDefaultSafetySettings:
+          useDefaultSafetySettings ?? this.useDefaultSafetySettings,
+    );
   }
 }

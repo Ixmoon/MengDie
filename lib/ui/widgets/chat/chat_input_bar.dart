@@ -7,6 +7,7 @@ import 'package:mime/mime.dart';
 
 import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
+import '../../../app/providers/chat_settings_provider.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../cached_image.dart';
 
@@ -28,6 +29,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final FocusNode _keyboardListenerFocusNode = FocusNode();
   final List<PlatformFile> _attachments = [];
   bool _isChinesePunctuation = true;
+  bool _isSwitchingApi = false;
 
   @override
   void dispose() {
@@ -152,6 +154,78 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
+  Future<void> _showApiConfigSwitcherDialog() async {
+    final allConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
+    final chatSettings = ref.read(chatSettingsProvider(widget.chatId));
+    final currentConfigId = chatSettings.chatForDisplay?.apiConfigId;
+
+    if (allConfigs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('没有可用的 API 配置。'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final String? selectedId = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) {
+        return SimpleDialog(
+          title: const Text('选择 API 配置'),
+          children: allConfigs.map((config) {
+            return SimpleDialogOption(
+              onPressed: () {
+                Navigator.pop(context, config.id);
+              },
+              child: ListTile(
+                title: Text(config.name),
+                trailing: config.id == currentConfigId
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+
+    if (selectedId != null && selectedId != currentConfigId) {
+      setState(() {
+        _isSwitchingApi = true;
+      });
+      try {
+        final notifier = ref.read(chatSettingsProvider(widget.chatId).notifier);
+        notifier.updateSettings(
+          (chat) => chat.copyWith(apiConfigId: selectedId),
+        );
+        await notifier.saveSettings();
+        if (mounted) {
+          final newConfig = allConfigs.firstWhere((c) => c.id == selectedId);
+          ref
+              .read(chatStateNotifierProvider(widget.chatId).notifier)
+              .showTopMessage(
+                'API 已切换为: ${newConfig.name}',
+                backgroundColor: Colors.green,
+              );
+        }
+      } catch (e) {
+        if (mounted) {
+          ref
+              .read(chatStateNotifierProvider(widget.chatId).notifier)
+              .showTopMessage('API 切换失败: $e', backgroundColor: Colors.red);
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSwitchingApi = false;
+          });
+        }
+      }
+    }
+  }
+
   Widget _buildAttachmentsPreview() {
     if (_attachments.isEmpty) {
       return const SizedBox.shrink();
@@ -269,7 +343,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     required String tooltip,
     required bool isSelected,
     required VoidCallback onPressed,
+    Widget? replacement,
   }) {
+    if (replacement != null) {
+      return replacement;
+    }
     final theme = Theme.of(context);
     return IconButton(
       icon: Icon(icon),
@@ -296,16 +374,19 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     return SizedBox(
       width: 40,
       height: 40,
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.zero,
-          visualDensity: VisualDensity.compact,
-          foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      child: Tooltip(
+        message: tooltip,
+        child: TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
         ),
       ),
     );
@@ -316,6 +397,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final notifier = ref.read(
       chatStateNotifierProvider(widget.chatId).notifier,
     );
+    final chatSettings = ref.watch(chatSettingsProvider(widget.chatId));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
@@ -324,6 +406,24 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         children: [
           Row(
             children: [
+              _buildIconButton(
+                icon: Icons.settings_ethernet,
+                tooltip: '切换 API 配置',
+                isSelected: false,
+                onPressed: _isSwitchingApi
+                    ? () {}
+                    : _showApiConfigSwitcherDialog,
+                replacement: _isSwitchingApi
+                    ? const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.0),
+                        ),
+                      )
+                    : null,
+              ),
               _buildIconButton(
                 icon: chatState.isImageGenerationMode
                     ? Icons.image
@@ -397,22 +497,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               SizedBox(
                 width: 40,
                 height: 40,
-                child: TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isChinesePunctuation = !_isChinesePunctuation;
-                    });
-                  },
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: Theme.of(context).colorScheme.primary,
-                  ),
-                  child: Text(
-                    _isChinesePunctuation ? '中' : '英',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                child: Tooltip(
+                  message: '切换中/英文标点',
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isChinesePunctuation = !_isChinesePunctuation;
+                      });
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                    ),
+                    child: Text(
+                      _isChinesePunctuation ? '中' : '英',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),

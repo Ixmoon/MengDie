@@ -289,3 +289,32 @@ class LlmImageResponse {
       isSuccess = false,
       error = message;
 }
+
+/// Represents the data structure for a single model returned by the Gemini `/models` endpoint.
+@immutable
+class GeminiModel {
+  final String name; // e.g., "models/gemini-1.5-flash-001"
+  final String? displayName;
+  final List<String> supportedGenerationMethods;
+
+  const GeminiModel({
+    required this.name,
+    this.displayName,
+    this.supportedGenerationMethods = const [],
+  });
+
+  /// Extracts the actual model ID (e.g., "gemini-1.5-flash-001") from the full resource name.
+  String get modelId => name.startsWith('models/') ? name.substring(7) : name;
+
+  factory GeminiModel.fromJson(Map<String, dynamic> json) {
+    return GeminiModel(
+      name: json['name'] ?? '',
+      displayName: json['displayName'] as String?,
+      supportedGenerationMethods:
+          (json['supportedGenerationMethods'] as List?)
+              ?.map((item) => item.toString())
+              .toList() ??
+          const [],
+    );
+  }
+}

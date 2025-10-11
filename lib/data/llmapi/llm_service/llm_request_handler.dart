@@ -317,7 +317,7 @@ class LlmRequestHandler {
     if (CancelToken.isCancel(e)) {
       return const LlmResponse.error("Request cancelled by user.");
     }
-    final errorMessage = _formatDioError(e, serviceName);
+    final errorMessage = formatDioError(e, serviceName);
     return LlmResponse.error(errorMessage);
   }
 
@@ -367,11 +367,11 @@ class LlmRequestHandler {
     if (CancelToken.isCancel(e)) {
       return const LlmImageResponse.error("Request cancelled by user.");
     }
-    final errorMessage = _formatDioError(e, serviceName);
+    final errorMessage = formatDioError(e, serviceName);
     return LlmImageResponse.error(errorMessage);
   }
 
-  String _formatDioError(DioException e, String serviceName) {
+  String formatDioError(DioException e, String serviceName) {
     String errorMsg = "$serviceName API DioException: ${e.message}";
     if (e.response != null) {
       errorMsg +=

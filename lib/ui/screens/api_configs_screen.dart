@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/api_config.dart';
 import '../../domain/enums.dart';
 import '../../app/providers/api_key_provider.dart';
+import '../../data/llmapi/gemini_models_provider.dart';
 import '../../data/llmapi/openai_models_provider.dart';
 
 class ApiConfigsScreen extends ConsumerWidget {
@@ -150,9 +151,10 @@ class ApiConfigsScreen extends ConsumerWidget {
         existingConfig?.useDefaultSafetySettings ?? true;
 
     // Reset the state of the models provider when opening the dialog to ensure data isolation.
-    Future.microtask(
-      () => ref.read(openAIModelsProvider.notifier).resetState(),
-    );
+    Future.microtask(() {
+      ref.read(openAIModelsProvider.notifier).resetState();
+      ref.read(geminiModelsProvider.notifier).resetState();
+    });
 
     showDialog(
       context: context,
@@ -195,85 +197,29 @@ class ApiConfigsScreen extends ConsumerWidget {
                         decoration: const InputDecoration(labelText: 'API 类型'),
                       ),
                       const SizedBox(height: 16),
-                      if (selectedApiType == LlmType.openai) ...[
-                        Consumer(
-                          builder: (context, ref, child) {
-                            final modelsState = ref.watch(openAIModelsProvider);
-                            final models =
-                                modelsState.models.asData?.value ?? [];
-
-                            return TextFormField(
-                              controller: modelController,
-                              decoration: InputDecoration(
-                                labelText: '模型名称',
-                                suffixIcon: models.isEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.refresh),
-                                        tooltip: '获取模型列表',
-                                        onPressed: () {
-                                          final baseUrl =
-                                              baseUrlController.text;
-                                          final apiKey = apiKeyController.text;
-                                          if (baseUrl.isNotEmpty &&
-                                              apiKey.isNotEmpty) {
-                                            ref
-                                                .read(
-                                                  openAIModelsProvider.notifier,
-                                                )
-                                                .fetchModels(
-                                                  ApiConfig(
-                                                    id: '-1',
-                                                    name: 'temp',
-                                                    apiType: LlmType.openai,
-                                                    model: '',
-                                                    baseUrl: baseUrl,
-                                                    apiKey: apiKey,
-                                                    createdAt: DateTime.now(),
-                                                    updatedAt: DateTime.now(),
-                                                  ),
-                                                );
-                                          } else {
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  '请输入 Base URL 和 API Key 以获取模型列表',
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                        },
-                                      )
-                                    : PopupMenuButton<String>(
-                                        icon: const Icon(Icons.arrow_drop_down),
-                                        tooltip: '选择模型',
-                                        onSelected: (String value) {
-                                          setDialogState(() {
-                                            modelController.text = value;
-                                          });
-                                        },
-                                        itemBuilder: (BuildContext context) {
-                                          // The list from the provider should not contain nulls.
-                                          return models.map((model) {
-                                            return PopupMenuItem<String>(
-                                              value: model.id,
-                                              child: Text(model.id),
-                                            );
-                                          }).toList();
-                                        },
-                                      ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                      ] else ...[
+                      if (selectedApiType == LlmType.openai)
+                        _buildOpenAIModelSelector(
+                          context,
+                          ref,
+                          modelController,
+                          baseUrlController,
+                          apiKeyController,
+                          setDialogState,
+                        )
+                      else if (selectedApiType == LlmType.gemini)
+                        _buildGeminiModelSelector(
+                          context,
+                          ref,
+                          modelController,
+                          baseUrlController,
+                          apiKeyController,
+                          setDialogState,
+                        )
+                      else
                         TextFormField(
                           controller: modelController,
                           decoration: const InputDecoration(labelText: '模型名称'),
                         ),
-                      ],
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: baseUrlController,
@@ -639,6 +585,137 @@ class ApiConfigsScreen extends ConsumerWidget {
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildOpenAIModelSelector(
+    BuildContext context,
+    WidgetRef ref,
+    TextEditingController modelController,
+    TextEditingController baseUrlController,
+    TextEditingController apiKeyController,
+    StateSetter setDialogState,
+  ) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final modelsState = ref.watch(openAIModelsProvider);
+        final models = modelsState.models.asData?.value ?? [];
+
+        return TextFormField(
+          controller: modelController,
+          decoration: InputDecoration(
+            labelText: '模型名称',
+            suffixIcon: models.isEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: '获取模型列表',
+                    onPressed: () {
+                      final baseUrl = baseUrlController.text;
+                      final apiKey = apiKeyController.text;
+                      if (baseUrl.isNotEmpty && apiKey.isNotEmpty) {
+                        ref
+                            .read(openAIModelsProvider.notifier)
+                            .fetchModels(
+                              ApiConfig.empty().copyWith(
+                                apiType: LlmType.openai,
+                                baseUrl: baseUrl,
+                                apiKey: apiKey,
+                              ),
+                            );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('请输入 Base URL 和 API Key 以获取模型列表'),
+                          ),
+                        );
+                      }
+                    },
+                  )
+                : PopupMenuButton<String>(
+                    icon: const Icon(Icons.arrow_drop_down),
+                    tooltip: '选择模型',
+                    onSelected: (String value) {
+                      setDialogState(() {
+                        modelController.text = value;
+                      });
+                    },
+                    itemBuilder: (BuildContext context) {
+                      return models.map((model) {
+                        return PopupMenuItem<String>(
+                          value: model.id,
+                          child: Text(model.id),
+                        );
+                      }).toList();
+                    },
+                  ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGeminiModelSelector(
+    BuildContext context,
+    WidgetRef ref,
+    TextEditingController modelController,
+    TextEditingController baseUrlController,
+    TextEditingController apiKeyController,
+    StateSetter setDialogState,
+  ) {
+    return Consumer(
+      builder: (context, ref, child) {
+        final modelsState = ref.watch(geminiModelsProvider);
+        final models = modelsState.models.asData?.value ?? [];
+
+        return TextFormField(
+          controller: modelController,
+          decoration: InputDecoration(
+            labelText: '模型名称',
+            suffixIcon: models.isEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: '获取模型列表',
+                    onPressed: () {
+                      final apiKey = apiKeyController.text;
+                      if (apiKey.isNotEmpty) {
+                        ref
+                            .read(geminiModelsProvider.notifier)
+                            .fetchModels(
+                              ApiConfig.empty().copyWith(
+                                apiType: LlmType.gemini,
+                                baseUrl: baseUrlController.text,
+                                apiKey: apiKey,
+                              ),
+                            );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('请输入 API Key 以获取模型列表 (留空则使用全局密钥)'),
+                          ),
+                        );
+                      }
+                    },
+                  )
+                : PopupMenuButton<String>(
+                    icon: const Icon(Icons.arrow_drop_down),
+                    tooltip: '选择模型',
+                    onSelected: (String value) {
+                      setDialogState(() {
+                        modelController.text = value;
+                      });
+                    },
+                    itemBuilder: (BuildContext context) {
+                      return models.map((model) {
+                        return PopupMenuItem<String>(
+                          value: model.modelId,
+                          child: Text(model.displayName ?? model.modelId),
+                        );
+                      }).toList();
+                    },
+                  ),
+          ),
         );
       },
     );

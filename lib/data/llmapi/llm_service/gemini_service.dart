@@ -27,6 +27,47 @@ class GeminiService implements BaseLlmService {
 
   GeminiService(this._apiKeyNotifier, this._requestHandler);
 
+  /// Fetches the list of available Gemini models from the API.
+  Future<List<GeminiModel>> fetchModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final payload = GeminiListModelsPayload(
+      apiKey: apiKey,
+      apiConfig: ApiConfig.empty().copyWith(baseUrl: baseUrl, apiKey: apiKey),
+    );
+    final dio = Dio();
+    try {
+      final response = await dio.get(
+        payload.buildUrl(),
+        options: Options(headers: payload.buildHeaders()),
+      );
+
+      if (response.statusCode == 200 && response.data?['models'] is List) {
+        final data = response.data['models'] as List;
+        final models = data
+            .map((modelJson) => GeminiModel.fromJson(modelJson))
+            .where((m) {
+              return m.supportedGenerationMethods.contains('generateContent');
+            })
+            .toList();
+        models.sort(
+          (a, b) =>
+              (a.displayName ?? a.name).compareTo(b.displayName ?? b.name),
+        );
+        return models;
+      } else {
+        throw Exception('Failed to load models: Status ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      final handler = LlmRequestHandler(dio);
+      final errorMsg = handler.formatDioError(e, 'Gemini');
+      throw Exception('Failed to fetch models: $errorMsg');
+    } catch (e) {
+      throw Exception('An unexpected error occurred while fetching models: $e');
+    }
+  }
+
   @override
   Stream<LlmStreamChunk> sendMessageStream({
     required List<LlmContent> llmContext,
@@ -753,5 +794,74 @@ class GeminiCountTokensPayload extends HttpRequestPayload {
       }
     }
     return {'contents': history};
+  }
+}
+
+/// Fetches the list of available Gemini models from the API.
+Future<List<GeminiModel>> fetchModels({
+  required String baseUrl,
+  required String apiKey,
+}) async {
+  final payload = GeminiListModelsPayload(
+    apiKey: apiKey,
+    apiConfig: ApiConfig.empty().copyWith(baseUrl: baseUrl, apiKey: apiKey),
+  );
+  final dio = Dio();
+  try {
+    final response = await dio.get(
+      payload.buildUrl(),
+      options: Options(headers: payload.buildHeaders()),
+    );
+
+    if (response.statusCode == 200 && response.data?['models'] is List) {
+      final data = response.data['models'] as List;
+      final models = data
+          .map((modelJson) => GeminiModel.fromJson(modelJson))
+          // Only include models that support 'generateContent'
+          .where(
+            (m) => m.supportedGenerationMethods.contains('generateContent'),
+          )
+          .toList();
+      // Sort by display name or name
+      models.sort(
+        (a, b) => (a.displayName ?? a.name).compareTo(b.displayName ?? b.name),
+      );
+      return models;
+    } else {
+      throw Exception('Failed to load models: Status ${response.statusCode}');
+    }
+  } on DioException catch (e) {
+    final handler = LlmRequestHandler(dio);
+    final errorMsg = handler.formatDioError(e, 'Gemini');
+    throw Exception('Failed to fetch models: $errorMsg');
+  } catch (e) {
+    throw Exception('An unexpected error occurred while fetching models: $e');
+  }
+}
+
+class GeminiListModelsPayload extends HttpRequestPayload {
+  final String apiKey;
+
+  GeminiListModelsPayload({required this.apiKey, required super.apiConfig})
+    : super(generationParams: {});
+
+  @override
+  String buildUrl() {
+    const defaultBaseUrl = "https://generativelanguage.googleapis.com";
+    final baseUrl = apiConfig.baseUrl?.isNotEmpty == true
+        ? apiConfig.baseUrl!
+        : defaultBaseUrl;
+    return "$baseUrl/v1beta/models?key=$apiKey";
+  }
+
+  @override
+  Map<String, String> buildHeaders() {
+    return {'Content-Type': 'application/json'};
+  }
+
+  @override
+  Map<String, dynamic> buildBody() {
+    // GET request does not have a body
+    return {};
   }
 }
