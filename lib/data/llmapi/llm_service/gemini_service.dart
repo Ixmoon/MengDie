@@ -101,31 +101,55 @@ class GeminiService implements BaseLlmService {
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
     int n = 1,
-  }) {
+  }) async {
     _cancelToken = CancelToken();
     _requestHandler.setCancelToken(_cancelToken);
 
-    // New API key logic: Prioritize the key from the config, fallback to the pool.
     final apiKey = apiConfig.apiKey?.isNotEmpty == true
         ? apiConfig.apiKey
         : _apiKeyNotifier.getNextGeminiApiKey();
 
     if (apiKey == null || apiKey.isEmpty) {
-      return Future.value(
-        const LlmImageResponse.error("没有可用的 Gemini API Key。"),
-      );
+      return const LlmImageResponse.error("没有可用的 Gemini API Key。");
     }
 
-    // Gemini 的图片生成 API（通过 generateContent）可以处理更丰富的上下文。
-    // 我们直接将上下文传递给 Payload。
     final payload = GeminiImagePayload(
       apiKey: apiKey,
       apiConfig: apiConfig,
-      generationParams: {}, // n is not a standard generation param here
+      generationParams: {},
       llmContext: llmContext,
     );
 
-    return _requestHandler.executeImage(payload);
+    try {
+      final stream = _requestHandler.executeStream(
+        payload,
+        textExtractor: _extractTextOrImageFromChunk,
+      );
+
+      final imageChunks = <String>[];
+      final textChunks = <String>[];
+      await for (final chunk in stream) {
+        if (chunk.textChunk.startsWith('IMAGE:')) {
+          imageChunks.add(chunk.textChunk.substring('IMAGE:'.length));
+        } else if (chunk.textChunk.startsWith('TEXT:')) {
+          textChunks.add(chunk.textChunk.substring('TEXT:'.length));
+        }
+        if (chunk.isFinished && chunk.error != null) {
+          return LlmImageResponse.error(chunk.error!);
+        }
+      }
+
+      if (imageChunks.isEmpty && textChunks.isEmpty) {
+        return const LlmImageResponse.error("未生成任何图像或文本数据。");
+      }
+
+      return LlmImageResponse(
+        base64Images: imageChunks,
+        text: textChunks.join(''),
+      );
+    } catch (e) {
+      return LlmImageResponse.error("图像生成流处理失败: $e");
+    }
   }
 
   @override
@@ -249,6 +273,54 @@ class GeminiService implements BaseLlmService {
     return const LlmResponse.error(
       "Invalid response: No valid text parts found in Gemini response.",
     );
+  }
+
+  String _extractImageFromChunk(Map<String, dynamic> json) {
+    final candidates = json['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) return '';
+
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) return '';
+
+    final part = parts.first as Map<String, dynamic>? ?? {};
+    final inlineData = part['inlineData'] as Map<String, dynamic>?;
+    if (inlineData != null) {
+      final mimeType = inlineData['mimeType'] as String?;
+      if (mimeType != null && mimeType.startsWith('image/')) {
+        return inlineData['data'] as String? ?? '';
+      }
+    }
+    return '';
+  }
+
+  String _extractTextOrImageFromChunk(Map<String, dynamic> json) {
+    final candidates = json['candidates'] as List?;
+    if (candidates == null || candidates.isEmpty) return '';
+
+    final content = candidates.first['content'] as Map<String, dynamic>?;
+    final parts = content?['parts'] as List?;
+    if (parts == null || parts.isEmpty) return '';
+
+    // Gemini's image generation can have multiple parts in a single response chunk
+    for (final part in parts) {
+      if (part is! Map<String, dynamic>) continue;
+
+      final inlineData = part['inlineData'] as Map<String, dynamic>?;
+      if (inlineData != null) {
+        final mimeType = inlineData['mimeType'] as String?;
+        if (mimeType != null && mimeType.startsWith('image/')) {
+          final data = inlineData['data'] as String? ?? '';
+          if (data.isNotEmpty) return 'IMAGE:$data';
+        }
+      }
+
+      final text = part['text'] as String? ?? '';
+      if (text.isNotEmpty) {
+        return 'TEXT:$text';
+      }
+    }
+    return '';
   }
 }
 
@@ -425,7 +497,7 @@ class GeminiImagePayload extends HttpRequestPayload {
     final baseUrl = apiConfig.baseUrl?.isNotEmpty == true
         ? apiConfig.baseUrl!
         : defaultBaseUrl;
-    return "$baseUrl/v1beta/models/${apiConfig.model}:generateContent?key=$apiKey";
+    return "$baseUrl/v1beta/models/${apiConfig.model}:streamGenerateContent?key=$apiKey&alt=sse";
   }
 
   @override
