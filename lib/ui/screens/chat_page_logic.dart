@@ -155,40 +155,28 @@ class ChatPageLogic {
     if (chat == null) return;
 
     final textController = TextEditingController(text: message.rawText);
-    final xmlController = TextEditingController();
-
-    // Unified logic for both user and model messages
-    final bool useSecondaryXml = chat.enableSecondaryXml;
-    if (message.role == MessageRole.model) {
-      xmlController.text = useSecondaryXml
-          ? (message.secondaryXmlContent ?? '')
-          : (message.originalXmlContent ?? '');
-    } else {
-      // For user messages, always use originalXmlContent
-      xmlController.text = message.originalXmlContent ?? '';
-    }
+    final originalXmlController =
+        TextEditingController(text: message.originalXmlContent ?? '');
+    final secondaryXmlController =
+        TextEditingController(text: message.secondaryXmlContent ?? '');
 
     showDialog(
       context: context,
       builder: (dialogContext) {
-        // Unified dialog content for both user and model roles
+        final isModelMessage = message.role == MessageRole.model;
+
         final dialogContent = SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                message.role == MessageRole.model ? '模型消息:' : '用户消息:',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
               TextField(
                 controller: textController,
                 autofocus: true,
                 maxLines: 5,
                 minLines: 1,
                 decoration: InputDecoration(
-                  hintText: '用户可见的纯文本内容...',
+                  labelText: '用户可见内容',
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.all(12),
                   suffixIcon: IconButton(
@@ -211,12 +199,12 @@ class ChatPageLogic {
               ),
               const SizedBox(height: 16),
               const Text(
-                'XML内容:',
+                '原生XML:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               TextField(
-                controller: xmlController,
+                controller: originalXmlController,
                 maxLines: 5,
                 minLines: 1,
                 decoration: InputDecoration(
@@ -229,19 +217,54 @@ class ChatPageLogic {
                     onPressed: () async {
                       final newText = await showFullScreenTextEditor(
                         context,
-                        initialText: xmlController.text,
-                        title: '编辑XML内容',
+                        initialText: originalXmlController.text,
+                        title: '编辑原生XML内容',
                         initialLanguage: 'xml',
                         chatId: chatId,
                       );
                       if (newText != null) {
-                        xmlController.text = newText;
+                        originalXmlController.text = newText;
                       }
                     },
                   ),
                 ),
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
               ),
+              if (isModelMessage) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '再生XML:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: secondaryXmlController,
+                  maxLines: 5,
+                  minLines: 1,
+                  decoration: InputDecoration(
+                    hintText: '由AI生成的额外XML内容...',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.all(12),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.fullscreen),
+                      tooltip: '全屏编辑',
+                      onPressed: () async {
+                        final newText = await showFullScreenTextEditor(
+                          context,
+                          initialText: secondaryXmlController.text,
+                          title: '编辑再生XML内容',
+                          initialLanguage: 'xml',
+                          chatId: chatId,
+                        );
+                        if (newText != null) {
+                          secondaryXmlController.text = newText;
+                        }
+                      },
+                    ),
+                  ),
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+              ]
             ],
           ),
         );
@@ -260,7 +283,8 @@ class ChatPageLogic {
                   chatStateNotifierProvider(chatId).notifier,
                 );
                 final newModelsTextFromInput = textController.text;
-                final newXmlFromInput = xmlController.text;
+                final newOriginalXml = originalXmlController.text;
+                final newSecondaryXml = secondaryXmlController.text;
 
                 if (newModelsTextFromInput.trim().isEmpty &&
                     !message.parts.any((p) => p.type != MessagePartType.text)) {
@@ -276,24 +300,20 @@ class ChatPageLogic {
                 );
                 newParts.add(MessagePart.text(newModelsTextFromInput));
 
-                final finalCombinedXml = newXmlFromInput.isNotEmpty
-                    ? newXmlFromInput
-                    : null;
+                final finalOriginalXml =
+                    newOriginalXml.isNotEmpty ? newOriginalXml : null;
+                final finalSecondaryXml =
+                    newSecondaryXml.isNotEmpty ? newSecondaryXml : null;
 
-                Message updatedMessage;
-                if (message.role == MessageRole.model && useSecondaryXml) {
-                  updatedMessage = message.copyWith(
-                    parts: newParts,
-                    secondaryXmlContent: finalCombinedXml,
-                    clearSecondaryXml: finalCombinedXml == null,
-                  );
-                } else {
-                  updatedMessage = message.copyWith(
-                    parts: newParts,
-                    originalXmlContent: finalCombinedXml,
-                    clearOriginalXml: finalCombinedXml == null,
-                  );
-                }
+                Message updatedMessage = message.copyWith(
+                  parts: newParts,
+                  originalXmlContent: finalOriginalXml,
+                  clearOriginalXml: finalOriginalXml == null,
+                  secondaryXmlContent:
+                      isModelMessage ? finalSecondaryXml : message.secondaryXmlContent,
+                  clearSecondaryXml:
+                      isModelMessage ? (finalSecondaryXml == null) : false,
+                );
 
                 Navigator.pop(dialogContext);
                 await notifier.editMessage(
@@ -309,7 +329,8 @@ class ChatPageLogic {
                   chatStateNotifierProvider(chatId).notifier,
                 );
                 final newModelsTextFromInput = textController.text;
-                final newXmlFromInput = xmlController.text;
+                final newOriginalXml = originalXmlController.text;
+                final newSecondaryXml = secondaryXmlController.text;
 
                 if (newModelsTextFromInput.trim().isEmpty &&
                     !message.parts.any((p) => p.type != MessagePartType.text)) {
@@ -327,36 +348,34 @@ class ChatPageLogic {
                 final finalCleanModelsText = processResult.modelsText;
                 final newlyExtractedXml = processResult.extractedXml;
 
-                final List<String> xmlParts = [];
-                if (newXmlFromInput.isNotEmpty) {
-                  xmlParts.add(newXmlFromInput);
+                final List<String> originalXmlParts = [];
+                if (newOriginalXml.isNotEmpty) {
+                  originalXmlParts.add(newOriginalXml);
                 }
                 if (newlyExtractedXml != null && newlyExtractedXml.isNotEmpty) {
-                  xmlParts.add(newlyExtractedXml);
+                  originalXmlParts.add(newlyExtractedXml);
                 }
-                final finalCombinedXml = xmlParts.isEmpty
+                final finalOriginalXml = originalXmlParts.isEmpty
                     ? null
-                    : xmlParts.join('\n');
+                    : originalXmlParts.join('\n');
+                
+                final finalSecondaryXml =
+                    newSecondaryXml.isNotEmpty ? newSecondaryXml : null;
 
                 final newParts = List<MessagePart>.from(
                   message.parts.where((p) => p.type != MessagePartType.text),
                 );
                 newParts.add(MessagePart.text(finalCleanModelsText));
 
-                Message updatedMessage;
-                if (message.role == MessageRole.model && useSecondaryXml) {
-                  updatedMessage = message.copyWith(
-                    parts: newParts,
-                    secondaryXmlContent: finalCombinedXml,
-                    clearSecondaryXml: finalCombinedXml == null,
-                  );
-                } else {
-                  updatedMessage = message.copyWith(
-                    parts: newParts,
-                    originalXmlContent: finalCombinedXml,
-                    clearOriginalXml: finalCombinedXml == null,
-                  );
-                }
+                Message updatedMessage = message.copyWith(
+                  parts: newParts,
+                  originalXmlContent: finalOriginalXml,
+                  clearOriginalXml: finalOriginalXml == null,
+                  secondaryXmlContent:
+                      isModelMessage ? finalSecondaryXml : message.secondaryXmlContent,
+                  clearSecondaryXml:
+                      isModelMessage ? (finalSecondaryXml == null) : false,
+                );
 
                 Navigator.pop(dialogContext);
                 await notifier.editMessage(
