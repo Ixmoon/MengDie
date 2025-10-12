@@ -21,6 +21,10 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
     _prefs = prefs;
     state = state.copyWith(
       isStreamMode: _prefs.getBool('chat_${chatId}_is_stream_mode') ?? true,
+      isPseudoStreamMode:
+          _prefs.getBool('chat_${chatId}_is_pseudo_stream_mode') ?? false,
+      pseudoStreamSpeed:
+          _prefs.getDouble('chat_${chatId}_pseudo_stream_speed') ?? 1.0,
       isBubbleTransparent:
           _prefs.getBool('chat_${chatId}_is_bubble_transparent') ?? false,
       isBubbleHalfWidth:
@@ -72,6 +76,18 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
     state = state.copyWith(isStreamMode: newValue);
     _prefs.setBool('chat_${chatId}_is_stream_mode', newValue);
     showTopMessage('输出模式已切换为: ${newValue ? "流式" : "一次性"}');
+  }
+
+  void togglePseudoStreamMode() {
+    final newValue = !state.isPseudoStreamMode;
+    state = state.copyWith(isPseudoStreamMode: newValue);
+    _prefs.setBool('chat_${chatId}_is_pseudo_stream_mode', newValue);
+    showTopMessage('伪流式模式已${newValue ? "开启" : "关闭"}');
+  }
+
+  void setPseudoStreamSpeed(double speed) {
+    state = state.copyWith(pseudoStreamSpeed: speed);
+    _prefs.setDouble('chat_${chatId}_pseudo_stream_speed', speed);
   }
 
   void toggleBubbleTransparency() {

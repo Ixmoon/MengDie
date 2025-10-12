@@ -259,7 +259,7 @@ class _FullScreenTextEditorDialogState
               onPressed: _onClosePressed, // 2. Add confirmation on exit
             ),
             actions: [
-              // --- Prompt Injection ---
+              // --- 提示词注入 ---
               IconButton(
                 icon: const Icon(Icons.input),
                 tooltip: '注入提示词',

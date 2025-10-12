@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // 用于渲染 Markdown 文本
 import 'package:markdown/markdown.dart' as md;
@@ -22,18 +23,23 @@ class MessageBubble extends StatelessWidget {
   final bool highlightQuotes; // 新增：是否高亮引号内容
   final int? totalTokens; // Add totalTokens to display the token count
   final String?
-  carriedOverXml; // The synthesized XML context for the latest user message
+      carriedOverXml; // The synthesized XML context for the latest user message
+  final bool isPseudoStreamMode;
+  final double pseudoStreamSpeed;
+
   const MessageBubble({
     super.key,
     required this.message,
     required this.xmlRules,
-    this.isStreaming = false, // 默认为 false
-    this.onTap, // 可选的回调
-    this.isTransparent = false, // 默认不透明
-    this.isHalfWidth = false, // 默认全宽
-    this.highlightQuotes = false, // 默认不高亮
-    this.totalTokens, // Initialize totalTokens
+    this.isStreaming = false,
+    this.onTap,
+    this.isTransparent = false,
+    this.isHalfWidth = false,
+    this.highlightQuotes = false,
+    this.totalTokens,
     this.carriedOverXml,
+    this.isPseudoStreamMode = false,
+    this.pseudoStreamSpeed = 1.0,
   });
 
   // --- 私有辅助方法 ---
@@ -484,23 +490,46 @@ class MessageBubble extends StatelessWidget {
     final textContent = message.modelsText.isEmpty && isStreaming && !isUser
         ? "..."
         : message.modelsText;
-    final widgets = _renderTextContent(
-      context,
-      textContent,
-      xmlRules,
-      textColor,
-      isStreaming,
-    );
-    if (widgets.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween),
-        ...widgets,
-      ],
-    );
+    if (isPseudoStreamMode && !isUser) {
+      return _TypewriterText(
+        key: ValueKey(message.id), // Ensure widget rebuilds for new messages
+        fullText: textContent,
+        speed: pseudoStreamSpeed,
+        isStreaming: isStreaming,
+        builder: (context, displayedText) {
+          final widgets = _renderTextContent(
+            context,
+            displayedText,
+            xmlRules,
+            textColor,
+            isStreaming,
+          );
+          if (widgets.isEmpty) return const SizedBox.shrink();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: widgets,
+          );
+        },
+      );
+    } else {
+      final widgets = _renderTextContent(
+        context,
+        textContent,
+        xmlRules,
+        textColor,
+        isStreaming,
+      );
+      if (widgets.isEmpty) return const SizedBox.shrink();
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: widgets,
+      );
+    }
   }
 
   Widget _buildNonTextPart(
@@ -577,7 +606,7 @@ class MessageBubble extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             if (hasText)
               _buildTextPart(context, textColor, isUser, isStreaming),
@@ -634,18 +663,13 @@ class MessageBubble extends StatelessWidget {
       child: ExpansionTile(
         initiallyExpanded: isStreaming,
         tilePadding: EdgeInsets.zero,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: textColor.withAlpha((255 * 0.7).round()),
-                fontSize: 12,
-              ),
-            ),
-          ],
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: textColor.withAlpha((255 * 0.7).round()),
+            fontSize: 12,
+          ),
         ),
         children: [
           Align(
@@ -707,39 +731,41 @@ class MessageBubble extends StatelessWidget {
 
     final messageCard = Align(
       alignment: alignment,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: isHalfWidth ? screenWidth * 2 / 3 : double.infinity,
-        ),
-        margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-        child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12.0),
-            side: BorderSide(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withAlpha((255 * 0.2).round()),
-              width: 0.8,
-            ),
+      child: IntrinsicWidth(
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: isHalfWidth ? screenWidth * 2 / 3 : screenWidth,
           ),
-          color: color,
-          elevation: 0,
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight:
-                    24, // Ensure a minimum tappable height for empty messages
-                minWidth:
-                    48, // Ensure a minimum tappable width for empty messages
+          margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+          child: Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12.0),
+              side: BorderSide(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withAlpha((255 * 0.2).round()),
+                width: 0.8,
               ),
-              child: _buildMessageContent(
-                context,
-                textColor,
-                isUser,
-                isStreaming,
+            ),
+            color: color,
+            elevation: 0,
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight:
+                      24, // Ensure a minimum tappable height for empty messages
+                  minWidth:
+                      48, // Ensure a minimum tappable width for empty messages
+                ),
+                child: _buildMessageContent(
+                  context,
+                  textColor,
+                  isUser,
+                  isStreaming,
+                ),
               ),
             ),
           ),
@@ -750,34 +776,36 @@ class MessageBubble extends StatelessWidget {
     if (isUser && carriedOverXml != null && carriedOverXml!.isNotEmpty) {
       final xmlBubble = Align(
         alignment: alignment,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: isHalfWidth ? screenWidth * 2 / 3 : double.infinity,
-          ),
-          margin: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 4.0),
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12.0),
-              side: BorderSide(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withAlpha((255 * 0.1).round()),
-                width: 0.8,
-              ),
+        child: IntrinsicWidth(
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: isHalfWidth ? screenWidth * 2 / 3 : screenWidth,
             ),
-            color: color.withAlpha(180),
-            elevation: 0,
-            margin: EdgeInsets.zero,
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: _buildXmlExpansionTile(
-                context,
-                '合成XML',
-                carriedOverXml!,
-                textColor,
-                isStreaming,
-                MessagePartType.text,
+            margin: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 4.0),
+            child: Card(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12.0),
+                side: BorderSide(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withAlpha((255 * 0.1).round()),
+                  width: 0.8,
+                ),
+              ),
+              color: color.withAlpha(180),
+              elevation: 0,
+              margin: EdgeInsets.zero,
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: _buildXmlExpansionTile(
+                  context,
+                  '合成XML',
+                  carriedOverXml!,
+                  textColor,
+                  isStreaming,
+                  MessagePartType.text,
+                ),
               ),
             ),
           ),
@@ -792,5 +820,102 @@ class MessageBubble extends StatelessWidget {
     }
 
     return messageCard;
+  }
+}
+
+class _TypewriterText extends StatefulWidget {
+  final String fullText;
+  final double speed;
+  final bool isStreaming;
+  final Widget Function(BuildContext, String) builder;
+
+  const _TypewriterText({
+    super.key,
+    required this.fullText,
+    required this.speed,
+    required this.isStreaming,
+    required this.builder,
+  });
+
+  @override
+  _TypewriterTextState createState() => _TypewriterTextState();
+}
+
+class _TypewriterTextState extends State<_TypewriterText> {
+  String _displayedText = "";
+  Timer? _timer;
+  int _charIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_TypewriterText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If streaming has just finished, cancel the timer and show the full text.
+    if (!widget.isStreaming && oldWidget.isStreaming) {
+      _timer?.cancel();
+      if (_displayedText != widget.fullText) {
+        setState(() {
+          _displayedText = widget.fullText;
+        });
+      }
+      return; // Animation is done, no need to continue.
+    }
+
+    // If the text or speed changes, restart the timer to continue animating.
+    if (widget.fullText != oldWidget.fullText ||
+        widget.speed != oldWidget.speed) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startAnimation() {
+    _timer?.cancel();
+    if (_charIndex >= widget.fullText.length) {
+      // Already displayed everything
+      if (_displayedText != widget.fullText) {
+        setState(() {
+          _displayedText = widget.fullText;
+        });
+      }
+      return;
+    }
+
+    const baseDelay = 50; // Milliseconds per character at 1x speed
+    final delay = (baseDelay / widget.speed).clamp(10, 500).toInt();
+
+    _timer = Timer.periodic(Duration(milliseconds: delay), (timer) {
+      if (_charIndex < widget.fullText.length) {
+        _charIndex++;
+        setState(() {
+          _displayedText = widget.fullText.substring(0, _charIndex);
+        });
+      } else {
+        timer.cancel();
+        // If it's not a streaming message, ensure the final full text is displayed
+        // in case of any timing discrepancies.
+        if (!widget.isStreaming && _displayedText != widget.fullText) {
+          setState(() {
+            _displayedText = widget.fullText;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _displayedText);
   }
 }

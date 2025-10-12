@@ -37,6 +37,9 @@ class _ChatStateSelectors {
 
   static (bool, bool) selectScrollListenerTriggers(ChatScreenState state) =>
       (state.isLoading, state.isStreaming);
+  
+  static (bool, double) selectPseudoStream(ChatScreenState state) =>
+      (state.isPseudoStreamMode, state.pseudoStreamSpeed);
 }
 
 class ChatPageContent extends ConsumerStatefulWidget {
@@ -182,6 +185,13 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
     final isLoading = loadingIndicators.$1;
     final isProcessingInBackground = loadingIndicators.$2;
     final isStreaming = loadingIndicators.$3;
+    final pseudoStream = ref.watch(
+      chatStateNotifierProvider(
+        chatId,
+      ).select(_ChatStateSelectors.selectPseudoStream),
+    );
+    final isPseudoStreamMode = pseudoStream.$1;
+    final pseudoStreamSpeed = pseudoStream.$2;
 
     return chatAsync.when(
       data: (chat) {
@@ -299,6 +309,8 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                         onSuggestionSelected: (suggestion) {
                           _messageController.text = suggestion;
                         },
+                        isPseudoStreamMode: isPseudoStreamMode,
+                        pseudoStreamSpeed: pseudoStreamSpeed,
                       ),
                     ),
                     if ((isLoading || isProcessingInBackground) && !isStreaming)

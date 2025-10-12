@@ -181,7 +181,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
 
     if (activeChatId == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Prompt Injection')),
+        appBar: AppBar(title: const Text('提示词注入')),
         body: const Center(child: Text('没有活动的聊天。请先选择一个聊天。')),
       );
     }
@@ -193,7 +193,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Prompt Injection'),
+        title: const Text('提示词注入'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),

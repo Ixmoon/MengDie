@@ -15,6 +15,8 @@ class MessageList extends ConsumerStatefulWidget {
   final String? carriedOverXml;
   final void Function(Message, MessagePart, List<Message>) onMessageTap;
   final Function(String) onSuggestionSelected;
+  final bool isPseudoStreamMode;
+  final double pseudoStreamSpeed;
 
   const MessageList({
     super.key,
@@ -24,6 +26,8 @@ class MessageList extends ConsumerStatefulWidget {
     this.carriedOverXml,
     required this.onMessageTap,
     required this.onSuggestionSelected,
+    this.isPseudoStreamMode = false,
+    this.pseudoStreamSpeed = 1.0,
   });
 
   @override
@@ -133,9 +137,10 @@ class _MessageListState extends ConsumerState<MessageList> {
                     ? chatState.totalTokens
                     : null,
                 // 将合成的XML和标记传递给最新的用户消息
-                carriedOverXml: isLatestUserMessage
-                    ? widget.carriedOverXml
-                    : null,
+                carriedOverXml:
+                    isLatestUserMessage ? widget.carriedOverXml : null,
+                isPseudoStreamMode: widget.isPseudoStreamMode,
+                pseudoStreamSpeed: widget.pseudoStreamSpeed,
               );
             }).toList();
 

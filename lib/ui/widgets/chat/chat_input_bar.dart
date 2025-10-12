@@ -10,6 +10,7 @@ import 'package:mime/mime.dart';
 import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
 import '../../../app/providers/chat_settings_provider.dart';
+import '../../../app/providers/chat_state/chat_screen_state.dart';
 import '../../../app/providers/chat_state/chat_state_notifier.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../cached_image.dart';
@@ -407,6 +408,91 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
+  Widget _buildStreamModeButton(
+    ChatScreenState chatState,
+    ChatStateNotifier notifier,
+  ) {
+    return GestureDetector(
+      onLongPress: () {
+        final RenderBox button = context.findRenderObject() as RenderBox;
+        final RenderBox overlay =
+            Overlay.of(context).context.findRenderObject() as RenderBox;
+        final RelativeRect position = RelativeRect.fromRect(
+          Rect.fromPoints(
+            button.localToGlobal(Offset.zero, ancestor: overlay),
+            button.localToGlobal(
+              button.size.bottomRight(Offset.zero),
+              ancestor: overlay,
+            ),
+          ),
+          Offset.zero & overlay.size,
+        );
+        showMenu(
+          context: context,
+          position: position,
+          items: [
+            PopupMenuItem(
+              // Use a Consumer to rebuild the switch when the state changes.
+              child: Consumer(
+                builder: (context, ref, child) {
+                  // Watch the provider to get the latest state.
+                  final watchedChatState =
+                      ref.watch(chatStateNotifierProvider(widget.chatId));
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('伪流式'),
+                      Switch(
+                        value: watchedChatState.isPseudoStreamMode,
+                        onChanged: (bool value) {
+                          // The notifier call will trigger the Consumer to rebuild.
+                          notifier.togglePseudoStreamMode();
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            PopupMenuItem(
+              enabled: false,
+              // Use another Consumer for the slider.
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final watchedChatState =
+                      ref.watch(chatStateNotifierProvider(widget.chatId));
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('打字机速度'),
+                      Slider(
+                        value: watchedChatState.pseudoStreamSpeed,
+                        min: 0.1,
+                        max: 5.0,
+                        divisions: 49,
+                        label:
+                            watchedChatState.pseudoStreamSpeed.toStringAsFixed(1),
+                        onChanged: (double value) {
+                          notifier.setPseudoStreamSpeed(value);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+      child: _buildIconButton(
+        icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble,
+        tooltip: chatState.isStreamMode ? '流式输出 (长按设置)' : '一次性输出',
+        isSelected: chatState.isStreamMode,
+        onPressed: notifier.toggleOutputMode,
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
     final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
     final notifier = ref.read(
@@ -447,12 +533,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 isSelected: chatState.isImageGenerationMode,
                 onPressed: notifier.toggleImageGenerationMode,
               ),
-              _buildIconButton(
-                icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble,
-                tooltip: chatState.isStreamMode ? '流式输出' : '一次性输出',
-                isSelected: chatState.isStreamMode,
-                onPressed: notifier.toggleOutputMode,
-              ),
+              _buildStreamModeButton(chatState, notifier),
               _buildIconButton(
                 icon: chatState.highlightQuotes
                     ? Icons.format_quote
@@ -463,7 +544,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
               _buildIconButton(
                 icon: Icons.biotech_outlined,
-                tooltip: 'Prompt Injection',
+                tooltip: '提示词注入',
                 isSelected: false,
                 onPressed: () {
                   context.go('/chat/prompt-editor');

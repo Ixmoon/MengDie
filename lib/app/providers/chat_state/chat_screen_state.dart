@@ -14,6 +14,8 @@ class ChatScreenState {
   final DateTime? generationStartTime;
   final bool isStreaming; // Still useful to know if a stream is active overall
   final bool isStreamMode;
+  final bool isPseudoStreamMode; // New state for pseudo streaming
+  final double pseudoStreamSpeed; // New state for pseudo streaming speed
   final bool isBubbleTransparent;
   final bool isBubbleHalfWidth;
   final bool isMessageListHalfHeight;
@@ -57,6 +59,8 @@ class ChatScreenState {
     this.topMessageColor,
     this.isStreaming = false,
     this.isStreamMode = true,
+    this.isPseudoStreamMode = false,
+    this.pseudoStreamSpeed = 1.0,
     this.isBubbleTransparent = false,
     this.isBubbleHalfWidth = false,
     this.isMessageListHalfHeight = false,
@@ -98,6 +102,8 @@ class ChatScreenState {
     bool? isStreaming,
     bool clearStreaming = false,
     bool? isStreamMode,
+    bool? isPseudoStreamMode,
+    double? pseudoStreamSpeed,
     bool? isBubbleTransparent,
     bool? isBubbleHalfWidth,
     bool? isMessageListHalfHeight,
@@ -145,6 +151,8 @@ class ChatScreenState {
           : (generationStartTime ?? this.generationStartTime),
       isStreaming: clearStreaming ? false : (isStreaming ?? this.isStreaming),
       isStreamMode: isStreamMode ?? this.isStreamMode,
+      isPseudoStreamMode: isPseudoStreamMode ?? this.isPseudoStreamMode,
+      pseudoStreamSpeed: pseudoStreamSpeed ?? this.pseudoStreamSpeed,
       isBubbleTransparent: isBubbleTransparent ?? this.isBubbleTransparent,
       isBubbleHalfWidth: isBubbleHalfWidth ?? this.isBubbleHalfWidth,
       isMessageListHalfHeight:
