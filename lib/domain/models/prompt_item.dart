@@ -16,6 +16,9 @@ class PromptItem {
   final MessageRole injectionRole;
   final int injectionPosition;
   final int matchMessageCount;
+  final int order;
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  final bool isGlobal;
 
   const PromptItem({
     required this.id,
@@ -25,6 +28,8 @@ class PromptItem {
     this.injectionRole = MessageRole.user,
     this.injectionPosition = 2,
     this.matchMessageCount = 6,
+    this.order = 0,
+    this.isGlobal = false,
   });
 
   factory PromptItem.fromJson(Map<String, dynamic> json) =>
@@ -40,6 +45,8 @@ class PromptItem {
     MessageRole? injectionRole,
     int? injectionPosition,
     int? matchMessageCount,
+    int? order,
+    bool? isGlobal,
   }) {
     return PromptItem(
       id: id ?? this.id,
@@ -49,6 +56,8 @@ class PromptItem {
       injectionRole: injectionRole ?? this.injectionRole,
       injectionPosition: injectionPosition ?? this.injectionPosition,
       matchMessageCount: matchMessageCount ?? this.matchMessageCount,
+      order: order ?? this.order,
+      isGlobal: isGlobal ?? this.isGlobal,
     );
   }
 }

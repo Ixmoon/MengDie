@@ -10,6 +10,7 @@ import '../../data/database/daos/user_dao.dart';
 import '../../data/mappers/chat_mapper.dart';
 import '../providers/auth_providers.dart';
 import '../providers/repository_providers.dart';
+import '../services/prompt_service.dart';
 
 // 本文件包含用于管理 Chat 数据集合的仓库类和提供者。
 
@@ -280,6 +281,10 @@ class ChatRepository {
     }
 
     await _bindItemToCurrentUser(newChatId);
+
+    //
+    final promptService = _ref.read(promptServiceProvider.notifier);
+    await promptService.duplicateChatSettings(sourceChatId, newChatId);
     return newChatId;
   }
 

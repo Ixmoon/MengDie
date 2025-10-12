@@ -386,7 +386,9 @@ class ContextXmlService {
               .map((k) => k.trim().toLowerCase());
           if (keywords.any(
             (keyword) => messagesToSearch.any(
-              (m) => m.rawText.toLowerCase().contains(keyword),
+              (m) => ('${m.rawText}${m.originalXmlContent ?? ''}${m.secondaryXmlContent ?? ''}')
+                  .toLowerCase()
+                  .contains(keyword),
             ),
           )) {
             onTexts.add(prompt.text);

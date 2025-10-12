@@ -118,7 +118,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await SyncService.instance.syncAllUsers();
+      await SyncService.instance.syncUsersAndChats();
       if (mounted) {
         ScaffoldMessenger.of(
           context,

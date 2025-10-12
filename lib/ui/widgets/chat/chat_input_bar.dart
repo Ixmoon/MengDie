@@ -10,6 +10,7 @@ import 'package:mime/mime.dart';
 import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
 import '../../../app/providers/chat_settings_provider.dart';
+import '../../../app/providers/chat_state/chat_state_notifier.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../cached_image.dart';
 
@@ -30,7 +31,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final FocusNode _inputFocusNode = FocusNode();
   final FocusNode _keyboardListenerFocusNode = FocusNode();
   final List<PlatformFile> _attachments = [];
-  bool _isChinesePunctuation = true;
+  bool _isChineseQuotes = false;
+  bool _isChineseParentheses = false;
   bool _isSwitchingApi = false;
 
   @override
@@ -137,7 +139,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     }
   }
 
-  void _insertText(String left, String right) {
+  Future<void> _insertText(String left, String right) async {
+    _inputFocusNode.requestFocus();
+    // Wait a short moment to ensure the focus is applied and the selection is valid.
+    await Future.delayed(const Duration(milliseconds: 50));
     final text = widget.messageController.text;
     final selection = widget.messageController.selection;
     final middle = selection.textInside(text);
@@ -372,7 +377,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     required String text,
     required String tooltip,
     required VoidCallback onPressed,
+    VoidCallback? onLongPress,
+    bool isSelected = false,
   }) {
+    final theme = Theme.of(context);
     return SizedBox(
       width: 40,
       height: 40,
@@ -380,10 +388,15 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         message: tooltip,
         child: TextButton(
           onPressed: onPressed,
+          onLongPress: onLongPress,
           style: TextButton.styleFrom(
             padding: EdgeInsets.zero,
             visualDensity: VisualDensity.compact,
-            foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+            foregroundColor: isSelected
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant,
+            backgroundColor:
+                isSelected ? theme.colorScheme.primary.withAlpha(40) : null,
           ),
           child: Text(
             text,
@@ -441,30 +454,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 onPressed: notifier.toggleOutputMode,
               ),
               _buildIconButton(
-                icon: chatState.isGoogleSearchEnabled
-                    ? Icons.public
-                    : Icons.public_off,
-                tooltip: 'Google 搜索',
-                isSelected: chatState.isGoogleSearchEnabled,
-                onPressed: notifier.toggleGoogleSearch,
-              ),
-              _buildIconButton(
-                icon: chatState.isUrlContextEnabled
-                    ? Icons.link
-                    : Icons.link_off,
-                tooltip: 'URL 上下文',
-                isSelected: chatState.isUrlContextEnabled,
-                onPressed: notifier.toggleUrlContext,
-              ),
-              _buildIconButton(
-                icon: chatState.isCodeExecutionEnabled
-                    ? Icons.code
-                    : Icons.code_off,
-                tooltip: '代码执行',
-                isSelected: chatState.isCodeExecutionEnabled,
-                onPressed: notifier.toggleCodeExecution,
-              ),
-              _buildIconButton(
                 icon: chatState.highlightQuotes
                     ? Icons.format_quote
                     : Icons.format_quote_outlined,
@@ -480,55 +469,104 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   context.go('/chat/prompt-editor');
                 },
               ),
+              PopupMenuButton<String>(
+                onSelected: (result) {
+                  switch (result) {
+                    case 'google_search':
+                      notifier.toggleGoogleSearch();
+                      break;
+                    case 'url_context':
+                      notifier.toggleUrlContext();
+                      break;
+                    case 'code_execution':
+                      notifier.toggleCodeExecution();
+                      break;
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  CheckedPopupMenuItem<String>(
+                    value: 'google_search',
+                    checked: chatState.isGoogleSearchEnabled,
+                    child: const Text('Google 搜索'),
+                  ),
+                  CheckedPopupMenuItem<String>(
+                    value: 'url_context',
+                    checked: chatState.isUrlContextEnabled,
+                    child: const Text('URL 上下文'),
+                  ),
+                  CheckedPopupMenuItem<String>(
+                    value: 'code_execution',
+                    checked: chatState.isCodeExecutionEnabled,
+                    child: const Text('代码执行'),
+                  ),
+                ],
+                tooltip: '高级工具',
+                offset: const Offset(0, -140),
+                child: Builder(
+                  builder: (context) {
+                    final theme = Theme.of(context);
+                    final isAnyToolActive = chatState.isGoogleSearchEnabled ||
+                        chatState.isUrlContextEnabled ||
+                        chatState.isCodeExecutionEnabled;
+                    return Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: isAnyToolActive
+                            ? theme.colorScheme.primary.withAlpha(40)
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.tune,
+                        size: 20,
+                        color: isAnyToolActive
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
           Row(
             children: [
               _buildTextButton(
                 text: '""',
-                tooltip: '添加双引号',
+                tooltip: _isChineseQuotes
+                    ? '长按切换为英文引号'
+                    : '长按切换为中文引号',
+                isSelected: _isChineseQuotes,
                 onPressed: () {
                   _insertText(
-                    _isChinesePunctuation ? '“' : '"',
-                    _isChinesePunctuation ? '”' : '"',
+                    _isChineseQuotes ? '“' : '"',
+                    _isChineseQuotes ? '”' : '"',
                   );
+                },
+                onLongPress: () {
+                  setState(() {
+                    _isChineseQuotes = !_isChineseQuotes;
+                  });
                 },
               ),
               _buildTextButton(
                 text: '()',
-                tooltip: '添加括号',
+                tooltip: _isChineseParentheses
+                    ? '长按切换为英文括号'
+                    : '长按切换为中文括号',
+                isSelected: _isChineseParentheses,
                 onPressed: () {
                   _insertText(
-                    _isChinesePunctuation ? '（' : '(',
-                    _isChinesePunctuation ? '）' : ')',
+                    _isChineseParentheses ? '（' : '(',
+                    _isChineseParentheses ? '）' : ')',
                   );
                 },
-              ),
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: Tooltip(
-                  message: '切换中/英文标点',
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _isChinesePunctuation = !_isChinesePunctuation;
-                      });
-                    },
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      foregroundColor: Theme.of(context).colorScheme.primary,
-                    ),
-                    child: Text(
-                      _isChinesePunctuation ? '中' : '英',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
+                onLongPress: () {
+                  setState(() {
+                    _isChineseParentheses = !_isChineseParentheses;
+                  });
+                },
               ),
             ],
           ),
@@ -703,49 +741,33 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                 _attachments.isNotEmpty);
 
                             if (isSendMode) {
-                              return GestureDetector(
-                                onLongPress: chatState.isLoading
-                                    ? null
-                                    : _pickFiles,
-                                child: IconButton(
-                                  icon: const Icon(Icons.send),
-                                  tooltip: chatState.isImageGenerationMode
-                                      ? '生成图片 (长按添加文件)'
-                                      : '发送 (长按添加文件)',
-                                  onPressed: canSendMessage
-                                      ? _sendMessage
-                                      : null,
-                                  style:
-                                      IconButton.styleFrom(
-                                        padding: const EdgeInsets.all(12),
-                                      ).copyWith(
-                                        backgroundColor:
-                                            WidgetStateProperty.resolveWith<
-                                              Color?
-                                            >((Set<WidgetState> states) {
-                                              if (states.contains(
-                                                WidgetState.disabled,
-                                              )) {
-                                                return Colors.grey.shade300;
-                                              }
-                                              return Theme.of(
+                              return Tooltip(
+                                message: chatState.isImageGenerationMode
+                                    ? '生成图片 (长按添加文件)'
+                                    : '发送 (长按添加文件)',
+                                child: Material(
+                                  shape: const CircleBorder(),
+                                  clipBehavior: Clip.antiAlias,
+                                  color: canSendMessage
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.shade300,
+                                  child: InkWell(
+                                    onTap: canSendMessage ? _sendMessage : null,
+                                    onLongPress: !chatState.isLoading
+                                        ? _pickFiles
+                                        : null,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12.0),
+                                      child: Icon(
+                                        Icons.send,
+                                        color: canSendMessage
+                                            ? Theme.of(
                                                 context,
-                                              ).colorScheme.primary;
-                                            }),
-                                        foregroundColor:
-                                            WidgetStateProperty.resolveWith<
-                                              Color?
-                                            >((Set<WidgetState> states) {
-                                              if (states.contains(
-                                                WidgetState.disabled,
-                                              )) {
-                                                return Colors.grey.shade700;
-                                              }
-                                              return Theme.of(
-                                                context,
-                                              ).colorScheme.onPrimary;
-                                            }),
+                                              ).colorScheme.onPrimary
+                                            : Colors.grey.shade700,
                                       ),
+                                    ),
+                                  ),
                                 ),
                               );
                             } else {

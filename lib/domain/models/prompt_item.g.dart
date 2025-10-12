@@ -18,6 +18,7 @@ PromptItem _$PromptItemFromJson(Map<String, dynamic> json) => PromptItem(
       MessageRole.user,
   injectionPosition: (json['injectionPosition'] as num?)?.toInt() ?? 2,
   matchMessageCount: (json['matchMessageCount'] as num?)?.toInt() ?? 6,
+  order: (json['order'] as num?)?.toInt() ?? 0,
 );
 
 Map<String, dynamic> _$PromptItemToJson(PromptItem instance) =>
@@ -29,6 +30,7 @@ Map<String, dynamic> _$PromptItemToJson(PromptItem instance) =>
       'injectionRole': _$MessageRoleEnumMap[instance.injectionRole]!,
       'injectionPosition': instance.injectionPosition,
       'matchMessageCount': instance.matchMessageCount,
+      'order': instance.order,
     };
 
 const _$PromptItemStatusEnumMap = {
