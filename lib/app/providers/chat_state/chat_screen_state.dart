@@ -49,6 +49,9 @@ class ChatScreenState {
   final bool isGoogleSearchEnabled; // New state for Google Search toggle
   final bool isUrlContextEnabled;
   final bool isCodeExecutionEnabled;
+  // Tracks the transition from a temporary streaming message ID (key)
+  // to its final permanent database ID (value).
+  final Map<int, int> idTransitionMap;
 
   const ChatScreenState({
     this.isLoading = false,
@@ -86,6 +89,7 @@ class ChatScreenState {
     this.isGoogleSearchEnabled = false, // Default to false
     this.isUrlContextEnabled = false,
     this.isCodeExecutionEnabled = false,
+    this.idTransitionMap = const {},
   });
 
   ChatScreenState copyWith({
@@ -134,6 +138,8 @@ class ChatScreenState {
     bool? isGoogleSearchEnabled,
     bool? isUrlContextEnabled,
     bool? isCodeExecutionEnabled,
+    Map<int, int>? idTransitionMap,
+    bool clearIdTransitionMap = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -206,6 +212,9 @@ class ChatScreenState {
       isUrlContextEnabled: isUrlContextEnabled ?? this.isUrlContextEnabled,
       isCodeExecutionEnabled:
           isCodeExecutionEnabled ?? this.isCodeExecutionEnabled,
+      idTransitionMap: clearIdTransitionMap
+          ? {}
+          : (idTransitionMap ?? this.idTransitionMap),
     );
   }
 }

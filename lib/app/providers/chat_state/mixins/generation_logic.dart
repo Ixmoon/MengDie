@@ -241,6 +241,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       clearStreamingMessage: true, // Clear any previous leftovers
       clearCarriedOverXml:
           true, // Clear previous XML at the start of a new message
+      clearIdTransitionMap: true, // Clear old transitions for the new turn
       generationStartTime: DateTime.now(),
     );
     startUpdateTimer();
@@ -372,15 +373,15 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         combinedBuffer.write(baseMessage.originalXmlContent);
       }
     } else {
-      // This is a new message. Create a temporary message with ID 0.
-      // The actual database save will happen in _finalizeStreamedMessage.
+      // This is a new message. Create a unique temporary negative ID.
+      final tempId = -DateTime.now().millisecondsSinceEpoch;
       baseMessage = Message(
         chatId: chatId,
         role: MessageRole.model,
         parts: [MessagePart.text("...")], // Start with a placeholder
-        id: 0, // Temporary ID, indicates it's not yet saved to DB
+        id: tempId, // Use the unique temporary ID
       );
-      targetMessageId = 0; // Indicate no real ID yet
+      targetMessageId = tempId;
     }
 
     // The streaming message is now stored in the state, not the DB.
@@ -717,7 +718,17 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
         // "Promote" the temporary message to a persistent one in the state.
         if (mounted) {
-          state = state.copyWith(streamingMessage: finalMessage);
+          // Record the transition from the temporary ID to the final ID.
+          final newTransitionMap =
+              Map<int, int>.from(state.idTransitionMap);
+          if (messageId < 0) {
+            // Only record transitions for temporary IDs.
+            newTransitionMap[messageId] = savedId;
+          }
+          state = state.copyWith(
+            streamingMessage: null, // Clear the temp message from the active stream state
+            idTransitionMap: newTransitionMap,
+          );
         }
 
         // Run post-save tasks ONLY if the stream completed successfully.

@@ -856,18 +856,8 @@ class _TypewriterTextState extends State<_TypewriterText> {
   void didUpdateWidget(_TypewriterText oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // If streaming has just finished, cancel the timer and show the full text.
-    if (!widget.isStreaming && oldWidget.isStreaming) {
-      _timer?.cancel();
-      if (_displayedText != widget.fullText) {
-        setState(() {
-          _displayedText = widget.fullText;
-        });
-      }
-      return; // Animation is done, no need to continue.
-    }
-
     // If the text or speed changes, restart the timer to continue animating.
+    // This handles both incoming new text during streaming and the final text after streaming ends.
     if (widget.fullText != oldWidget.fullText ||
         widget.speed != oldWidget.speed) {
       _startAnimation();

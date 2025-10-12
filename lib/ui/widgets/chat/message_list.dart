@@ -35,6 +35,44 @@ class MessageList extends ConsumerStatefulWidget {
 }
 
 class _MessageListState extends ConsumerState<MessageList> {
+  // A local cache to hold stable, unique objects for each message's key.
+  // This helps Flutter's diffing algorithm recognize a message
+  // even after its ID changes from temporary to permanent.
+  final Map<int, Object> _stableIdCache = {};
+  // A set to keep track of permanent IDs we've already seen, to help clean up the cache.
+  final Set<int> _seenPermanentIds = {};
+
+  Object _getStableId(Message message, Map<int, int> idTransitionMap) {
+    final tempId = idTransitionMap.entries
+        .firstWhere((e) => e.value == message.id, orElse: () => const MapEntry(0, 0))
+        .key;
+
+    // If this message's ID is the *result* of a transition (i.e., it's a permanent ID)
+    // and we have its temporary ID, we should reuse the stable object created for the temporary ID.
+    if (tempId != 0 && _stableIdCache.containsKey(tempId)) {
+      final stableId = _stableIdCache[tempId]!;
+      // Now that the transition is complete, we can clean up the old tempId from the cache
+      // and associate the stable object directly with the new permanent ID for future builds.
+      _stableIdCache.remove(tempId);
+      _stableIdCache[message.id] = stableId;
+      _seenPermanentIds.add(message.id);
+      return stableId;
+    }
+
+    // If we haven't seen this message before, create a new stable object for it.
+    if (!_stableIdCache.containsKey(message.id)) {
+      _stableIdCache[message.id] = Object();
+    }
+    
+    // Keep track of permanent IDs we've processed in this build.
+    if (message.id > 0) {
+      _seenPermanentIds.add(message.id);
+    }
+
+    return _stableIdCache[message.id]!;
+  }
+
+
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(widget.chatId), (
@@ -92,6 +130,15 @@ class _MessageListState extends ConsumerState<MessageList> {
         final latestUserMessageId = allMessages
             .lastWhereOrNull((m) => m.role == MessageRole.user)
             ?.id;
+        
+        // --- Cache Cleanup ---
+        // After each build, clear out cache entries for messages that no longer exist.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final currentIds = allMessages.map((m) => m.id).toSet();
+          _stableIdCache.removeWhere((id, _) => !currentIds.contains(id));
+          _seenPermanentIds.clear();
+        });
 
         return ListView.builder(
           reverse: true,
@@ -120,9 +167,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                 secondaryXmlContent: message.secondaryXmlContent,
               );
               return MessageBubble(
-                key: ValueKey(
-                  "${message.id}_${message.parts.indexOf(part)}_${chatState.isBubbleTransparent}_${chatState.isBubbleHalfWidth}_${chatState.highlightQuotes}",
-                ),
+                key: ValueKey(_getStableId(message, chatState.idTransitionMap)),
                 message: singlePartMessage,
                 xmlRules: widget.xmlRules,
                 isStreaming: isThisMessageStreaming,
