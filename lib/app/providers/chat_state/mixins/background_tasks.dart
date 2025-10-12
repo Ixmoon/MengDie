@@ -239,8 +239,9 @@ mixin BackgroundTasks on UiStateManager {
   ) async {
     if (state.isCancelled) return;
     // Condition check must be inside the async task
-    if (!chat.enableSecondaryXml ||
-        (chat.secondaryXmlPrompt?.isEmpty ?? true)) {
+    // As long as the prompt is not empty, generation should proceed.
+    // The `enableSecondaryXml` flag only controls context merging, not generation itself.
+    if (chat.secondaryXmlPrompt?.isEmpty ?? true) {
       return;
     }
 

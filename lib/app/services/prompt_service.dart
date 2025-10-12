@@ -183,10 +183,17 @@ class PromptService extends StateNotifier<PromptState> {
       );
     }).toList();
 
-    chatSpecificItems.sort((a, b) => a.order.compareTo(b.order));
-    globalItems.sort((a, b) => a.order.compareTo(b.order));
+    final combinedItems = [...chatSpecificItems, ...globalItems];
+    combinedItems.sort((a, b) {
+      // 聊天专属条目 (isGlobal: false) 总是优先于全局条目 (isGlobal: true)
+      if (a.isGlobal != b.isGlobal) {
+        return a.isGlobal ? 1 : -1;
+      }
+      // 如果类型相同，则按其内部顺序排序
+      return a.order.compareTo(b.order);
+    });
 
-    return [...chatSpecificItems, ...globalItems];
+    return combinedItems;
   }
 
   Future<void> addGlobalPromptItem() async {
@@ -217,6 +224,7 @@ class PromptService extends StateNotifier<PromptState> {
                 injectionRole: item.injectionRole,
                 injectionPosition: item.injectionPosition,
                 matchMessageCount: item.matchMessageCount,
+                injectionTag: item.injectionTag,
               )
             else
               i,
@@ -227,7 +235,16 @@ class PromptService extends StateNotifier<PromptState> {
       final chatItems = List<PromptItem>.from(state.chatItems[chatId] ?? []);
       final itemIndex = chatItems.indexWhere((i) => i.id == item.id);
       if (itemIndex != -1) {
-        chatItems[itemIndex] = item;
+        // Use copyWith for consistency and safety, ensuring all fields are updated.
+        chatItems[itemIndex] = chatItems[itemIndex].copyWith(
+          status: item.status,
+          keyword: item.keyword,
+          text: item.text,
+          injectionRole: item.injectionRole,
+          injectionPosition: item.injectionPosition,
+          matchMessageCount: item.matchMessageCount,
+          injectionTag: item.injectionTag,
+        );
         final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
         newChatItemsMap[chatId] = chatItems;
         state = state.copyWith(chatItems: newChatItemsMap);
@@ -288,41 +305,40 @@ class PromptService extends StateNotifier<PromptState> {
     }
   }
 
-  Future<void> reorderPromptItem(
-      int oldIndex, int newIndex, int chatId) async {
-    final currentChatItems = state.chatItems[chatId] ?? [];
-    final numChatItems = currentChatItems.length;
+  Future<void> reorderChatPromptItem(
+      int chatId, int oldIndex, int newIndex) async {
+    final chatItems = List<PromptItem>.from(state.chatItems[chatId] ?? []);
+    if (chatItems.isEmpty) return;
 
-    final isReorderingChatItems =
-        oldIndex < numChatItems && newIndex < numChatItems;
-    final isReorderingGlobalItems =
-        oldIndex >= numChatItems && newIndex >= numChatItems;
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = chatItems.removeAt(oldIndex);
+    chatItems.insert(newIndex, item);
 
-    if (isReorderingChatItems) {
-      final items = List<PromptItem>.from(currentChatItems);
-      if (oldIndex < newIndex) newIndex -= 1;
-      final item = items.removeAt(oldIndex);
-      items.insert(newIndex, item);
-      final updatedItems = [
-        for (int i = 0; i < items.length; i++) items[i].copyWith(order: i)
-      ];
-      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
-      newChatItemsMap[chatId] = updatedItems;
-      state = state.copyWith(chatItems: newChatItemsMap);
-      await _saveChatItems();
-    } else if (isReorderingGlobalItems) {
-      final globalOldIndex = oldIndex - numChatItems;
-      var globalNewIndex = newIndex - numChatItems;
-      final items = List<PromptItem>.from(state.globalItems);
-      if (globalOldIndex < globalNewIndex) globalNewIndex -= 1;
-      final item = items.removeAt(globalOldIndex);
-      items.insert(globalNewIndex, item);
-      final updatedItems = [
-        for (int i = 0; i < items.length; i++) items[i].copyWith(order: i)
-      ];
-      state = state.copyWith(globalItems: updatedItems);
-      await _saveGlobalItems();
-    }
+    final updatedItems = [
+      for (int i = 0; i < chatItems.length; i++) chatItems[i].copyWith(order: i)
+    ];
+
+    final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+    newChatItemsMap[chatId] = updatedItems;
+    state = state.copyWith(chatItems: newChatItemsMap);
+    await _saveChatItems();
+  }
+
+  Future<void> reorderGlobalPromptItem(int oldIndex, int newIndex) async {
+    final globalItems = List<PromptItem>.from(state.globalItems);
+    if (globalItems.isEmpty) return;
+
+    if (oldIndex < newIndex) newIndex -= 1;
+    final item = globalItems.removeAt(oldIndex);
+    globalItems.insert(newIndex, item);
+
+    final updatedItems = [
+      for (int i = 0; i < globalItems.length; i++)
+        globalItems[i].copyWith(order: i)
+    ];
+
+    state = state.copyWith(globalItems: updatedItems);
+    await _saveGlobalItems();
   }
 
   // --- Import/Export Logic ---

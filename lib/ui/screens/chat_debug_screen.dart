@@ -113,19 +113,30 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
       final contextXmlService = ref.read(contextXmlServiceProvider);
       final messageRepo = ref.read(messageRepositoryProvider);
       final allMessages = await messageRepo.getMessagesForChat(chatId);
-      final messageForContextCheck = allMessages.isNotEmpty
-          ? allMessages.last
-          : Message(
-              chatId: chatId,
-              role: MessageRole.user,
-              parts: [MessagePart.text("")],
-            );
 
+      // 创建一个可修改的历史记录副本
+      final historyForContext = List<Message>.from(allMessages);
+
+      // 检查是否需要添加虚拟用户消息
+      if (historyForContext.isEmpty ||
+          historyForContext.last.role != MessageRole.user) {
+        historyForContext.add(Message(
+          chatId: chatId,
+          role: MessageRole.user,
+          parts: [MessagePart.text("(调试占位：用户输入...)")],
+        ));
+      }
+
+      // 使用 `historyOverride` 将修改后的历史记录传递给服务，以进行真实的上下文计算
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chatId: chat.id,
-        currentUserMessage: messageForContextCheck,
+        // currentUserMessage 仍然需要，我们传递被覆盖历史的最后一条消息
+        currentUserMessage: historyForContext.last,
+        historyOverride: historyForContext,
       );
 
+      // 现在 apiRequestContext.contextParts 应该已经正确包含了占位消息（如果它在上下文中）
+      // 无需再手动添加。
       if (mounted) {
         setState(() {
           _displayedApiContextParts = apiRequestContext.contextParts;

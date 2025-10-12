@@ -241,14 +241,12 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
             items: chatPrompts,
             chatId: activeChatId,
             isGlobalList: false,
-            reorderOffset: 0,
           ),
           _PromptListView(
             key: const ValueKey('global_prompts'),
             items: globalPrompts,
             chatId: activeChatId,
             isGlobalList: true,
-            reorderOffset: chatPrompts.length,
           ),
         ],
       ),
@@ -260,14 +258,12 @@ class _PromptListView extends ConsumerWidget {
   final List<PromptItem> items;
   final int chatId;
   final bool isGlobalList;
-  final int reorderOffset;
 
   const _PromptListView({
     super.key,
     required this.items,
     required this.chatId,
     required this.isGlobalList,
-    required this.reorderOffset,
   });
 
   @override
@@ -288,15 +284,15 @@ class _PromptListView extends ConsumerWidget {
           key: ValueKey(items[index].id),
           item: items[index],
           chatId: chatId,
-          index: index + reorderOffset,
+          index: index,
         );
       },
       onReorder: (oldIndex, newIndex) {
-        promptService.reorderPromptItem(
-          oldIndex + reorderOffset,
-          newIndex + reorderOffset,
-          chatId,
-        );
+        if (isGlobalList) {
+          promptService.reorderGlobalPromptItem(oldIndex, newIndex);
+        } else {
+          promptService.reorderChatPromptItem(chatId, oldIndex, newIndex);
+        }
       },
       onReorderStart: (_) {
         FocusScope.of(context).unfocus();
@@ -346,6 +342,7 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
   late final TextEditingController _textController;
   late final TextEditingController _positionController;
   late final TextEditingController _matchCountController;
+  late final TextEditingController _injectionTagController;
 
   @override
   void initState() {
@@ -358,6 +355,8 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
     _matchCountController = TextEditingController(
       text: widget.item.matchMessageCount.toString(),
     );
+    _injectionTagController =
+        TextEditingController(text: widget.item.injectionTag);
   }
 
   @override
@@ -366,6 +365,7 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
     _textController.dispose();
     _positionController.dispose();
     _matchCountController.dispose();
+    _injectionTagController.dispose();
     super.dispose();
   }
 
@@ -389,6 +389,10 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
     if (widget.item.matchMessageCount != oldWidget.item.matchMessageCount &&
         _matchCountController.text != newMatchCount) {
       _matchCountController.text = newMatchCount;
+    }
+    if (widget.item.injectionTag != oldWidget.item.injectionTag &&
+        _injectionTagController.text != widget.item.injectionTag) {
+      _injectionTagController.text = widget.item.injectionTag;
     }
   }
 
@@ -548,36 +552,18 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      flex: 3,
+                      flex: 1,
                       child: TextFormField(
-                        controller: _keywordController,
-                        decoration: InputDecoration(
-                          labelText: '关键词',
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 14),
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.fullscreen),
-                            tooltip: '全屏编辑',
-                            onPressed: () async {
-                              final newText = await showFullScreenTextEditor(
-                                context,
-                                initialText: item.keyword,
-                                title: '编辑关键词',
-                                initialLanguage: 'text',
-                              );
-                              if (newText != null && newText != item.keyword) {
-                                promptService.updatePromptItem(
-                                  item.copyWith(keyword: newText),
-                                  widget.chatId,
-                                );
-                              }
-                            },
-                          ),
+                        controller: _injectionTagController,
+                        decoration: const InputDecoration(
+                          labelText: 'XML标签',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
                         ),
                         onChanged: (value) {
                           promptService.updatePromptItem(
-                            item.copyWith(keyword: value),
+                            item.copyWith(injectionTag: value),
                             widget.chatId,
                           );
                         },
@@ -585,6 +571,39 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                TextFormField(
+                    controller: _keywordController,
+                    decoration: InputDecoration(
+                      labelText: '关键词',
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 14),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.fullscreen),
+                        tooltip: '全屏编辑',
+                        onPressed: () async {
+                          final newText = await showFullScreenTextEditor(
+                            context,
+                            initialText: item.keyword,
+                            title: '编辑关键词',
+                            initialLanguage: 'text',
+                          );
+                          if (newText != null && newText != item.keyword) {
+                            promptService.updatePromptItem(
+                              item.copyWith(keyword: newText),
+                              widget.chatId,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    onChanged: (value) {
+                      promptService.updatePromptItem(
+                        item.copyWith(keyword: value),
+                        widget.chatId,
+                      );
+                    }),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _textController,

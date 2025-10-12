@@ -997,12 +997,14 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             ),
           ),
         SwitchListTile(
-          title: const Text('启用再生XML生成'),
-          subtitle: const Text('在回复后，使用再生XML提示词生成额外XML内容'),
+          title: const Text('启用再生XML合并计算'),
+          subtitle: const Text('开启后将合并计算再生XML。关闭后仅生成并存储，不参与计算。'),
           value: chat.enableSecondaryXml,
-          onChanged: (value) => notifier.updateSettings(
-            (c) => c.copyWith(enableSecondaryXml: value),
-          ),
+          onChanged: (chat.secondaryXmlPrompt?.isEmpty ?? true)
+              ? null
+              : (value) => notifier.updateSettings(
+                    (c) => c.copyWith(enableSecondaryXml: value),
+                  ),
         ),
         if (chat.enableSecondaryXml)
           Padding(
@@ -1015,7 +1017,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
             child: TextFormField(
               controller: _secondaryXmlPromptController,
               decoration: InputDecoration(
-                labelText: '原生XML提示词',
+                labelText: '再生XML提示词',
                 hintText: defaultSecondaryXmlPrompt,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(

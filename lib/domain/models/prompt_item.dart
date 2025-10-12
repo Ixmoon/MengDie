@@ -16,6 +16,7 @@ class PromptItem {
   final MessageRole injectionRole;
   final int injectionPosition;
   final int matchMessageCount;
+  final String injectionTag; // New field for the XML tag
   final int order;
   @JsonKey(includeFromJson: false, includeToJson: false)
   final bool isGlobal;
@@ -28,6 +29,7 @@ class PromptItem {
     this.injectionRole = MessageRole.user,
     this.injectionPosition = 2,
     this.matchMessageCount = 6,
+    this.injectionTag = '', // Default to empty string
     this.order = 0,
     this.isGlobal = false,
   });
@@ -45,6 +47,7 @@ class PromptItem {
     MessageRole? injectionRole,
     int? injectionPosition,
     int? matchMessageCount,
+    String? injectionTag,
     int? order,
     bool? isGlobal,
   }) {
@@ -56,6 +59,7 @@ class PromptItem {
       injectionRole: injectionRole ?? this.injectionRole,
       injectionPosition: injectionPosition ?? this.injectionPosition,
       matchMessageCount: matchMessageCount ?? this.matchMessageCount,
+      injectionTag: injectionTag ?? this.injectionTag,
       order: order ?? this.order,
       isGlobal: isGlobal ?? this.isGlobal,
     );
