@@ -12,7 +12,7 @@ import '../../repository_providers.dart';
 import '../../../repositories/message_repository.dart';
 import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
-
+import '../../settings_providers.dart';
 import '../../../tools/context_xml_service.dart';
 
 mixin GenerationLogic on StateNotifier<ChatScreenState> {
@@ -279,13 +279,21 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         // The line clearing it has been removed.
       }
 
+      // --- 修正中断恢复的上下文构建逻辑 ---
+      // 根据最新的设计原则，“中断恢复”是一个半偏离任务，需要临时替换系统提示词以专注于修复任务。
+      final globalSettings = ref.read(globalSettingsProvider);
+      final isResumeTask = isContinuation &&
+          promptOverride != null &&
+          promptOverride == globalSettings.resumePrompt;
+
       final apiRequestContext = await contextXmlService.buildApiRequestContext(
         chatId: chatId,
         currentUserMessage:
             messageForContext, // Pass the representative message for context
         lastMessageOverride: lastMessageOverride,
-        // For standard chat, regeneration, and continuation, always keep the original system prompt.
-        keepAsSystemPrompt: true,
+        // 如果是中断恢复任务，则执行“替换+降级”策略
+        chatSystemPromptOverride: isResumeTask ? promptOverride : null,
+        keepAsSystemPrompt: !isResumeTask,
       );
 
       llmApiContext = apiRequestContext.contextParts;

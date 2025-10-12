@@ -639,36 +639,8 @@ class ContextXmlService {
       }
     }
 
-    // 10. 处理 lastMessageOverride (逻辑保持不变)
-    final lastUserMessageInHistory = limitedHistoryForPrompt.lastWhereOrNull(
-      (m) => m.role == MessageRole.user,
-    );
-    if (lastUserMessageInHistory != null &&
-        lastMessageOverride != null &&
-        lastMessageOverride.isNotEmpty) {
-      final lastUserMessageIndex = finalContextParts.lastIndexWhere(
-        (c) => c.messageId == lastUserMessageInHistory.id,
-      );
-
-      if (lastUserMessageIndex != -1) {
-        final originalContent = finalContextParts[lastUserMessageIndex];
-        final List<LlmPart> newParts = [];
-        newParts.addAll(originalContent.parts.where((p) => p is! LlmTextPart));
-        newParts.add(LlmTextPart(lastMessageOverride));
-        final originalUserXml = chat.enableSecondaryXml
-            ? lastUserMessageInHistory.secondaryXmlContent
-            : lastUserMessageInHistory.originalXmlContent;
-        if (originalUserXml != null && originalUserXml.isNotEmpty) {
-          newParts.add(LlmTextPart(originalUserXml));
-        }
-
-        finalContextParts[lastUserMessageIndex] = LlmContent(
-          originalContent.role,
-          newParts,
-          messageId: originalContent.messageId,
-        );
-      }
-    } else if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
+    // 10. 处理 lastMessageOverride：始终在末尾追加指令，而不是替换
+    if (lastMessageOverride != null && lastMessageOverride.isNotEmpty) {
       finalContextParts.add(
         LlmContent("user", [LlmTextPart(lastMessageOverride)]),
       );
