@@ -238,9 +238,8 @@ mixin BackgroundTasks on UiStateManager {
     Message targetMessage,
   ) async {
     if (state.isCancelled) return;
-    // Condition check must be inside the async task
-    // As long as the prompt is not empty, generation should proceed.
-    // The `enableSecondaryXml` flag only controls context merging, not generation itself.
+    // 只要提示词不为空，就执行生成。
+    // 合并计算的逻辑由 context_xml_service 中的 enableSecondaryXml 开关控制。
     if (chat.secondaryXmlPrompt?.isEmpty ?? true) {
       return;
     }

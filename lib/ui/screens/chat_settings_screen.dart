@@ -996,99 +996,107 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
               ),
             ),
           ),
-        SwitchListTile(
-          title: const Text('启用再生XML合并计算'),
-          subtitle: const Text('开启后将合并计算再生XML。关闭后仅生成并存储，不参与计算。'),
-          value: chat.enableSecondaryXml,
-          onChanged: (chat.secondaryXmlPrompt?.isEmpty ?? true)
-              ? null
-              : (value) => notifier.updateSettings(
-                    (c) => c.copyWith(enableSecondaryXml: value),
-                  ),
-        ),
-        if (chat.enableSecondaryXml)
-          Padding(
-            padding: const EdgeInsets.only(
-              top: 8.0,
-              left: 16.0,
-              right: 16.0,
-              bottom: 8.0,
-            ),
-            child: TextFormField(
-              controller: _secondaryXmlPromptController,
-              decoration: InputDecoration(
-                labelText: '再生XML提示词',
-                hintText: defaultSecondaryXmlPrompt,
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.fullscreen),
-                  tooltip: '全屏编辑',
-                  onPressed: () async {
-                    final newText = await showFullScreenTextEditor(
-                      context,
-                      initialText: _secondaryXmlPromptController.text,
-                      title: '编辑原生XML提示词',
-                      defaultValue: defaultSecondaryXmlPrompt,
-                    );
-                    if (newText != null) {
-                      _secondaryXmlPromptController.text = newText;
-                      notifier.updateSettings(
-                        (c) => c.copyWith(
-                          secondaryXmlPrompt: newText.isEmpty ? null : newText,
-                        ),
-                      );
-                    }
-                  },
-                ),
-              ),
-              maxLines: 3,
-              minLines: 1,
-              onChanged: (value) {
-                notifier.updateSettings(
-                  (c) => c.copyWith(
-                    secondaryXmlPrompt: value.isEmpty ? null : value,
-                  ),
-                );
-              },
-            ),
-          ),
-        if (chat.enableSecondaryXml)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: DropdownButtonFormField<String?>(
-              initialValue:
-                  validConfigIds.contains(chat.secondaryXmlApiConfigId)
-                  ? chat.secondaryXmlApiConfigId
-                  : null,
-              decoration: InputDecoration(
-                labelText: '用于再生XML的 API 配置',
-                border: const OutlineInputBorder(),
-                hintText:
-                    '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}',
-              ),
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(
-                    '使用聊天默认配置',
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
+        () {
+          final bool isPromptEmpty =
+              chat.secondaryXmlPrompt?.trim().isEmpty ?? true;
+          return SwitchListTile(
+            title: const Text('启用再生XML合并计算'),
+            subtitle: const Text('开启后进行合并计算。关闭但提示词不为空时，仅生成并存储。'),
+            value: chat.enableSecondaryXml,
+            onChanged: isPromptEmpty
+                ? null
+                : (value) => notifier.updateSettings(
+                      (c) => c.copyWith(enableSecondaryXml: value),
                     ),
-                  ),
-                ),
-                ...uniqueApiConfigs.map(
-                  (config) => DropdownMenuItem(
-                    value: config.id,
-                    child: Text(config.name),
-                  ),
-                ),
-              ],
-              onChanged: (value) => notifier.updateSettings(
-                (c) => c.copyWith(secondaryXmlApiConfigId: value),
+          );
+        }(),
+        Padding(
+          padding: const EdgeInsets.only(
+            top: 8.0,
+            left: 16.0,
+            right: 16.0,
+            bottom: 8.0,
+          ),
+          child: TextFormField(
+            controller: _secondaryXmlPromptController,
+            decoration: InputDecoration(
+              labelText: '原生XML提示词',
+              hintText: defaultSecondaryXmlPrompt,
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.fullscreen),
+                tooltip: '全屏编辑',
+                onPressed: () async {
+                  final newText = await showFullScreenTextEditor(
+                    context,
+                    initialText: _secondaryXmlPromptController.text,
+                    title: '编辑原生XML提示词',
+                    defaultValue: defaultSecondaryXmlPrompt,
+                  );
+                  if (newText != null) {
+                    _secondaryXmlPromptController.text = newText;
+                    notifier.updateSettings(
+                      (c) => c.copyWith(
+                        secondaryXmlPrompt: newText.isEmpty ? null : newText,
+                      ),
+                    );
+                  }
+                },
               ),
             ),
+            maxLines: 3,
+            minLines: 1,
+            onChanged: (value) {
+              notifier.updateSettings(
+                (c) {
+                  final bool promptIsEmpty = value.trim().isEmpty;
+                  return c.copyWith(
+                    secondaryXmlPrompt: promptIsEmpty ? null : value,
+                    // 如果提示词变为空，则强制关闭合并计算功能
+                    enableSecondaryXml:
+                        promptIsEmpty ? false : c.enableSecondaryXml,
+                  );
+                },
+              );
+            },
           ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: DropdownButtonFormField<String?>(
+            initialValue:
+                validConfigIds.contains(chat.secondaryXmlApiConfigId)
+                ? chat.secondaryXmlApiConfigId
+                : null,
+            decoration: InputDecoration(
+              labelText: '用于再生XML的 API 配置',
+              border: const OutlineInputBorder(),
+              hintText:
+                  '默认: ${_getEffectiveApiConfig(ref, chat, specificConfigId: chat.secondaryXmlApiConfigId)?.name ?? 'N/A'}',
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text(
+                  '使用聊天默认配置',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+              ...uniqueApiConfigs.map(
+                (config) => DropdownMenuItem(
+                  value: config.id,
+                  child: Text(config.name),
+                ),
+              ),
+            ],
+            onChanged: (value) => notifier.updateSettings(
+              (c) => c.copyWith(secondaryXmlApiConfigId: value),
+            ),
+          ),
+        ),
       ],
     );
   }
