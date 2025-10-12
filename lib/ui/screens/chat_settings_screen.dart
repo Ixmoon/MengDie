@@ -536,6 +536,7 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                   context,
                   initialText: _systemPromptController.text,
                   title: '编辑系统提示词',
+                  chatId: widget.chatId,
                 );
                 if (newText != null) {
                   _systemPromptController.text = newText;
@@ -572,6 +573,7 @@ class _BasicInfoSettingsState extends ConsumerState<_BasicInfoSettings> {
                   initialText: _continuePromptController.text,
                   title: '编辑续写提示词',
                   defaultValue: defaultContinuePrompt,
+                  chatId: widget.chatId,
                 );
                 if (newText != null) {
                   _continuePromptController.text = newText;
@@ -936,6 +938,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                       initialText: _preprocessingPromptController.text,
                       title: '编辑前处理提示词',
                       defaultValue: defaultPreprocessingPrompt,
+                      chatId: widget.chatId,
                     );
                     if (newText != null) {
                       _preprocessingPromptController.text = newText;
@@ -1032,6 +1035,7 @@ class _AutomationSettingsState extends ConsumerState<_AutomationSettings> {
                     initialText: _secondaryXmlPromptController.text,
                     title: '编辑原生XML提示词',
                     defaultValue: defaultSecondaryXmlPrompt,
+                    chatId: widget.chatId,
                   );
                   if (newText != null) {
                     _secondaryXmlPromptController.text = newText;
@@ -1182,6 +1186,7 @@ class _HelpMeReplySettingsState extends ConsumerState<_HelpMeReplySettings> {
                           initialText: _promptController.text,
                           title: '编辑“帮我回复”提示词',
                           defaultValue: defaultHelpMeReplyPrompt,
+                          chatId: widget.chatId,
                         );
                         if (newText != null) {
                           _promptController.text = newText;

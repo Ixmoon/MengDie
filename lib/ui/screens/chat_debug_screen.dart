@@ -446,11 +446,12 @@ class _ChatDebugScreenState extends ConsumerState<ChatDebugScreen> {
                               onPressed: () async {
                                 final newSummary =
                                     await showFullScreenTextEditor(
-                                      context,
-                                      initialText:
-                                          _contextSummaryController.text,
-                                      title: '编辑上下文总结',
-                                    );
+                                    context,
+                                    initialText:
+                                        _contextSummaryController.text,
+                                    title: '编辑上下文总结',
+                                    chatId: chatId,
+                                  );
                                 if (newSummary != null) {
                                   _contextSummaryController.text = newSummary;
                                 }

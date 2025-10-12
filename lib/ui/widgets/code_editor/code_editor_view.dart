@@ -87,6 +87,10 @@ class CodeEditorViewState extends State<CodeEditorView> {
   String get currentLanguage => _currentLanguage;
   String get currentTheme => _currentTheme;
 
+ void requestFocus() {
+   _codeFieldFocusNode.requestFocus();
+ }
+
   void resetText(String text) {
     setState(() {
       _controller.text = text;

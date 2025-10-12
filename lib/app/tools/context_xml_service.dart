@@ -456,36 +456,63 @@ class ContextXmlService {
     final onAndMatchPrompts = prompts.where(
         (p) => p.status == PromptItemStatus.on || p.status == PromptItemStatus.match);
 
+    // --- Optimization Start: Pre-calculate match successes using grouping and caching ---
+    final successfullyMatchedPrompts = <PromptItem>{};
+    final Map<int, List<PromptItem>> promptsByScope = {};
+
+    // 1. Group 'match' prompts by their search scope.
+    for (final prompt in onAndMatchPrompts) {
+      if (prompt.status == PromptItemStatus.match) {
+        promptsByScope
+            .putIfAbsent(prompt.matchMessageCount, () => [])
+            .add(prompt);
+      }
+    }
+
+    // 2. For each unique scope, create a corpus and check for keyword matches.
+    promptsByScope.forEach((scope, scopedPrompts) {
+      // Skip invalid scopes to prevent errors (this also fixes a potential bug in old code).
+      if (scope <= 0) return;
+
+      final messagesToSearch = fullHistory.length > scope
+          ? fullHistory.sublist(fullHistory.length - scope)
+          : fullHistory;
+
+      // Create a single, newline-separated corpus for this scope to prevent cross-message keyword matching.
+      final searchableCorpus = messagesToSearch
+          .map((m) =>
+              '${m.rawText}${m.originalXmlContent ?? ''}${m.secondaryXmlContent ?? ''}')
+          .join('\n')
+          .toLowerCase();
+
+      for (final prompt in scopedPrompts) {
+        final keywords = prompt.keyword
+            .split(',')
+            .map((k) => k.trim().toLowerCase())
+            .where((k) => k.isNotEmpty);
+        
+        if (keywords.isNotEmpty &&
+            keywords.any((keyword) => searchableCorpus.contains(keyword))) {
+          // If a match is found, add the prompt to a success set for O(1) lookup later.
+          successfullyMatchedPrompts.add(prompt);
+        }
+      }
+    });
+
+    // 3. Main loop: Iterate through prompts in their original order to preserve injection logic.
     for (final prompt in onAndMatchPrompts) {
       bool isMatchSuccessful = false;
       if (prompt.status == PromptItemStatus.on) {
         isMatchSuccessful = true;
       } else if (prompt.status == PromptItemStatus.match) {
-        final searchScope = prompt.matchMessageCount;
-        final messagesToSearch = fullHistory.length > searchScope
-            ? fullHistory.sublist(fullHistory.length - searchScope)
-            : fullHistory;
-
-        final keywords = prompt.keyword
-            .split(',')
-            .map((k) => k.trim().toLowerCase())
-            .where((k) => k.isNotEmpty);
-
-        if (keywords.isNotEmpty &&
-            keywords.any(
-              (keyword) => messagesToSearch.any(
-                (m) =>
-                    ('${m.rawText}${m.originalXmlContent ?? ''}${m.secondaryXmlContent ?? ''}')
-                        .toLowerCase()
-                        .contains(keyword),
-              ),
-            )) {
+        // Use the pre-calculated success set for an efficient O(1) check.
+        if (successfullyMatchedPrompts.contains(prompt)) {
           isMatchSuccessful = true;
         }
       }
 
       if (isMatchSuccessful) {
-        // 在有限的历史记录中查找注入目标
+        // The injection logic remains identical to the old code, ensuring behavior consistency.
         final targetRoleMessages = limitedHistoryForPrompt
             .where((m) => m.role == prompt.injectionRole)
             .toList();
@@ -500,11 +527,12 @@ class ContextXmlService {
           injectionsMap
               .putIfAbsent(targetMessage.id, () => [])
               .add(_InjectionContent(prompt.text, prompt.injectionTag));
-          // 记录第一个注入目标的ID，用于注入合并的XML
+          // Record the ID of the first injection target, preserving the original order-dependent logic.
           firstInjectionTargetId ??= targetMessage.id;
         }
       }
     }
+    // --- Optimization End ---
 
     // Part B: 组装最终的上下文，应用注入
     final List<LlmContent> finalContextParts = List.from(fixedContextParts);

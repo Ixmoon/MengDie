@@ -586,6 +586,7 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
                           final newText = await showFullScreenTextEditor(
                             context,
                             initialText: item.keyword,
+                            chatId: widget.chatId,
                             title: '编辑关键词',
                             initialLanguage: 'text',
                           );
@@ -617,6 +618,7 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
                         final newText = await showFullScreenTextEditor(
                           context,
                           initialText: item.text,
+                          chatId: widget.chatId,
                           title: '编辑注入文本',
                           initialLanguage: 'markdown',
                         );

@@ -200,6 +200,7 @@ class ChatPageLogic {
                         initialText: textController.text,
                         title: '编辑消息内容',
                         initialLanguage: 'markdown',
+                        chatId: chatId,
                       );
                       if (newText != null) {
                         textController.text = newText;
@@ -231,6 +232,7 @@ class ChatPageLogic {
                         initialText: xmlController.text,
                         title: '编辑XML内容',
                         initialLanguage: 'xml',
+                        chatId: chatId,
                       );
                       if (newText != null) {
                         xmlController.text = newText;

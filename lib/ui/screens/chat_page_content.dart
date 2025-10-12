@@ -551,6 +551,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                           initialText: textController.text,
                           title: '编辑消息内容',
                           initialLanguage: 'markdown',
+                          chatId: widget.chatId,
                         );
                         if (newText != null) {
                           textController.text = newText;
@@ -580,6 +581,7 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
                           initialText: xmlController.text,
                           title: '编辑XML内容',
                           initialLanguage: 'xml',
+                          chatId: widget.chatId,
                         );
                         if (newText != null) {
                           xmlController.text = newText;

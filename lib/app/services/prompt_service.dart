@@ -457,21 +457,44 @@ class PromptService extends StateNotifier<PromptState> {
     final updatedItems = List<PromptItem>.from(existingItems);
     final idMap = <String, String>{};
 
-    for (final itemToImport in itemsToImport) {
-      final existingItem = updatedItems
-          .firstWhereOrNull((e) => e.text == itemToImport.text);
+    // --- Optimization Start ---
+    // Create a lookup map for existing items to achieve O(1) average lookup time.
+    // The key is the prompt text, and the value is the index in the `updatedItems` list.
+    // We only add the first occurrence to mimic the behavior of `firstWhereOrNull`.
+    final existingItemIndexMap = <String, int>{};
+    for (int i = 0; i < updatedItems.length; i++) {
+      final itemText = updatedItems[i].text;
+      if (!existingItemIndexMap.containsKey(itemText)) {
+        existingItemIndexMap[itemText] = i;
+      }
+    }
+    // --- Optimization End ---
 
-      if (existingItem != null) {
+    for (final itemToImport in itemsToImport) {
+      // --- Optimization Start ---
+      // Use the map for efficient lookup.
+      final existingItemIndex = existingItemIndexMap[itemToImport.text];
+      // --- Optimization End ---
+
+      if (existingItemIndex != null) {
+        final existingItem = updatedItems[existingItemIndex];
         // Case 1 & 2: Text matches, item exists.
         idMap[itemToImport.id] = existingItem.id;
-        final itemIndex = updatedItems.indexOf(existingItem);
-        
-        final existingKeywords = existingItem.keyword.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toSet();
-        final importKeywords = itemToImport.keyword.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toSet();
+
+        final existingKeywords = existingItem.keyword
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet();
+        final importKeywords = itemToImport.keyword
+            .split(',')
+            .map((k) => k.trim())
+            .where((k) => k.isNotEmpty)
+            .toSet();
 
         if (const SetEquality().equals(existingKeywords, importKeywords)) {
           // Case 1: Keywords also match -> Overwrite config
-          updatedItems[itemIndex] = existingItem.copyWith(
+          updatedItems[existingItemIndex] = existingItem.copyWith(
             status: itemToImport.status,
             injectionRole: itemToImport.injectionRole,
             injectionPosition: itemToImport.injectionPosition,
@@ -480,7 +503,7 @@ class PromptService extends StateNotifier<PromptState> {
         } else {
           // Case 2: Keywords differ -> Merge keywords
           existingKeywords.addAll(importKeywords);
-          updatedItems[itemIndex] =
+          updatedItems[existingItemIndex] =
               existingItem.copyWith(keyword: existingKeywords.join(', '));
         }
       } else {
@@ -491,6 +514,14 @@ class PromptService extends StateNotifier<PromptState> {
         );
         idMap[itemToImport.id] = newItem.id;
         updatedItems.add(newItem);
+        // --- Optimization Start ---
+        // Add the new item to the map to handle cases where the import list
+        // contains duplicate texts. This ensures we find the newly added item
+        // for subsequent duplicates in the import list.
+        if (!existingItemIndexMap.containsKey(newItem.text)) {
+          existingItemIndexMap[newItem.text] = updatedItems.length - 1;
+        }
+        // --- Optimization End ---
       }
     }
     return _MergeResult(items: updatedItems, idMap: idMap);
