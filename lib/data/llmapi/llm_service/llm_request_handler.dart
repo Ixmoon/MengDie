@@ -79,6 +79,7 @@ class LlmRequestHandler {
   Stream<LlmStreamChunk> executeStream(
     HttpRequestPayload payload, {
     required String Function(Map<String, dynamic> json) textExtractor,
+    String Function(String, Map<String, dynamic>)? citationApplier,
   }) async* {
     try {
       final response = await _dio.post<ResponseBody>(
@@ -93,6 +94,7 @@ class LlmRequestHandler {
       yield* _processSseStream(
         stream: response.data!.stream,
         textExtractor: textExtractor,
+        citationApplier: citationApplier,
       );
     } on DioException catch (e) {
       yield* _handleStreamDioError(e, payload.apiConfig.apiType.name);
@@ -206,9 +208,11 @@ class LlmRequestHandler {
   Stream<LlmStreamChunk> _processSseStream({
     required Stream<List<int>> stream,
     required String Function(Map<String, dynamic> json) textExtractor,
+    String Function(String, Map<String, dynamic>)? citationApplier,
   }) async* {
     String accumulatedResponse = "";
     String carryOverBuffer = '';
+    Map<String, dynamic>? lastGroundingMetadata;
 
     try {
       await for (var chunk in stream) {
@@ -227,11 +231,16 @@ class LlmRequestHandler {
             final jsonData = line.substring('data: '.length).trim();
 
             if (jsonData == '[DONE]') {
+              if (citationApplier != null && lastGroundingMetadata != null) {
+                accumulatedResponse =
+                    citationApplier(accumulatedResponse, lastGroundingMetadata!);
+              }
               yield LlmStreamChunk(
                 textChunk: '',
                 accumulatedText: accumulatedResponse,
                 isFinished: true,
                 timestamp: DateTime.now(),
+                groundingMetadata: lastGroundingMetadata,
               );
               return;
             }
@@ -239,6 +248,13 @@ class LlmRequestHandler {
             if (jsonData.isNotEmpty) {
               try {
                 final jsonMap = jsonDecode(jsonData) as Map<String, dynamic>;
+
+                final groundingMetadata =
+                    jsonMap['candidates']?.first?['groundingMetadata']
+                        as Map<String, dynamic>?;
+                if (groundingMetadata != null) {
+                  lastGroundingMetadata = groundingMetadata;
+                }
 
                 // Check for finish reason before extracting text
                 final finishReason = _extractFinishReason(jsonMap);
@@ -251,9 +267,6 @@ class LlmRequestHandler {
                 }
 
                 final textChunk = textExtractor(jsonMap);
-                final groundingMetadata =
-                    jsonMap['candidates']?.first?['groundingMetadata']
-                        as Map<String, dynamic>?;
 
                 if (textChunk.isNotEmpty || groundingMetadata != null) {
                   accumulatedResponse += textChunk;
@@ -282,11 +295,18 @@ class LlmRequestHandler {
       // For other Dio errors, rethrow to be handled by the caller in executeStream.
       rethrow;
     }
+
+    if (citationApplier != null && lastGroundingMetadata != null) {
+      accumulatedResponse =
+          citationApplier(accumulatedResponse, lastGroundingMetadata!);
+    }
+
     yield LlmStreamChunk(
       textChunk: '',
       accumulatedText: accumulatedResponse,
       isFinished: true,
       timestamp: DateTime.now(),
+      groundingMetadata: lastGroundingMetadata,
     );
   }
 

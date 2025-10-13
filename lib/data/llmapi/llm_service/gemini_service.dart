@@ -104,6 +104,7 @@ class GeminiService implements BaseLlmService {
       payload,
       textExtractor: (json) =>
           _extractTextAndThinkFromChunk(json, isStreaming: true),
+      citationApplier: _addCitationsToText,
     );
   }
 
@@ -276,13 +277,15 @@ class GeminiService implements BaseLlmService {
     }
     if (groundingChunks != null && groundingChunks.isNotEmpty) {
       buffer.writeln('  <sources>');
-      for (final chunk in groundingChunks) {
+      for (final entry in groundingChunks.asMap().entries) {
+        final index = entry.key;
+        final chunk = entry.value;
         final source = chunk['web'] as Map?;
         if (source != null) {
           final uri = source['uri'] as String?;
           final title = source['title'] as String?;
           if (uri != null && title != null) {
-            buffer.writeln('    <source uri="$uri">$title</source>');
+            buffer.writeln('    <source>[${index + 1}] [$title]($uri)</source>');
           }
         }
       }
@@ -290,6 +293,62 @@ class GeminiService implements BaseLlmService {
     }
     buffer.write('</grounding>');
     return buffer.toString();
+  }
+
+  /// 根据 grounding metadata 为文本添加内嵌引用。
+  ///
+  /// [text]: 模型生成的原始文本。
+  /// [metadata]: 包含 `groundingSupports` 和 `groundingChunks` 的元数据。
+  /// 返回带有 Markdown 格式引用的文本。
+  String _addCitationsToText(String text, Map<String, dynamic> metadata) {
+    final supports = metadata['groundingSupports'] as List?;
+    final chunks = metadata['groundingChunks'] as List?;
+
+    if (supports == null ||
+        supports.isEmpty ||
+        chunks == null ||
+        chunks.isEmpty) {
+      return text;
+    }
+
+    // 为了避免在插入时出现索引偏移，按结束索引从大到小排序
+    final sortedSupports = List<Map<String, dynamic>>.from(supports);
+    sortedSupports.sort((a, b) {
+      final endA = a['segment']?['endIndex'] as int? ?? 0;
+      final endB = b['segment']?['endIndex'] as int? ?? 0;
+      return endB.compareTo(endA);
+    });
+
+    var citedText = text;
+    for (final support in sortedSupports) {
+      final segment = support['segment'] as Map?;
+      final endIndex = segment?['endIndex'] as int?;
+      final chunkIndices = support['groundingChunkIndices'] as List?;
+
+      if (endIndex != null &&
+          chunkIndices != null &&
+          chunkIndices.isNotEmpty) {
+        final citationLinks = <String>[];
+        for (final i in chunkIndices) {
+          if (i is int && i < chunks.length) {
+            final chunk = chunks[i] as Map?;
+            final uri = chunk?['web']?['uri'] as String?;
+            if (uri != null) {
+              citationLinks.add('[[${i + 1}]($uri)]');
+            }
+          }
+        }
+
+        if (citationLinks.isNotEmpty) {
+          final citationString = citationLinks.join(''); // 直接拼接，例如(...)(...)
+          if (endIndex <= citedText.length) {
+            citedText =
+                citedText.substring(0, endIndex) + citationString + citedText.substring(endIndex);
+          }
+        }
+      }
+    }
+    return citedText;
   }
 
   String _formatUrlContextMetadata(Map<String, dynamic> metadata) {
@@ -406,10 +465,15 @@ class GeminiService implements BaseLlmService {
   }
 
   LlmResponse _parseGeminiResponse(Map<String, dynamic> data) {
-    final text = _extractTextAndThinkFromChunk(data, isStreaming: false);
+    var text = _extractTextAndThinkFromChunk(data, isStreaming: false);
     final candidates = data['candidates'] as List?;
     final groundingMetadata =
         candidates?.first?['groundingMetadata'] as Map<String, dynamic>?;
+
+    // 在返回最终响应之前应用引用
+    if (groundingMetadata != null && text.isNotEmpty) {
+      text = _addCitationsToText(text, groundingMetadata);
+    }
 
     if (text.isNotEmpty) {
       return LlmResponse(
