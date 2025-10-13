@@ -257,9 +257,16 @@ class GeminiService implements BaseLlmService {
 
   // --- Helpers ---
   String _formatGroundingMetadata(Map<String, dynamic> metadata) {
+    final webSearchQueries = metadata['webSearchQueries'] as List?;
+    final groundingChunks = metadata['groundingChunks'] as List?;
+
+    if ((webSearchQueries == null || webSearchQueries.isEmpty) &&
+        (groundingChunks == null || groundingChunks.isEmpty)) {
+      return '';
+    }
+
     final buffer = StringBuffer();
     buffer.writeln('<grounding>');
-    final webSearchQueries = metadata['webSearchQueries'] as List?;
     if (webSearchQueries != null && webSearchQueries.isNotEmpty) {
       buffer.writeln('  <queries>');
       for (final query in webSearchQueries) {
@@ -267,7 +274,6 @@ class GeminiService implements BaseLlmService {
       }
       buffer.writeln('  </queries>');
     }
-    final groundingChunks = metadata['groundingChunks'] as List?;
     if (groundingChunks != null && groundingChunks.isNotEmpty) {
       buffer.writeln('  <sources>');
       for (final chunk in groundingChunks) {
@@ -287,10 +293,15 @@ class GeminiService implements BaseLlmService {
   }
 
   String _formatUrlContextMetadata(Map<String, dynamic> metadata) {
+    final urlMetadata = metadata['url_metadata'] as List?;
+
+    if (urlMetadata == null || urlMetadata.isEmpty) {
+      return '';
+    }
+
     final buffer = StringBuffer();
     buffer.writeln('<url_context>');
-    final urlMetadata = metadata['url_metadata'] as List?;
-    if (urlMetadata != null && urlMetadata.isNotEmpty) {
+    if (urlMetadata.isNotEmpty) {
       buffer.writeln('  <retrieved_urls>');
       for (final item in urlMetadata) {
         final url = item['retrieved_url'] as String?;

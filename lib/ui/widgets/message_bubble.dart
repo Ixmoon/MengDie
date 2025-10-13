@@ -497,6 +497,7 @@ class MessageBubble extends StatelessWidget {
         fullText: textContent,
         speed: pseudoStreamSpeed,
         isStreaming: isStreaming,
+        textColor: textColor,
         builder: (context, displayedText) {
           final widgets = _renderTextContent(
             context,
@@ -827,6 +828,7 @@ class _TypewriterText extends StatefulWidget {
   final String fullText;
   final double speed;
   final bool isStreaming;
+  final Color textColor;
   final Widget Function(BuildContext, String) builder;
 
   const _TypewriterText({
@@ -834,6 +836,7 @@ class _TypewriterText extends StatefulWidget {
     required this.fullText,
     required this.speed,
     required this.isStreaming,
+    required this.textColor,
     required this.builder,
   });
 
@@ -841,14 +844,27 @@ class _TypewriterText extends StatefulWidget {
   _TypewriterTextState createState() => _TypewriterTextState();
 }
 
-class _TypewriterTextState extends State<_TypewriterText> {
+class _TypewriterTextState extends State<_TypewriterText>
+    with SingleTickerProviderStateMixin {
   String _displayedText = "";
   Timer? _timer;
   int _charIndex = 0;
 
+  late AnimationController _animationController;
+  late Animation<double> _opacityAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+
+    _opacityAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
     _startAnimation();
   }
 
@@ -867,6 +883,7 @@ class _TypewriterTextState extends State<_TypewriterText> {
   @override
   void dispose() {
     _timer?.cancel();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -904,8 +921,47 @@ class _TypewriterTextState extends State<_TypewriterText> {
     });
   }
 
+  void _skipAnimation() {
+    _timer?.cancel();
+    if (_displayedText != widget.fullText) {
+      setState(() {
+        _charIndex = widget.fullText.length;
+        _displayedText = widget.fullText;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return widget.builder(context, _displayedText);
+    final bool showSkipButton = _charIndex < widget.fullText.length;
+    final builtContent = widget.builder(context, _displayedText);
+
+    // Avoid showing the button on an empty placeholder
+    if (builtContent is SizedBox &&
+        (builtContent.width == 0 || builtContent.height == 0)) {
+      return builtContent;
+    }
+
+    return Stack(
+      children: [
+        builtContent,
+        if (showSkipButton)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: GestureDetector(
+              onTap: _skipAnimation,
+              child: FadeTransition(
+                opacity: _opacityAnimation,
+                child: Icon(
+                  Icons.arrow_drop_down,
+                  size: 24,
+                  color: widget.textColor.withOpacity(0.6),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }

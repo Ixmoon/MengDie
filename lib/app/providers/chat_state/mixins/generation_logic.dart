@@ -47,7 +47,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
     // 1. 检查是否可以重新生成
     final messageIndex = allMessages.indexWhere((m) => m.id == userMessage.id);
-    final isLastUserMsg = userMessage.role == MessageRole.user &&
+    final isLastUserMsg =
+        userMessage.role == MessageRole.user &&
         messageIndex >= 0 &&
         (messageIndex == allMessages.length - 1 ||
             (messageIndex == allMessages.length - 2 &&
