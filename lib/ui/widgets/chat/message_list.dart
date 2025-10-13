@@ -37,126 +37,185 @@ class MessageList extends ConsumerStatefulWidget {
 class _MessageListState extends ConsumerState<MessageList> {
   @override
   Widget build(BuildContext context) {
-    ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(widget.chatId), (
-      previous,
-      next,
-    ) {
-      if (previous == next) return;
-
-      if (next is! AsyncData || !next.hasValue || next.requireValue.isEmpty) {
-        return;
-      }
-
-      final chatState = ref.read(chatStateNotifierProvider(widget.chatId));
-      if (chatState.isLoading) return;
-
-      ref
-          .read(chatStateNotifierProvider(widget.chatId).notifier)
-          .calculateAndStoreTokenCount();
-    });
-
-    final messagesAsync = ref.watch(chatMessagesProvider(widget.chatId));
     final chatState = ref.watch(chatStateNotifierProvider(widget.chatId));
 
-    return messagesAsync.when(
-      data: (dbMessages) {
-        if ((chatState.totalTokens ?? 0) == 0 &&
-            !chatState.isLoading &&
-            dbMessages.isNotEmpty) {
-          final apiConfigs = ref.read(apiKeyNotifierProvider).apiConfigs;
-          if (apiConfigs.isNotEmpty) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                ref
-                    .read(chatStateNotifierProvider(widget.chatId).notifier)
-                    .calculateAndStoreTokenCount();
-              }
-            });
-          }
+    // Combine the historical messages from the DB with the real-time UI-controlled message.
+    final List<Message> allMessages = [
+      ...chatState.historicalMessages,
+      if (chatState.uiControlledMessage != null) chatState.uiControlledMessage!,
+    ];
+
+    // This logic should be moved to the notifier, but we'll keep it here for now to ensure functionality.
+    if ((chatState.totalTokens ?? 0) == 0 &&
+        !chatState.isLoading &&
+        allMessages.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref
+              .read(chatStateNotifierProvider(widget.chatId).notifier)
+              .calculateAndStoreTokenCount();
         }
+      });
+    }
 
-        final allMessages = dbMessages;
+    // 查找最新的用户消息ID
+    final latestUserMessageId =
+        allMessages.lastWhereOrNull((m) => m.role == MessageRole.user)?.id;
 
-        // 查找最新的用户消息ID
-        final latestUserMessageId =
-            allMessages.lastWhereOrNull((m) => m.role == MessageRole.user)?.id;
+    return ListView.builder(
+      reverse: true,
+      controller: widget.scrollController,
+      padding: const EdgeInsets.all(8.0),
+      itemCount: allMessages.length,
+      itemBuilder: (context, index) {
+        final message = allMessages[allMessages.length - 1 - index];
+        final isLastMessage = index == 0;
+        // The stream is now indicated by the global state and tied to the uiControlledMessage.
+        final isThisMessageStreaming =
+            message.id == chatState.uiControlledMessage?.id &&
+                chatState.isStreaming;
+        final isLatestUserMessage = message.id == latestUserMessageId;
 
-        return ListView.builder(
-          reverse: true,
-          controller: widget.scrollController,
-          padding: const EdgeInsets.all(8.0),
-          itemCount: allMessages.length,
-          itemBuilder: (context, index) {
-            final message = allMessages[allMessages.length - 1 - index];
-            final isLastMessage = index == 0;
-            // The stream is now indicated by the global state, not by a temporary message object.
-            final isThisMessageStreaming = chatState.isStreaming && isLastMessage;
-            final isLatestUserMessage = message.id == latestUserMessageId;
+        // Create a column of MessageBubble widgets, one for each part of the message.
+        final partWidgets = message.parts.map((part) {
+          // Create a temporary message object for the bubble, containing only one part.
+          final singlePartMessage = Message(
+            id: message.id,
+            chatId: message.chatId,
+            role: message.role,
+            parts: [part],
+            timestamp: message.timestamp,
+            originalXmlContent: message.originalXmlContent,
+            secondaryXmlContent: message.secondaryXmlContent,
+          );
+          return MessageBubble(
+            key: ValueKey(message.id), // Use the stable, permanent ID.
+            message: singlePartMessage,
+            xmlRules: widget.xmlRules,
+            isStreaming: isThisMessageStreaming,
+            isTransparent: chatState.isBubbleTransparent,
+            isHalfWidth: chatState.isBubbleHalfWidth,
+            highlightQuotes: chatState.highlightQuotes,
+            onTap: () => widget.onMessageTap(message, part, allMessages),
+            totalTokens: isLastMessage &&
+                    part == message.parts.last &&
+                    !isThisMessageStreaming
+                ? chatState.totalTokens
+                : null,
+            // 将合成的XML和标记传递给最新的用户消息
+            carriedOverXml:
+                isLatestUserMessage ? widget.carriedOverXml : null,
+            isPseudoStreamMode: widget.isPseudoStreamMode,
+            pseudoStreamSpeed: widget.pseudoStreamSpeed,
+          );
+        }).toList();
 
-            // Create a column of MessageBubble widgets, one for each part of the message.
-            final partWidgets = message.parts.map((part) {
-              // Create a temporary message object for the bubble, containing only one part.
-              final singlePartMessage = Message(
-                id: message.id,
-                chatId: message.chatId,
-                role: message.role,
-                parts: [part],
-                timestamp: message.timestamp,
-                originalXmlContent: message.originalXmlContent,
-                secondaryXmlContent: message.secondaryXmlContent,
-              );
-              return MessageBubble(
-                key: ValueKey(message.id), // Use the stable, permanent ID.
-                message: singlePartMessage,
-                xmlRules: widget.xmlRules,
-                isStreaming: isThisMessageStreaming,
-                isTransparent: chatState.isBubbleTransparent,
-                isHalfWidth: chatState.isBubbleHalfWidth,
-                highlightQuotes: chatState.highlightQuotes,
-                onTap: () => widget.onMessageTap(message, part, allMessages),
-                totalTokens:
-                    isLastMessage &&
-                        part == message.parts.last &&
-                        !isThisMessageStreaming
-                    ? chatState.totalTokens
-                    : null,
-                // 将合成的XML和标记传递给最新的用户消息
-                carriedOverXml:
-                    isLatestUserMessage ? widget.carriedOverXml : null,
-                isPseudoStreamMode: widget.isPseudoStreamMode,
-                pseudoStreamSpeed: widget.pseudoStreamSpeed,
-              );
-            }).toList();
+        Widget buildActionButtons() {
+          // Action buttons should only appear after the last message if it's from the model and not loading.
+          final canPerformAction = isLastMessage &&
+              allMessages.isNotEmpty &&
+              allMessages.last.role == MessageRole.model &&
+              !chatState.isLoading;
 
-            Widget buildActionButtons() {
-              final chatState = ref.watch(
-                chatStateNotifierProvider(widget.chatId),
-              );
-              // Action buttons should only appear after the last message if it's from the model and not loading.
-              final canPerformAction =
-                  isLastMessage &&
-                  allMessages.isNotEmpty &&
-                  allMessages.last.role == MessageRole.model &&
-                  !chatState.isLoading;
+          if (!canPerformAction) return const SizedBox.shrink();
 
-              if (!canPerformAction) return const SizedBox.shrink();
+          final chat = ref.watch(currentChatProvider(widget.chatId)).value;
+          final globalSettings = ref.watch(globalSettingsProvider);
+          final notifier = ref.read(
+            chatStateNotifierProvider(widget.chatId).notifier,
+          );
 
-              final chat = ref.watch(currentChatProvider(widget.chatId)).value;
-              final globalSettings = ref.watch(globalSettingsProvider);
-              final notifier = ref.read(
-                chatStateNotifierProvider(widget.chatId).notifier,
-              );
+          if (chat == null) return const SizedBox.shrink();
 
-              if (chat == null) return const SizedBox.shrink();
+          List<Widget> buttons = [];
 
-              List<Widget> buttons = [];
+          // Continue Button
+          buttons.add(
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('续写'),
+              onPressed: notifier.continueGeneration,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          );
 
-              // Continue Button
+          // Resume Button
+          if (globalSettings.enableResume) {
+            buttons.add(const SizedBox(width: 8));
+            buttons.add(
+              FilledButton.tonalIcon(
+                icon: const Icon(
+                  Icons.replay_circle_filled_rounded,
+                  size: 16,
+                ),
+                label: const Text('中断恢复'),
+                onPressed: notifier.resumeGeneration,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          // Help Me Reply / Cancel Button
+          if (chat.enableHelpMeReply) {
+            buttons.add(const SizedBox(width: 8));
+            if (chatState.isGeneratingSuggestions) {
               buttons.add(
                 FilledButton.tonalIcon(
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('续写'),
-                  onPressed: notifier.continueGeneration,
+                  icon: const Icon(Icons.cancel_outlined, size: 16),
+                  label: const Text('取消'),
+                  onPressed: () => notifier.cancelGeneration(),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    backgroundColor: Colors.red.withAlpha(
+                      (255 * 0.1).round(),
+                    ),
+                    foregroundColor: Colors.red.shade700,
+                  ),
+                ),
+              );
+            } else {
+              buttons.add(
+                FilledButton.tonalIcon(
+                  icon: const Icon(Icons.quickreply_rounded, size: 16),
+                  label: const Text('帮我回复'),
+                  onPressed: () {
+                    notifier.generateHelpMeReply(
+                      onSuggestionsReady: (suggestions) {
+                        if (!mounted) return;
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) => _HelpMeReplyDialog(
+                            chatId: widget.chatId,
+                            initialSuggestions: suggestions,
+                            onSuggestionSelected:
+                                widget.onSuggestionSelected,
+                          ),
+                        );
+                      },
+                    );
+                  },
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -168,120 +227,35 @@ class _MessageListState extends ConsumerState<MessageList> {
                   ),
                 ),
               );
-
-              // Resume Button
-              if (globalSettings.enableResume) {
-                buttons.add(const SizedBox(width: 8));
-                buttons.add(
-                  FilledButton.tonalIcon(
-                    icon: const Icon(
-                      Icons.replay_circle_filled_rounded,
-                      size: 16,
-                    ),
-                    label: const Text('中断恢复'),
-                    onPressed: notifier.resumeGeneration,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              // Help Me Reply / Cancel Button
-              if (chat.enableHelpMeReply) {
-                buttons.add(const SizedBox(width: 8));
-                if (chatState.isGeneratingSuggestions) {
-                  buttons.add(
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.cancel_outlined, size: 16),
-                      label: const Text('取消'),
-                      onPressed: () => notifier.cancelGeneration(),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        backgroundColor: Colors.red.withAlpha(
-                          (255 * 0.1).round(),
-                        ),
-                        foregroundColor: Colors.red.shade700,
-                      ),
-                    ),
-                  );
-                } else {
-                  buttons.add(
-                    FilledButton.tonalIcon(
-                      icon: const Icon(Icons.quickreply_rounded, size: 16),
-                      label: const Text('帮我回复'),
-                      onPressed: () {
-                        notifier.generateHelpMeReply(
-                          onSuggestionsReady: (suggestions) {
-                            if (!mounted) return;
-                            showDialog(
-                              context: context,
-                              builder: (dialogContext) => _HelpMeReplyDialog(
-                                chatId: widget.chatId,
-                                initialSuggestions: suggestions,
-                                onSuggestionSelected:
-                                    widget.onSuggestionSelected,
-                              ),
-                            );
-                          },
-                        );
-                      },
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-
-              return Padding(
-                padding: const EdgeInsets.only(top: 4.0, left: 16.0),
-                child: Wrap(
-                  spacing: 8.0,
-                  runSpacing: 8.0,
-                  alignment: WrapAlignment.start,
-                  children: buttons,
-                ),
-              );
             }
+          }
 
-            // The main column for a single message entry in the ListView.
-            // It contains all the part-bubbles and, if it's the last message, the action buttons.
-            final messageColumn = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: partWidgets,
-            );
+          return Padding(
+            padding: const EdgeInsets.only(top: 4.0, left: 16.0),
+            child: Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              alignment: WrapAlignment.start,
+              children: buttons,
+            ),
+          );
+        }
 
-            if (isLastMessage) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [messageColumn, buildActionButtons()],
-              );
-            }
-            return messageColumn;
-          },
+        // The main column for a single message entry in the ListView.
+        // It contains all the part-bubbles and, if it's the last message, the action buttons.
+        final messageColumn = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: partWidgets,
         );
+
+        if (isLastMessage) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [messageColumn, buildActionButtons()],
+          );
+        }
+        return messageColumn;
       },
-      loading: () => const SizedBox.shrink(),
-      error: (err, stack) => Center(child: Text("无法加载消息: $err")),
     );
   }
 }

@@ -316,20 +316,15 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       specificConfigId: apiConfigIdOverride,
     );
 
-    // Refactored Logic: Prioritize the UI effect (pseudo-streaming) first.
-    if (state.isPseudoStreamMode) {
-      await _handlePseudoStreamResponse(
-        llmService,
-        apiConfig,
-        llmApiContext,
-        requestThoughts: requestThoughts,
-        messageToUpdateId: messageToUpdateId,
-        isGoogleSearchEnabled: state.isGoogleSearchEnabled,
-        isUrlContextEnabled: state.isUrlContextEnabled,
-        isCodeExecutionEnabled: state.isCodeExecutionEnabled,
-      );
-    } else if (state.isStreamMode && !forceNonStreaming) {
-      // Standard real-time streaming
+    // Corrected Logic: Differentiate between real streaming and simulated streaming.
+    final bool shouldUseRealStream = state.isStreamMode && !forceNonStreaming;
+    final bool shouldUsePseudoStreamSimulation =
+        !shouldUseRealStream && state.isPseudoStreamMode;
+
+    if (shouldUseRealStream) {
+      // Case 1: Real streaming from API.
+      // The UI layer (MessageBubble) will use _TypewriterText for animation
+      // if isPseudoStreamMode is also true, acting as a buffer/smoother.
       await _handleStreamResponse(
         llmService,
         apiConfig,
@@ -340,8 +335,21 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         isUrlContextEnabled: state.isUrlContextEnabled,
         isCodeExecutionEnabled: state.isCodeExecutionEnabled,
       );
+    } else if (shouldUsePseudoStreamSimulation) {
+      // Case 2: No real stream, but pseudo-stream is on.
+      // We get the full response once, then simulate the typing animation.
+      await _handlePseudoStreamResponse(
+        llmService,
+        apiConfig,
+        llmApiContext,
+        requestThoughts: requestThoughts,
+        messageToUpdateId: messageToUpdateId,
+        isGoogleSearchEnabled: state.isGoogleSearchEnabled,
+        isUrlContextEnabled: state.isUrlContextEnabled,
+        isCodeExecutionEnabled: state.isCodeExecutionEnabled,
+      );
     } else {
-      // Standard single-shot response
+      // Case 3: Standard single-shot response, no streaming or animation.
       await _handleSingleResponse(
         llmService,
         apiConfig,
@@ -369,7 +377,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     final messageRepo = ref.read(messageRepositoryProvider);
     Message? messageToUpdate;
 
-    // --- Step 1: Create or find the placeholder message in the DB ---
+    // --- Step 1: Create placeholder and set it as the UI-controlled message ---
     try {
       if (messageToUpdateId != null) {
         messageToUpdate = await messageRepo.getMessageById(messageToUpdateId);
@@ -383,22 +391,16 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         final newId = await messageRepo.saveMessage(placeholder);
         messageToUpdate = placeholder.copyWith(id: newId);
       }
+      // Immediately set this message as the one controlled by the UI.
+      state = state.copyWith(
+        uiControlledMessage: messageToUpdate,
+        isStreaming: true,
+      );
     } catch (e) {
       showTopMessage('无法创建占位消息: $e', backgroundColor: Colors.red);
-      state = state.copyWith(isLoading: false);
-      stopUpdateTimer();
+      _finalizeResponse(null, hasError: true);
       return;
     }
-
-    if (messageToUpdate == null) {
-      showTopMessage('占位消息为空，无法继续', backgroundColor: Colors.red);
-      state = state.copyWith(isLoading: false);
-      stopUpdateTimer();
-      return;
-    }
-
-    final int targetMessageId = messageToUpdate.id;
-    state = state.copyWith(isStreaming: true);
 
     final stream = llmService.sendMessageStream(
       llmContext: llmContext,
@@ -411,18 +413,17 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
     llmStreamSubscription?.cancel();
     llmStreamSubscription = stream.listen(
-      (chunk) async {
+      (chunk) {
         if (!mounted || state.isCancelled) return;
 
         if (chunk.type == LlmStreamChunkType.text) {
-          // --- Live Update Logic (DB only) ---
-          final updatedMessage = messageToUpdate!.copyWith(
+          // --- Live Update Logic (UI State only) ---
+          final updatedMessage = state.uiControlledMessage?.copyWith(
             parts: [MessagePart.text(chunk.accumulatedText)],
           );
-          // Update the reference for the next chunk
-          messageToUpdate = updatedMessage;
-          // Update the database directly, which will trigger the UI to rebuild.
-          await messageRepo.saveMessage(updatedMessage);
+          if (updatedMessage != null) {
+            state = state.copyWith(uiControlledMessage: updatedMessage);
+          }
         } else if (chunk.type == LlmStreamChunkType.error) {
           showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
         } else if (chunk.type == LlmStreamChunkType.finishReason) {
@@ -433,10 +434,10 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         if (mounted) {
           showTopMessage('消息流错误: $error', backgroundColor: Colors.red);
         }
-        _finalizeResponse(targetMessageId, hasError: true);
+        _finalizeResponse(state.uiControlledMessage, hasError: true);
       },
       onDone: () {
-        _finalizeResponse(targetMessageId, isCancelled: state.isCancelled);
+        _finalizeResponse(state.uiControlledMessage, isCancelled: state.isCancelled);
       },
       cancelOnError: true,
     );
@@ -453,7 +454,25 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     required bool isUrlContextEnabled,
     required bool isCodeExecutionEnabled,
   }) async {
+    Message? messageToUpdate;
     try {
+      // --- Step 1: Create placeholder and set it as the UI-controlled message ---
+      final messageRepo = ref.read(messageRepositoryProvider);
+      if (messageToUpdateId != null) {
+        messageToUpdate = await messageRepo.getMessageById(messageToUpdateId);
+        if (messageToUpdate == null) throw Exception("Original message not found.");
+      } else {
+        final placeholder = Message(
+          chatId: chatId,
+          role: MessageRole.model,
+          parts: [MessagePart.text("...")],
+        );
+        final newId = await messageRepo.saveMessage(placeholder);
+        messageToUpdate = placeholder.copyWith(id: newId);
+      }
+      state = state.copyWith(uiControlledMessage: messageToUpdate);
+
+      // --- Step 2: Fetch the actual response ---
       final response = await llmService.sendMessageOnce(
         llmContext: llmContext,
         apiConfig: apiConfig,
@@ -465,40 +484,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       if (!mounted) return;
 
       if (state.isCancelled) {
-        _finalizeResponse(messageToUpdateId, isCancelled: true);
+        _finalizeResponse(state.uiControlledMessage, isCancelled: true);
         return;
       }
 
       if (response.isSuccess && response.parts.isNotEmpty) {
-        final messageRepo = ref.read(messageRepositoryProvider);
         final String newContent = response.parts.map((p) => p.text ?? "").join("\n");
-
-        Message messageToProcess;
-
-        if (messageToUpdateId != null) {
-          final baseMessage = await messageRepo.getMessageById(messageToUpdateId);
-          if (baseMessage == null) throw Exception("Original message not found.");
-          final combinedRawText = baseMessage.rawText + newContent;
-          messageToProcess = baseMessage.copyWith(parts: [MessagePart.text(combinedRawText)]);
-        } else {
-          messageToProcess = Message(
-            chatId: chatId,
-            role: MessageRole.model,
-            parts: response.parts,
-          );
-        }
-
-        final savedId = await messageRepo.saveMessage(messageToProcess);
-        _finalizeResponse(savedId);
+        final finalMessage = state.uiControlledMessage?.copyWith(
+          parts: [MessagePart.text(newContent)],
+        );
+        // Update the UI state with the final content before finalizing.
+        state = state.copyWith(uiControlledMessage: finalMessage);
+        _finalizeResponse(finalMessage);
       } else {
         showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
-        _finalizeResponse(messageToUpdateId, hasError: true);
+        _finalizeResponse(state.uiControlledMessage, hasError: true);
       }
     } catch (e) {
       if (mounted) {
         showTopMessage('发送消息时发生意外错误: $e', backgroundColor: Colors.red);
       }
-      _finalizeResponse(messageToUpdateId, hasError: true);
+      _finalizeResponse(state.uiControlledMessage, hasError: true);
     }
   }
 
@@ -512,11 +518,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     required bool isUrlContextEnabled,
     required bool isCodeExecutionEnabled,
   }) async {
-    final messageRepo = ref.read(messageRepositoryProvider);
     Message? messageToUpdate;
 
-    // --- Step 1: Create or find the placeholder message in the DB (common for both modes) ---
+    // --- Step 1: Create placeholder and set it as the UI-controlled message ---
     try {
+      final messageRepo = ref.read(messageRepositoryProvider);
       if (messageToUpdateId != null) {
         messageToUpdate = await messageRepo.getMessageById(messageToUpdateId);
         if (messageToUpdate == null) throw Exception("Original message not found.");
@@ -529,131 +535,70 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         final newId = await messageRepo.saveMessage(placeholder);
         messageToUpdate = placeholder.copyWith(id: newId);
       }
+      state = state.copyWith(
+        uiControlledMessage: messageToUpdate,
+        isStreaming: true,
+      );
     } catch (e) {
       showTopMessage('无法创建伪流式占位消息: $e', backgroundColor: Colors.red);
       _finalizeResponse(null, hasError: true);
       return;
     }
 
-    if (messageToUpdate == null) {
-      showTopMessage('伪流式占位消息为空', backgroundColor: Colors.red);
-      _finalizeResponse(null, hasError: true);
+    // --- Step 2: Get the full response first ---
+    final response = await llmService.sendMessageOnce(
+      llmContext: llmContext,
+      apiConfig: apiConfig,
+      requestThoughts: requestThoughts,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
+    );
+
+    if (!mounted || state.isCancelled) {
+      _finalizeResponse(state.uiControlledMessage, isCancelled: true);
       return;
     }
 
-    final int targetMessageId = messageToUpdate.id;
-    state = state.copyWith(isStreaming: true);
-
-    // --- Step 2: Choose data fetching strategy based on isStreamMode ---
-
-    // Case A: Real-time stream with a buffer/throttle
-    if (state.isStreamMode) {
-      final StringBuffer textBuffer = StringBuffer();
-      String displayedText = "";
-      bool streamCompleted = false;
-
-      const baseDelay = 50; // Milliseconds per character at 1x speed
-      final delay = (baseDelay / state.pseudoStreamSpeed).clamp(10, 500).toInt();
-
-      pseudoStreamTimer?.cancel();
-      pseudoStreamTimer = Timer.periodic(Duration(milliseconds: delay), (timer) async {
-        if (!mounted || state.isCancelled) {
-          timer.cancel();
-          _finalizeResponse(targetMessageId, isCancelled: true);
-          return;
-        }
-
-        if (displayedText.length < textBuffer.length) {
-          int charsPerTick = (state.pseudoStreamSpeed).ceil();
-          int nextEnd = displayedText.length + charsPerTick;
-          if (nextEnd > textBuffer.length) nextEnd = textBuffer.length;
-          displayedText = textBuffer.toString().substring(0, nextEnd);
-          await messageRepo.saveMessage(
-            messageToUpdate!.copyWith(parts: [MessagePart.text(displayedText)]),
-          );
-        } else if (streamCompleted) {
-          timer.cancel();
-          _finalizeResponse(targetMessageId);
-        }
-      });
-
-      final stream = llmService.sendMessageStream(
-        llmContext: llmContext,
-        apiConfig: apiConfig,
-        requestThoughts: requestThoughts,
-        isGoogleSearchEnabled: isGoogleSearchEnabled,
-        isUrlContextEnabled: isUrlContextEnabled,
-        isCodeExecutionEnabled: isCodeExecutionEnabled,
-      );
-
-      llmStreamSubscription?.cancel();
-      llmStreamSubscription = stream.listen(
-        (chunk) {
-          if (!mounted || state.isCancelled) return;
-          if (chunk.type == LlmStreamChunkType.text) {
-            textBuffer.clear();
-            textBuffer.write(chunk.accumulatedText);
-          } else if (chunk.type == LlmStreamChunkType.error) {
-            showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
-          } else if (chunk.type == LlmStreamChunkType.finishReason) {
-            showTopMessage('输出因 ${chunk.textChunk} 而中断', backgroundColor: Colors.orange);
-          }
-        },
-        onError: (error) {
-          if (mounted) showTopMessage('消息流错误: $error', backgroundColor: Colors.red);
-          streamCompleted = true;
-        },
-        onDone: () => streamCompleted = true,
-        cancelOnError: true,
-      );
+    if (!response.isSuccess || response.parts.isEmpty) {
+      showTopMessage(response.error ?? "伪流式获取响应失败", backgroundColor: Colors.red);
+      _finalizeResponse(state.uiControlledMessage, hasError: true);
+      return;
     }
-    // Case B: Single-shot response with a typewriter animation
-    else {
-      final response = await llmService.sendMessageOnce(
-        llmContext: llmContext,
-        apiConfig: apiConfig,
-        requestThoughts: requestThoughts,
-        isGoogleSearchEnabled: isGoogleSearchEnabled,
-        isUrlContextEnabled: isUrlContextEnabled,
-        isCodeExecutionEnabled: isCodeExecutionEnabled,
-      );
 
+    // --- Step 3: Animate the text update in the UI state ---
+    final fullText = response.parts.map((p) => p.text ?? "").join("\n");
+    int charIndex = 0;
+    const baseDelay = 50;
+    final delay = (baseDelay / state.pseudoStreamSpeed).clamp(10, 500).toInt();
+
+    pseudoStreamTimer?.cancel();
+    pseudoStreamTimer = Timer.periodic(Duration(milliseconds: delay), (timer) {
       if (!mounted || state.isCancelled) {
-        _finalizeResponse(targetMessageId, isCancelled: true);
+        timer.cancel();
+        _finalizeResponse(state.uiControlledMessage, isCancelled: true);
         return;
       }
 
-      if (!response.isSuccess || response.parts.isEmpty) {
-        showTopMessage(response.error ?? "伪流式获取响应失败", backgroundColor: Colors.red);
-        _finalizeResponse(targetMessageId, hasError: true);
-        return;
+      if (charIndex < fullText.length) {
+        charIndex++;
+        final displayedText = fullText.substring(0, charIndex);
+        final updatedMessage = state.uiControlledMessage?.copyWith(
+          parts: [MessagePart.text(displayedText)],
+        );
+        if (updatedMessage != null) {
+          state = state.copyWith(uiControlledMessage: updatedMessage);
+        }
+      } else {
+        timer.cancel();
+        // Ensure the final text is set before finalizing
+        final finalMessage = state.uiControlledMessage?.copyWith(
+          parts: [MessagePart.text(fullText)],
+        );
+        state = state.copyWith(uiControlledMessage: finalMessage);
+        _finalizeResponse(finalMessage);
       }
-
-      final fullText = response.parts.map((p) => p.text ?? "").join("\n");
-      int charIndex = 0;
-      const baseDelay = 50;
-      final delay = (baseDelay / state.pseudoStreamSpeed).clamp(10, 500).toInt();
-
-      pseudoStreamTimer?.cancel();
-      pseudoStreamTimer = Timer.periodic(Duration(milliseconds: delay), (timer) async {
-        if (!mounted || state.isCancelled) {
-          timer.cancel();
-          _finalizeResponse(targetMessageId, isCancelled: true);
-          return;
-        }
-
-        if (charIndex < fullText.length) {
-          charIndex++;
-          final displayedText = fullText.substring(0, charIndex);
-          await messageRepo.saveMessage(
-            messageToUpdate!.copyWith(parts: [MessagePart.text(displayedText)]),
-          );
-        } else {
-          timer.cancel();
-          _finalizeResponse(targetMessageId);
-        }
-      });
-    }
+    });
   }
 
   Future<void> cancelGeneration() async {
@@ -702,25 +647,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   }
 
   Future<void> _finalizeResponse(
-    int? messageId, {
+    Message? finalMessage, {
     bool hasError = false,
     bool isCancelled = false,
   }) async {
     // This function is now the single point of exit for all generation types.
-    
+
     // 1. Stop UI indicators
     if (mounted) {
       state = state.copyWith(
         isPrimaryResponseLoading: false,
         isStreaming: false,
-        clearStreaming: true,
       );
     }
 
     // 2. If there was an error or cancellation without a message, fully stop.
-    if (messageId == null) {
+    if (finalMessage == null) {
       if (mounted) {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(
+          isLoading: false,
+          clearUiControlledMessage: true,
+        );
         stopUpdateTimer();
       }
       return;
@@ -729,14 +676,16 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     // 3. Process the final message and run background tasks
     try {
       final messageRepo = ref.read(messageRepositoryProvider);
-      final finalMessage = await messageRepo.getMessageById(messageId);
       final chat = ref.read(currentChatProvider(chatId)).value;
 
-      if (finalMessage != null && chat != null) {
+      if (chat != null) {
         // Process the message in-memory to extract XML, etc.
         final processedMessage = await getFinalProcessedMessage(chat, finalMessage);
-        // Save the processed version back to the DB.
+        // Save the final, processed version back to the DB.
         await messageRepo.saveMessage(processedMessage);
+
+        // The UI already has the final content. We just update the state with the processed version.
+        state = state.copyWith(uiControlledMessage: processedMessage);
 
         // Run post-save tasks ONLY if the stream completed successfully.
         if (!isCancelled && !hasError) {
@@ -751,7 +700,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         showTopMessage('后台处理任务出错: $e', backgroundColor: Colors.red);
       }
     } finally {
-      // 4. Final state cleanup, regardless of success or failure.
+      // 4. Final state cleanup. The uiControlledMessage is intentionally NOT cleared.
+      // It will be automatically moved to historicalMessages by the DB listener.
       if (mounted) {
         state = state.copyWith(
           isLoading: false, // Master lock OFF

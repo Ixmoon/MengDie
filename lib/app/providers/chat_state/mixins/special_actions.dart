@@ -189,7 +189,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
       return;
     }
 
-    final lastMessage = ref.read(lastModelMessageProvider(chatId));
+    final lastMessage = state.uiControlledMessage;
     if (lastMessage == null) {
       showTopMessage('没有可恢复的消息', backgroundColor: Colors.orange);
       return;
@@ -234,7 +234,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         return;
       }
 
-      final lastMessage = ref.read(lastModelMessageProvider(chatId));
+      final lastMessage = state.uiControlledMessage;
       if (lastMessage == null) {
         if (onSuggestionsReady != null) {
           showTopMessage('没有可供回复的消息', backgroundColor: Colors.orange);

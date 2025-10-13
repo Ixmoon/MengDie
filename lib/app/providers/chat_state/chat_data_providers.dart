@@ -79,23 +79,6 @@ final chatMessagesProvider = StreamProvider.family<List<Message>, int>((
   }
 });
 
-// --- 最后一条模型消息 Provider (响应式) ---
-final lastModelMessageProvider = Provider.family<Message?, int>((ref, chatId) {
-  final messagesAsyncValue = ref.watch(chatMessagesProvider(chatId));
-  return messagesAsyncValue.when(
-    data: (messages) {
-      final lastModelMsg = messages.lastWhereOrNull(
-        (msg) => msg.role == MessageRole.model,
-      );
-      return lastModelMsg;
-    },
-    loading: () => null,
-    error: (error, stack) {
-      return null;
-    },
-  );
-});
-
 // --- 新增：第一条模型消息 Provider (用于列表预览) ---
 // 优化：从 StreamProvider 改为 FutureProvider，避免为每个列表项建立实时监听。
 // 这将显著降低应用启动时的数据库负载。

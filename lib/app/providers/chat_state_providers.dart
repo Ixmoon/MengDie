@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core_providers.dart';
 import 'chat_state/chat_screen_state.dart';
 import 'chat_state/chat_state_notifier.dart';
 
@@ -15,22 +15,21 @@ export 'chat_state/chat_screen_state.dart';
 /// It asynchronously initializes the notifier with SharedPreferences.
 final chatStateNotifierProvider =
     StateNotifierProvider.family<ChatStateNotifier, ChatScreenState, int>((
-      ref,
-      chatId,
-    ) {
-      // Asynchronously get the SharedPreferences instance.
-      final prefsFuture = SharedPreferences.getInstance();
+  ref,
+  chatId,
+) {
+  // Depend on the SharedPreferences provider.
+  // This will cause this provider to re-evaluate when the Future completes.
+  final prefsAsyncValue = ref.watch(sharedPreferencesProvider);
 
-      // Create the notifier instance.
-      final notifier = ChatStateNotifier(ref, chatId);
+  // Create the notifier instance.
+  final notifier = ChatStateNotifier(ref, chatId);
 
-      // When the preferences are ready, initialize the notifier.
-      prefsFuture.then((prefs) {
-        // Check if the notifier is still mounted before calling init.
-        if (notifier.mounted) {
-          notifier.init(prefs);
-        }
-      });
+  // When SharedPreferences is ready, initialize the notifier.
+  // This ensures that the `_prefs` field in the UiStateManager mixin is set.
+  prefsAsyncValue.whenData((prefs) {
+    notifier.init(prefs);
+  });
 
-      return notifier;
-    });
+  return notifier;
+});

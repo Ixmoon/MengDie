@@ -45,6 +45,11 @@ class ChatScreenState {
   final bool isGoogleSearchEnabled; // New state for Google Search toggle
   final bool isUrlContextEnabled;
   final bool isCodeExecutionEnabled;
+
+  // New state fields for UI-controlled message management
+  final List<Message> historicalMessages;
+  final Message? uiControlledMessage;
+
   const ChatScreenState({
     this.isLoading = false,
     this.isPrimaryResponseLoading = false,
@@ -79,6 +84,8 @@ class ChatScreenState {
     this.isGoogleSearchEnabled = false, // Default to false
     this.isUrlContextEnabled = false,
     this.isCodeExecutionEnabled = false,
+    this.historicalMessages = const [],
+    this.uiControlledMessage,
   });
 
   ChatScreenState copyWith({
@@ -124,6 +131,9 @@ class ChatScreenState {
     bool? isGoogleSearchEnabled,
     bool? isUrlContextEnabled,
     bool? isCodeExecutionEnabled,
+    List<Message>? historicalMessages,
+    Message? uiControlledMessage,
+    bool clearUiControlledMessage = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -190,6 +200,10 @@ class ChatScreenState {
       isUrlContextEnabled: isUrlContextEnabled ?? this.isUrlContextEnabled,
       isCodeExecutionEnabled:
           isCodeExecutionEnabled ?? this.isCodeExecutionEnabled,
+      historicalMessages: historicalMessages ?? this.historicalMessages,
+      uiControlledMessage: clearUiControlledMessage
+          ? null
+          : uiControlledMessage ?? this.uiControlledMessage,
     );
   }
 }

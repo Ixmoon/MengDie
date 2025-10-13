@@ -39,7 +39,49 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
   @override
   bool isFinalizing = false; // Used to prevent re-entry into finalization logic
 
-  ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState());
+  StreamSubscription<List<Message>>? _dbMessagesSubscription;
+
+  ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState()) {
+    _initDbListener();
+  }
+
+  void _initDbListener() {
+    // Start listening to the database stream.
+    final messageRepo = ref.read(messageRepositoryProvider);
+    _dbMessagesSubscription =
+        messageRepo.watchMessagesForChat(chatId).listen(_processMessagesFromDb);
+  }
+
+  void _processMessagesFromDb(List<Message> messages) {
+    if (!mounted) return;
+
+    // If a generation is in progress, the UI-controlled message is the source of truth.
+    // We avoid processing DB updates for it to prevent conflicts.
+    if (state.isLoading && state.uiControlledMessage != null) {
+      final uiMessageId = state.uiControlledMessage!.id;
+      // Filter out the message that is currently under UI control from the DB list.
+      final historical = messages.where((m) => m.id != uiMessageId).toList();
+      state = state.copyWith(historicalMessages: historical);
+      return; // Exit early
+    }
+
+    final lastMessage = messages.lastOrNull;
+
+    if (lastMessage != null && lastMessage.role == MessageRole.model) {
+      // The last message is a model message, it becomes UI-controlled.
+      final historical = messages.sublist(0, messages.length - 1);
+      state = state.copyWith(
+        historicalMessages: historical,
+        uiControlledMessage: lastMessage,
+      );
+    } else {
+      // The last message is a user message or the list is empty.
+      state = state.copyWith(
+        historicalMessages: messages,
+        clearUiControlledMessage: true,
+      );
+    }
+  }
 
   // --- Method Implementations to satisfy Mixin contracts ---
 
@@ -120,6 +162,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
 
   @override
   void dispose() {
+    _dbMessagesSubscription?.cancel();
     llmStreamSubscription?.cancel();
     pseudoStreamTimer?.cancel(); // Cancel pseudo-stream timer
     stopUpdateTimer(); // from UiStateManager

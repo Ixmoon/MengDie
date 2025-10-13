@@ -487,28 +487,49 @@ class MessageBubble extends StatelessWidget {
     bool isUser,
     bool isStreaming,
   ) {
-    // Simplified logic: Always render the text content directly.
-    // The "streaming" or "typing" effect is now driven by database updates,
-    // not a widget-level animation.
     final textContent = message.modelsText.isEmpty && isStreaming && !isUser
         ? "..."
         : message.modelsText;
 
-    final widgets = _renderTextContent(
-      context,
-      textContent,
-      xmlRules,
-      textColor,
-      isStreaming,
-    );
-    if (widgets.isEmpty) return const SizedBox.shrink();
+    if (isPseudoStreamMode && !isUser) {
+      return _TypewriterText(
+        key: ValueKey(message.id), // Ensure widget rebuilds for new messages
+        fullText: textContent,
+        speed: pseudoStreamSpeed,
+        isStreaming: isStreaming,
+        builder: (context, displayedText) {
+          final widgets = _renderTextContent(
+            context,
+            displayedText,
+            xmlRules,
+            textColor,
+            isStreaming,
+          );
+          if (widgets.isEmpty) return const SizedBox.shrink();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: widgets,
+          );
+        },
+      );
+    } else {
+      final widgets = _renderTextContent(
+        context,
+        textContent,
+        xmlRules,
+        textColor,
+        isStreaming,
+      );
+      if (widgets.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment:
-          isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: widgets,
-    );
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: widgets,
+      );
+    }
   }
 
   Widget _buildNonTextPart(
@@ -799,5 +820,92 @@ class MessageBubble extends StatelessWidget {
     }
 
     return messageCard;
+  }
+}
+
+class _TypewriterText extends StatefulWidget {
+  final String fullText;
+  final double speed;
+  final bool isStreaming;
+  final Widget Function(BuildContext, String) builder;
+
+  const _TypewriterText({
+    super.key,
+    required this.fullText,
+    required this.speed,
+    required this.isStreaming,
+    required this.builder,
+  });
+
+  @override
+  _TypewriterTextState createState() => _TypewriterTextState();
+}
+
+class _TypewriterTextState extends State<_TypewriterText> {
+  String _displayedText = "";
+  Timer? _timer;
+  int _charIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_TypewriterText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If the text or speed changes, restart the timer to continue animating.
+    // This handles both incoming new text during streaming and the final text after streaming ends.
+    if (widget.fullText != oldWidget.fullText ||
+        widget.speed != oldWidget.speed) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startAnimation() {
+    _timer?.cancel();
+    if (_charIndex >= widget.fullText.length) {
+      // Already displayed everything
+      if (_displayedText != widget.fullText) {
+        setState(() {
+          _displayedText = widget.fullText;
+        });
+      }
+      return;
+    }
+
+    const baseDelay = 50; // Milliseconds per character at 1x speed
+    final delay = (baseDelay / widget.speed).clamp(10, 500).toInt();
+
+    _timer = Timer.periodic(Duration(milliseconds: delay), (timer) {
+      if (_charIndex < widget.fullText.length) {
+        _charIndex++;
+        setState(() {
+          _displayedText = widget.fullText.substring(0, _charIndex);
+        });
+      } else {
+        timer.cancel();
+        // If it's not a streaming message, ensure the final full text is displayed
+        // in case of any timing discrepancies.
+        if (!widget.isStreaming && _displayedText != widget.fullText) {
+          setState(() {
+            _displayedText = widget.fullText;
+          });
+        }
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(context, _displayedText);
   }
 }
