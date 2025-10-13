@@ -481,6 +481,61 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 },
               ),
             ),
+            PopupMenuItem(
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final watchedChatState =
+                      ref.watch(chatStateNotifierProvider(widget.chatId));
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('并行请求'),
+                      Switch(
+                        value: watchedChatState.isParallelRequestEnabled,
+                        onChanged: (bool value) {
+                          notifier.toggleParallelRequestMode();
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            PopupMenuItem(
+              enabled: false,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final watchedChatState =
+                      ref.watch(chatStateNotifierProvider(widget.chatId));
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('并行数'),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: TextEditingController(
+                            text: watchedChatState.parallelRequestCount
+                                .toString(),
+                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          decoration: const InputDecoration(
+                            isDense: true,
+                          ),
+                          onSubmitted: (value) {
+                            final count = int.tryParse(value) ?? 3;
+                            notifier.setParallelRequestCount(count);
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
           ],
         );
       },

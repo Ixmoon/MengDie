@@ -109,6 +109,44 @@ class GeminiService implements BaseLlmService {
   }
 
   @override
+  Stream<LlmStreamChunk> sendParallelMessageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) {
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
+    if (apiKey == null || apiKey.isEmpty) {
+      return Stream.value(LlmStreamChunk.error("没有可用的 Gemini API Key。", ''));
+    }
+
+    final payload = GeminiChatPayload(
+      apiKey: apiKey,
+      apiConfig: apiConfig,
+      generationParams: generationParams,
+      llmContext: llmContext,
+      stream: true,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
+    );
+
+    return _requestHandler.executeParallelStream(
+      payload,
+      count: parallelCount,
+      textExtractor: (json) =>
+          _extractTextAndThinkFromChunk(json, isStreaming: true),
+      citationApplier: _addCitationsToText,
+    );
+  }
+
+  @override
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
@@ -144,6 +182,44 @@ class GeminiService implements BaseLlmService {
 
     return _requestHandler.executeOnce(
       payload,
+      responseParser: _parseGeminiResponse,
+    );
+  }
+
+  @override
+  Future<LlmResponse> sendParallelMessageOnce({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) {
+    _isThinkStreamActive = false;
+
+    final apiKey = apiConfig.apiKey?.isNotEmpty == true
+        ? apiConfig.apiKey
+        : _apiKeyNotifier.getNextGeminiApiKey();
+
+    if (apiKey == null || apiKey.isEmpty) {
+      return Future.value(const LlmResponse.error("没有可用的 Gemini API Key。"));
+    }
+
+    final payload = GeminiChatPayload(
+      apiKey: apiKey,
+      apiConfig: apiConfig,
+      generationParams: generationParams,
+      llmContext: llmContext,
+      stream: false,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
+    );
+
+    return _requestHandler.executeParallelOnce(
+      payload,
+      count: parallelCount,
       responseParser: _parseGeminiResponse,
     );
   }

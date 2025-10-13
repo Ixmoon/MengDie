@@ -44,6 +44,26 @@ abstract class BaseLlmService {
     bool isCodeExecutionEnabled = false,
   });
 
+  Future<LlmResponse> sendParallelMessageOnce({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  });
+
+  Stream<LlmStreamChunk> sendParallelMessageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  });
+
   /// 使用客户端分词器计算给定上下文的 token 数量。
   ///
   /// 这是一个纯本地操作，用于估算 token，以便进行精确的上下文管理。

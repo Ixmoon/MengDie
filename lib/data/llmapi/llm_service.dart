@@ -111,6 +111,47 @@ class LlmService {
     }
   }
 
+  Stream<LlmStreamChunk> sendParallelMessageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required int parallelCount,
+    bool requestThoughts = false,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) {
+    final generationParams = _prepareGenerationParams(apiConfig);
+    generationParams['includeThoughts'] = requestThoughts;
+
+    _activeServiceType = apiConfig.apiType;
+
+    final service = _services[apiConfig.apiType];
+    if (service == null) {
+      return Stream.value(
+        LlmStreamChunk.error("Unsupported API type: ${apiConfig.apiType}", ''),
+      );
+    }
+
+    try {
+      return service.sendParallelMessageStream(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        generationParams: generationParams,
+        parallelCount: parallelCount,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
+      );
+    } catch (e) {
+      return Stream.value(
+        LlmStreamChunk.error(
+          "Failed to start parallel ${apiConfig.apiType} stream: $e",
+          '',
+        ),
+      );
+    }
+  }
+
   /// 发送消息并获取一次性完整响应。
   /// 【重构】此方法不再解析配置，而是直接接收一个确定的 `ApiConfig` 对象。
   Future<LlmResponse> sendMessageOnce({
@@ -137,6 +178,40 @@ class LlmService {
         llmContext: llmContext,
         apiConfig: apiConfig,
         generationParams: generationParams,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
+      );
+    } catch (e) {
+      return LlmResponse.error("${apiConfig.apiType} API Error: $e");
+    }
+  }
+
+  Future<LlmResponse> sendParallelMessageOnce({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required int parallelCount,
+    bool requestThoughts = false,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) async {
+    final generationParams = _prepareGenerationParams(apiConfig);
+    generationParams['includeThoughts'] = requestThoughts;
+
+    _activeServiceType = apiConfig.apiType;
+
+    final service = _services[apiConfig.apiType];
+    if (service == null) {
+      return LlmResponse.error("Unsupported API type: ${apiConfig.apiType}");
+    }
+
+    try {
+      return await service.sendParallelMessageOnce(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        generationParams: generationParams,
+        parallelCount: parallelCount,
         isGoogleSearchEnabled: isGoogleSearchEnabled,
         isUrlContextEnabled: isUrlContextEnabled,
         isCodeExecutionEnabled: isCodeExecutionEnabled,

@@ -39,6 +39,10 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
           _prefs.getBool('chat_${chatId}_is_url_context_enabled') ?? false,
       isCodeExecutionEnabled:
           _prefs.getBool('chat_${chatId}_is_code_execution_enabled') ?? false,
+      isParallelRequestEnabled:
+          _prefs.getBool('chat_${chatId}_is_parallel_request_enabled') ?? false,
+      parallelRequestCount:
+          _prefs.getInt('chat_${chatId}_parallel_request_count') ?? 3,
     );
   }
 
@@ -140,6 +144,18 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
     state = state.copyWith(isCodeExecutionEnabled: newValue);
     _prefs.setBool('chat_${chatId}_is_code_execution_enabled', newValue);
     showTopMessage('代码执行已${newValue ? "启用" : "关闭"}');
+  }
+
+  void toggleParallelRequestMode() {
+    final newValue = !state.isParallelRequestEnabled;
+    state = state.copyWith(isParallelRequestEnabled: newValue);
+    _prefs.setBool('chat_${chatId}_is_parallel_request_enabled', newValue);
+    showTopMessage('并行请求模式已${newValue ? "开启" : "关闭"}');
+  }
+
+  void setParallelRequestCount(int count) {
+    state = state.copyWith(parallelRequestCount: count);
+    _prefs.setInt('chat_${chatId}_parallel_request_count', count);
   }
 
   void setMessageListHeightMode(bool isHalfHeight) {

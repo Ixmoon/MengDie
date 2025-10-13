@@ -388,14 +388,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return;
     }
 
-    final stream = llmService.sendMessageStream(
-      llmContext: llmContext,
-      apiConfig: apiConfig,
-      requestThoughts: requestThoughts,
-      isGoogleSearchEnabled: isGoogleSearchEnabled,
-      isUrlContextEnabled: isUrlContextEnabled,
-      isCodeExecutionEnabled: isCodeExecutionEnabled,
-    );
+    final Stream<LlmStreamChunk> stream;
+    if (state.isParallelRequestEnabled) {
+      stream = llmService.sendParallelMessageStream(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        parallelCount: state.parallelRequestCount,
+        requestThoughts: requestThoughts,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
+      );
+    } else {
+      stream = llmService.sendMessageStream(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        requestThoughts: requestThoughts,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
+      );
+    }
 
     llmStreamSubscription?.cancel();
     llmStreamSubscription = stream.listen(
@@ -459,14 +472,27 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       state = state.copyWith(uiControlledMessage: messageToUpdate);
 
       // --- Step 2: Fetch the actual response ---
-      final response = await llmService.sendMessageOnce(
-        llmContext: llmContext,
-        apiConfig: apiConfig,
-        requestThoughts: requestThoughts,
-        isGoogleSearchEnabled: isGoogleSearchEnabled,
-        isUrlContextEnabled: isUrlContextEnabled,
-        isCodeExecutionEnabled: isCodeExecutionEnabled,
-      );
+      final LlmResponse response;
+      if (state.isParallelRequestEnabled) {
+        response = await llmService.sendParallelMessageOnce(
+          llmContext: llmContext,
+          apiConfig: apiConfig,
+          parallelCount: state.parallelRequestCount,
+          requestThoughts: requestThoughts,
+          isGoogleSearchEnabled: isGoogleSearchEnabled,
+          isUrlContextEnabled: isUrlContextEnabled,
+          isCodeExecutionEnabled: isCodeExecutionEnabled,
+        );
+      } else {
+        response = await llmService.sendMessageOnce(
+          llmContext: llmContext,
+          apiConfig: apiConfig,
+          requestThoughts: requestThoughts,
+          isGoogleSearchEnabled: isGoogleSearchEnabled,
+          isUrlContextEnabled: isUrlContextEnabled,
+          isCodeExecutionEnabled: isCodeExecutionEnabled,
+        );
+      }
       if (!mounted) return;
 
       if (state.isCancelled) {

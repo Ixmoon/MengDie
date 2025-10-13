@@ -50,6 +50,30 @@ class OpenAIService implements BaseLlmService {
   }
 
   @override
+  Stream<LlmStreamChunk> sendParallelMessageStream({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) {
+    final payload = OpenAIChatPayload(
+      apiConfig: apiConfig,
+      generationParams: generationParams,
+      llmContext: llmContext,
+      stream: true,
+    );
+
+    return _requestHandler.executeParallelStream(
+      payload,
+      count: parallelCount,
+      textExtractor: _extractTextFromChunk,
+    );
+  }
+
+  @override
   Future<LlmResponse> sendMessageOnce({
     required List<LlmContent> llmContext,
     required ApiConfig apiConfig,
@@ -70,6 +94,30 @@ class OpenAIService implements BaseLlmService {
 
     return _requestHandler.executeOnce(
       payload,
+      responseParser: _parseOpenAIResponse,
+    );
+  }
+
+  @override
+  Future<LlmResponse> sendParallelMessageOnce({
+    required List<LlmContent> llmContext,
+    required ApiConfig apiConfig,
+    required Map<String, dynamic> generationParams,
+    required int parallelCount,
+    bool isGoogleSearchEnabled = false,
+    bool isUrlContextEnabled = false,
+    bool isCodeExecutionEnabled = false,
+  }) {
+    final payload = OpenAIChatPayload(
+      apiConfig: apiConfig,
+      generationParams: generationParams,
+      llmContext: llmContext,
+      stream: false,
+    );
+
+    return _requestHandler.executeParallelOnce(
+      payload,
+      count: parallelCount,
       responseParser: _parseOpenAIResponse,
     );
   }

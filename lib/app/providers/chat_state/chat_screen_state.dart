@@ -45,6 +45,8 @@ class ChatScreenState {
   final bool isGoogleSearchEnabled; // New state for Google Search toggle
   final bool isUrlContextEnabled;
   final bool isCodeExecutionEnabled;
+  final bool isParallelRequestEnabled;
+  final int parallelRequestCount;
 
   // New state fields for UI-controlled message management
   final List<Message> historicalMessages;
@@ -84,6 +86,8 @@ class ChatScreenState {
     this.isGoogleSearchEnabled = false, // Default to false
     this.isUrlContextEnabled = false,
     this.isCodeExecutionEnabled = false,
+    this.isParallelRequestEnabled = false,
+    this.parallelRequestCount = 3,
     this.historicalMessages = const [],
     this.uiControlledMessage,
   });
@@ -131,6 +135,8 @@ class ChatScreenState {
     bool? isGoogleSearchEnabled,
     bool? isUrlContextEnabled,
     bool? isCodeExecutionEnabled,
+    bool? isParallelRequestEnabled,
+    int? parallelRequestCount,
     List<Message>? historicalMessages,
     Message? uiControlledMessage,
     bool clearUiControlledMessage = false,
@@ -200,6 +206,9 @@ class ChatScreenState {
       isUrlContextEnabled: isUrlContextEnabled ?? this.isUrlContextEnabled,
       isCodeExecutionEnabled:
           isCodeExecutionEnabled ?? this.isCodeExecutionEnabled,
+      isParallelRequestEnabled:
+          isParallelRequestEnabled ?? this.isParallelRequestEnabled,
+      parallelRequestCount: parallelRequestCount ?? this.parallelRequestCount,
       historicalMessages: historicalMessages ?? this.historicalMessages,
       uiControlledMessage: clearUiControlledMessage
           ? null

@@ -203,6 +203,154 @@ class LlmRequestHandler {
     }
   }
 
+  Future<LlmResponse> executeParallelOnce(
+    HttpRequestPayload payload, {
+    required int count,
+    required LlmResponse Function(Map<String, dynamic> data) responseParser,
+  }) async {
+    final completer = Completer<LlmResponse>();
+    final cancelTokens = List.generate(count, (_) => CancelToken());
+    int successCount = 0;
+
+    for (int i = 0; i < count; i++) {
+      final cancelToken = cancelTokens[i];
+      _dio
+          .post(
+        payload.buildUrl(),
+        data: jsonEncode(payload.buildBody()),
+        options: Options(headers: payload.buildHeaders()),
+        cancelToken: cancelToken,
+      )
+          .then((response) {
+        if (completer.isCompleted) return;
+
+        if (response.statusCode == 200 && response.data != null) {
+          final result = responseParser(response.data as Map<String, dynamic>);
+          if (result.isSuccess) {
+            successCount++;
+            if (!completer.isCompleted) {
+              completer.complete(result);
+              // Cancel all other requests
+              for (var ct in cancelTokens) {
+                if (ct != cancelToken) {
+                  ct.cancel("A faster request succeeded.");
+                }
+              }
+            }
+          }
+        }
+      }).catchError((error) {
+        if (completer.isCompleted) return;
+        // If all requests have failed, complete with an error.
+        if (--count == 0 && successCount == 0) {
+          if (error is DioException) {
+            completer.complete(_handleDioErrorResponse(
+                error, payload.apiConfig.apiType.name));
+          } else {
+            completer.complete(_handleGeneralErrorResponse(
+                error, payload.apiConfig.apiType.name));
+          }
+        }
+      });
+    }
+
+    return completer.future;
+  }
+
+  Stream<LlmStreamChunk> executeParallelStream(
+    HttpRequestPayload payload, {
+    required int count,
+    required String Function(Map<String, dynamic> json) textExtractor,
+    String Function(String, Map<String, dynamic>)? citationApplier,
+  }) {
+    final controller = StreamController<LlmStreamChunk>();
+    final cancelTokens = List.generate(count, (_) => CancelToken());
+    bool winnerChosen = false;
+    int streamsCompleted = 0;
+    LlmStreamChunk? lastError;
+
+    void cancelAllOthers(CancelToken winnerToken) {
+      for (var ct in cancelTokens) {
+        if (ct != winnerToken) {
+          ct.cancel("A faster stream responded first.");
+        }
+      }
+    }
+
+    for (int i = 0; i < count; i++) {
+      final cancelToken = cancelTokens[i];
+      _dio
+          .post<ResponseBody>(
+        payload.buildUrl(),
+        data: jsonEncode(payload.buildBody()),
+        cancelToken: cancelToken,
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: payload.buildHeaders(),
+        ),
+      )
+          .then((response) {
+        if (winnerChosen) return;
+
+        final stream = _processSseStream(
+          stream: response.data!.stream,
+          textExtractor: textExtractor,
+          citationApplier: citationApplier,
+        );
+
+        StreamSubscription? subscription;
+        subscription = stream.listen(
+          (chunk) {
+            if (winnerChosen && !controller.isClosed) {
+              controller.add(chunk);
+            } else if (!winnerChosen &&
+                chunk.textChunk.isNotEmpty &&
+                !controller.isClosed) {
+              winnerChosen = true;
+              cancelAllOthers(cancelToken);
+              controller.add(chunk);
+            }
+          },
+          onError: (error) {
+            if (!winnerChosen) {
+              lastError = LlmStreamChunk.error(error.toString(), '');
+              streamsCompleted++;
+              if (streamsCompleted == count && !controller.isClosed) {
+                controller.add(lastError!);
+                controller.close();
+              }
+            } else if (!controller.isClosed) {
+              controller.addError(error);
+            }
+            subscription?.cancel();
+          },
+          onDone: () {
+            streamsCompleted++;
+            if ((winnerChosen || streamsCompleted == count) &&
+                !controller.isClosed) {
+              controller.close();
+            }
+          },
+        );
+      }).catchError((error) {
+        if (winnerChosen) return;
+        streamsCompleted++;
+        if (error is DioException) {
+          lastError = LlmStreamChunk.error(
+              formatDioError(error, payload.apiConfig.apiType.name), '');
+        } else {
+          lastError = LlmStreamChunk.error(error.toString(), '');
+        }
+        if (streamsCompleted == count && !controller.isClosed) {
+          controller.add(lastError!);
+          controller.close();
+        }
+      });
+    }
+
+    return controller.stream;
+  }
+
   // --- 3. Private Helper Methods (Moved from LlmHelper) ---
 
   Stream<LlmStreamChunk> _processSseStream({
