@@ -68,8 +68,6 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
       clearError: true,
       clearTopMessage: true,
       generationStartTime: DateTime.now(),
-      streamingMessage: placeholderMessage,
-      isStreamingMessageVisible: true,
     );
     startUpdateTimer();
 
@@ -135,7 +133,6 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
         state = state.copyWith(
           isLoading: false,
           isPrimaryResponseLoading: false,
-          clearStreamingMessage: true,
         );
         stopUpdateTimer();
       }

@@ -33,9 +33,11 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
   // --- Properties that belong to the Notifier itself ---
   @override
   StreamSubscription<LlmStreamChunk>? llmStreamSubscription;
+  @override
+  Timer? pseudoStreamTimer; // For pseudo-streaming animation
 
   @override
-  bool isFinalizing = false;
+  bool isFinalizing = false; // Used to prevent re-entry into finalization logic
 
   ChatStateNotifier(this.ref, this.chatId) : super(const ChatScreenState());
 
@@ -119,6 +121,7 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
   @override
   void dispose() {
     llmStreamSubscription?.cancel();
+    pseudoStreamTimer?.cancel(); // Cancel pseudo-stream timer
     stopUpdateTimer(); // from UiStateManager
     topMessageTimer?.cancel(); // from UiStateManager
     super.dispose();

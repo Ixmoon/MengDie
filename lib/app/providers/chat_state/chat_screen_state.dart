@@ -32,10 +32,6 @@ class ChatScreenState {
   isGeneratingSuggestions; // New state specifically for the "Help Me Reply" feature
   final bool
   isCancelled; // Flag to indicate if the current generation has been cancelled.
-  final Message?
-  streamingMessage; // Holds the message being streamed, for UI display only
-  final bool
-  isStreamingMessageVisible; // Controls the visibility of the streaming message in the UI
   final bool isImageGenerationMode;
   final String?
   carriedOverXml; // Holds the synthesized XML for the latest user message
@@ -49,10 +45,6 @@ class ChatScreenState {
   final bool isGoogleSearchEnabled; // New state for Google Search toggle
   final bool isUrlContextEnabled;
   final bool isCodeExecutionEnabled;
-  // Tracks the transition from a temporary streaming message ID (key)
-  // to its final permanent database ID (value).
-  final Map<int, int> idTransitionMap;
-
   const ChatScreenState({
     this.isLoading = false,
     this.isPrimaryResponseLoading = false,
@@ -76,8 +68,6 @@ class ChatScreenState {
     this.isSummarizing = false,
     this.isGeneratingSuggestions = false,
     this.isCancelled = false,
-    this.streamingMessage,
-    this.isStreamingMessageVisible = false,
     this.isImageGenerationMode = false,
     this.carriedOverXml,
     this.keptMessageCount,
@@ -89,7 +79,6 @@ class ChatScreenState {
     this.isGoogleSearchEnabled = false, // Default to false
     this.isUrlContextEnabled = false,
     this.isCodeExecutionEnabled = false,
-    this.idTransitionMap = const {},
   });
 
   ChatScreenState copyWith({
@@ -122,9 +111,6 @@ class ChatScreenState {
     bool? isSummarizing,
     bool? isGeneratingSuggestions,
     bool? isCancelled,
-    Message? streamingMessage,
-    bool? isStreamingMessageVisible,
-    bool clearStreamingMessage = false,
     bool? isImageGenerationMode,
     String? carriedOverXml,
     bool clearCarriedOverXml = false,
@@ -138,8 +124,6 @@ class ChatScreenState {
     bool? isGoogleSearchEnabled,
     bool? isUrlContextEnabled,
     bool? isCodeExecutionEnabled,
-    Map<int, int>? idTransitionMap,
-    bool clearIdTransitionMap = false,
   }) {
     return ChatScreenState(
       isLoading: isLoading ?? this.isLoading,
@@ -178,12 +162,6 @@ class ChatScreenState {
       isGeneratingSuggestions:
           isGeneratingSuggestions ?? this.isGeneratingSuggestions,
       isCancelled: isCancelled ?? this.isCancelled,
-      streamingMessage: clearStreamingMessage
-          ? null
-          : streamingMessage ?? this.streamingMessage,
-      isStreamingMessageVisible:
-          isStreamingMessageVisible ??
-          (clearStreamingMessage ? false : this.isStreamingMessageVisible),
       isImageGenerationMode:
           isImageGenerationMode ?? this.isImageGenerationMode,
       carriedOverXml: clearCarriedOverXml
@@ -212,9 +190,6 @@ class ChatScreenState {
       isUrlContextEnabled: isUrlContextEnabled ?? this.isUrlContextEnabled,
       isCodeExecutionEnabled:
           isCodeExecutionEnabled ?? this.isCodeExecutionEnabled,
-      idTransitionMap: clearIdTransitionMap
-          ? {}
-          : (idTransitionMap ?? this.idTransitionMap),
     );
   }
 }

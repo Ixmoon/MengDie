@@ -186,9 +186,6 @@ mixin BackgroundTasks on UiStateManager {
             isLoading: false, // Master lock OFF
             isPrimaryResponseLoading: false, // Ensure this is also off
             isProcessingInBackground: false,
-            // Do not clear the message object itself, just hide the UI element.
-            // The main message list will show the final version from the database stream.
-            isStreamingMessageVisible: false,
           );
           stopUpdateTimer();
         }
@@ -200,7 +197,6 @@ mixin BackgroundTasks on UiStateManager {
           isLoading: false, // Master lock OFF
           isPrimaryResponseLoading: false, // Ensure this is also off
           isProcessingInBackground: false,
-          isStreamingMessageVisible: false, // Just hide it
         );
         stopUpdateTimer();
       }
