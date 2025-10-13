@@ -412,139 +412,161 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     ChatScreenState chatState,
     ChatStateNotifier notifier,
   ) {
-    return GestureDetector(
-      onLongPress: () {
-        final RenderBox button = context.findRenderObject() as RenderBox;
-        final RenderBox overlay =
-            Overlay.of(context).context.findRenderObject() as RenderBox;
-        final RelativeRect position = RelativeRect.fromRect(
-          Rect.fromPoints(
-            button.localToGlobal(Offset.zero, ancestor: overlay),
-            button.localToGlobal(
-              button.size.bottomRight(Offset.zero),
-              ancestor: overlay,
+    final theme = Theme.of(context);
+    final isSelected = chatState.isStreamMode;
+
+    return Builder(
+      builder: (buttonContext) {
+        return Tooltip(
+          message: isSelected ? '流式输出 (长按设置)' : '一次性输出',
+          child: Material(
+            color: isSelected
+                ? theme.colorScheme.primary.withAlpha(40)
+                : Colors.transparent,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: notifier.toggleOutputMode,
+              onLongPress: () {
+                final RenderBox button =
+                    buttonContext.findRenderObject() as RenderBox;
+                final RenderBox overlay =
+                    Overlay.of(context).context.findRenderObject() as RenderBox;
+                final RelativeRect position = RelativeRect.fromRect(
+                  Rect.fromPoints(
+                    button.localToGlobal(Offset.zero, ancestor: overlay),
+                    button.localToGlobal(
+                      button.size.bottomRight(Offset.zero),
+                      ancestor: overlay,
+                    ),
+                  ),
+                  Offset.zero & overlay.size,
+                );
+                showMenu(
+                  context: context,
+                  position: position,
+                  items: [
+                    PopupMenuItem(
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final watchedChatState = ref
+                              .watch(chatStateNotifierProvider(widget.chatId));
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('伪流式'),
+                              Switch(
+                                value: watchedChatState.isPseudoStreamMode,
+                                onChanged: (bool value) {
+                                  notifier.togglePseudoStreamMode();
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final watchedChatState = ref
+                              .watch(chatStateNotifierProvider(widget.chatId));
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('打字机速度'),
+                              Slider(
+                                value: watchedChatState.pseudoStreamSpeed,
+                                min: 0.1,
+                                max: 5.0,
+                                divisions: 49,
+                                label: watchedChatState.pseudoStreamSpeed
+                                    .toStringAsFixed(1),
+                                onChanged: (double value) {
+                                  notifier.setPseudoStreamSpeed(value);
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    PopupMenuItem(
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final watchedChatState = ref
+                              .watch(chatStateNotifierProvider(widget.chatId));
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('并行请求'),
+                              Switch(
+                                value:
+                                    watchedChatState.isParallelRequestEnabled,
+                                onChanged: (bool value) {
+                                  notifier.toggleParallelRequestMode();
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    PopupMenuItem(
+                      enabled: false,
+                      child: Consumer(
+                        builder: (context, ref, child) {
+                          final watchedChatState = ref
+                              .watch(chatStateNotifierProvider(widget.chatId));
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('并行数'),
+                              SizedBox(
+                                width: 100,
+                                child: TextField(
+                                  controller: TextEditingController(
+                                    text: watchedChatState
+                                        .parallelRequestCount
+                                        .toString(),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly
+                                  ],
+                                  decoration: const InputDecoration(
+                                    isDense: true,
+                                  ),
+                                  onSubmitted: (value) {
+                                    final count = int.tryParse(value) ?? 3;
+                                    notifier.setParallelRequestCount(count);
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(
+                  isSelected ? Icons.stream : Icons.chat_bubble,
+                  size: 20,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ),
           ),
-          Offset.zero & overlay.size,
-        );
-        showMenu(
-          context: context,
-          position: position,
-          items: [
-            PopupMenuItem(
-              // Use a Consumer to rebuild the switch when the state changes.
-              child: Consumer(
-                builder: (context, ref, child) {
-                  // Watch the provider to get the latest state.
-                  final watchedChatState =
-                      ref.watch(chatStateNotifierProvider(widget.chatId));
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('伪流式'),
-                      Switch(
-                        value: watchedChatState.isPseudoStreamMode,
-                        onChanged: (bool value) {
-                          // The notifier call will trigger the Consumer to rebuild.
-                          notifier.togglePseudoStreamMode();
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            PopupMenuItem(
-              enabled: false,
-              // Use another Consumer for the slider.
-              child: Consumer(
-                builder: (context, ref, child) {
-                  final watchedChatState =
-                      ref.watch(chatStateNotifierProvider(widget.chatId));
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('打字机速度'),
-                      Slider(
-                        value: watchedChatState.pseudoStreamSpeed,
-                        min: 0.1,
-                        max: 5.0,
-                        divisions: 49,
-                        label:
-                            watchedChatState.pseudoStreamSpeed.toStringAsFixed(1),
-                        onChanged: (double value) {
-                          notifier.setPseudoStreamSpeed(value);
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            PopupMenuItem(
-              child: Consumer(
-                builder: (context, ref, child) {
-                  final watchedChatState =
-                      ref.watch(chatStateNotifierProvider(widget.chatId));
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('并行请求'),
-                      Switch(
-                        value: watchedChatState.isParallelRequestEnabled,
-                        onChanged: (bool value) {
-                          notifier.toggleParallelRequestMode();
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            PopupMenuItem(
-              enabled: false,
-              child: Consumer(
-                builder: (context, ref, child) {
-                  final watchedChatState =
-                      ref.watch(chatStateNotifierProvider(widget.chatId));
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('并行数'),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: TextEditingController(
-                            text: watchedChatState.parallelRequestCount
-                                .toString(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly
-                          ],
-                          decoration: const InputDecoration(
-                            isDense: true,
-                          ),
-                          onSubmitted: (value) {
-                            final count = int.tryParse(value) ?? 3;
-                            notifier.setParallelRequestCount(count);
-                          },
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
         );
       },
-      child: _buildIconButton(
-        icon: chatState.isStreamMode ? Icons.stream : Icons.chat_bubble,
-        tooltip: chatState.isStreamMode ? '流式输出 (长按设置)' : '一次性输出',
-        isSelected: chatState.isStreamMode,
-        onPressed: notifier.toggleOutputMode,
-      ),
     );
   }
 
