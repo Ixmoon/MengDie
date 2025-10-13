@@ -72,27 +72,37 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
   void _processMessagesFromDb(List<Message> messages) {
     if (!mounted) return;
 
-    // If a generation is in progress, the UI-controlled message is the source of truth.
-    // We avoid processing DB updates for it to prevent conflicts.
-    if (state.isLoading && state.uiControlledMessage != null) {
-      final uiMessageId = state.uiControlledMessage!.id;
-      // Filter out the message that is currently under UI control from the DB list.
-      final historical = messages.where((m) => m.id != uiMessageId).toList();
-      state = state.copyWith(historicalMessages: historical);
-      return; // Exit early
-    }
-
     final lastMessage = messages.lastOrNull;
 
+    // 优先处理：如果数据库中最后一条消息是用户消息，
+    // 这意味着用户发送了新的提示，必须移除旧模型消息的UI控制权。
+    if (lastMessage != null && lastMessage.role == MessageRole.user) {
+      state = state.copyWith(
+        historicalMessages: messages,
+        clearUiControlledMessage: true,
+      );
+      return;
+    }
+
+    // 其次处理：如果正在进行流式生成，则保护当前UI控制的消息不被数据库回写覆盖。
+    if (state.isLoading && state.uiControlledMessage != null) {
+      final uiMessageId = state.uiControlledMessage!.id;
+      // 从数据库列表中过滤掉当前正在UI控制下的消息
+      final historical = messages.where((m) => m.id != uiMessageId).toList();
+      state = state.copyWith(historicalMessages: historical);
+      return; // 提前退出
+    }
+
+    // 默认行为：如果最后一条消息是模型消息且当前无任何操作
     if (lastMessage != null && lastMessage.role == MessageRole.model) {
-      // The last message is a model message, it becomes UI-controlled.
+      // 最后一条消息是模型消息，它成为UI可控的
       final historical = messages.sublist(0, messages.length - 1);
       state = state.copyWith(
         historicalMessages: historical,
         uiControlledMessage: lastMessage,
       );
     } else {
-      // The last message is a user message or the list is empty.
+      // 处理消息列表为空的情况
       state = state.copyWith(
         historicalMessages: messages,
         clearUiControlledMessage: true,

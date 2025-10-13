@@ -27,6 +27,7 @@ class MessageBubble extends StatelessWidget {
       carriedOverXml; // The synthesized XML context for the latest user message
   final bool isPseudoStreamMode;
   final double pseudoStreamSpeed;
+  final bool isLastMessageInList;
 
   const MessageBubble({
     super.key,
@@ -41,6 +42,7 @@ class MessageBubble extends StatelessWidget {
     this.carriedOverXml,
     this.isPseudoStreamMode = false,
     this.pseudoStreamSpeed = 1.0,
+    this.isLastMessageInList = false,
   });
 
   // --- 私有辅助方法 ---
@@ -506,7 +508,7 @@ class MessageBubble extends StatelessWidget {
         ? "..."
         : message.modelsText;
 
-    if (isPseudoStreamMode && !isUser) {
+    if (isPseudoStreamMode && !isUser && isLastMessageInList) {
       return _TypewriterText(
         key: ValueKey(message.id), // Ensure widget rebuilds for new messages
         fullText: textContent,
@@ -917,7 +919,7 @@ class _TypewriterTextState extends State<_TypewriterText>
     }
 
     const baseDelay = 50; // Milliseconds per character at 1x speed
-    final delay = (baseDelay / widget.speed).clamp(10, 500).toInt();
+    final delay = (baseDelay / (widget.speed * widget.speed)).clamp(1, 500).toInt();
 
     _timer = Timer.periodic(Duration(milliseconds: delay), (timer) {
       if (_charIndex < widget.fullText.length) {

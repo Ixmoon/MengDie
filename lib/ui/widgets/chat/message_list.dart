@@ -107,6 +107,7 @@ class _MessageListState extends ConsumerState<MessageList> {
                 isLatestUserMessage ? widget.carriedOverXml : null,
             isPseudoStreamMode: widget.isPseudoStreamMode,
             pseudoStreamSpeed: widget.pseudoStreamSpeed,
+            isLastMessageInList: isLastMessage,
           );
         }).toList();
 
