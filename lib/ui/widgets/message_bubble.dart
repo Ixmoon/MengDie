@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart'; // 用于渲染 Markdown 文本
+import 'package:url_launcher/url_launcher.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:xml/xml.dart';
 import 'package:collection/collection.dart'; // For firstWhereOrNull
@@ -43,6 +44,15 @@ class MessageBubble extends StatelessWidget {
   });
 
   // --- 私有辅助方法 ---
+
+  void _onTapLink(String text, String? href, String title) {
+    if (href != null) {
+      final uri = Uri.tryParse(href);
+      if (uri != null) {
+        launchUrl(uri);
+      }
+    }
+  }
 
   MarkdownStyleSheet _getMarkdownStyleSheet(
     BuildContext context,
@@ -150,6 +160,7 @@ class MessageBubble extends StatelessWidget {
           styleSheet: _getMarkdownStyleSheet(context, textColor),
           inlineSyntaxes: _getMarkdownInlineSyntaxes(),
           builders: _getMarkdownBuilders(textColor),
+          onTapLink: _onTapLink,
         ),
       ];
     }
@@ -284,6 +295,7 @@ class MessageBubble extends StatelessWidget {
                             builders: _getMarkdownBuilders(
                               textColor.withAlpha((255 * 0.85).round()),
                             ),
+                            onTapLink: _onTapLink,
                           );
                         }(),
                       ),
@@ -385,6 +397,7 @@ class MessageBubble extends StatelessWidget {
                     context,
                     textColor.withAlpha((255 * 0.85).round()),
                   ),
+                  onTapLink: _onTapLink,
                 ),
               ),
             ],
@@ -441,6 +454,7 @@ class MessageBubble extends StatelessWidget {
               styleSheet: _getMarkdownStyleSheet(context, textColor),
               inlineSyntaxes: _getMarkdownInlineSyntaxes(),
               builders: _getMarkdownBuilders(textColor),
+              onTapLink: _onTapLink,
             ),
           );
         }
@@ -474,6 +488,7 @@ class MessageBubble extends StatelessWidget {
             styleSheet: _getMarkdownStyleSheet(context, textColor),
             inlineSyntaxes: _getMarkdownInlineSyntaxes(),
             builders: _getMarkdownBuilders(textColor),
+            onTapLink: _onTapLink,
           ),
         );
       }
@@ -693,6 +708,7 @@ class MessageBubble extends StatelessWidget {
                   builders: _getMarkdownBuilders(
                     textColor.withAlpha((255 * 0.85).round()),
                   ),
+                  onTapLink: _onTapLink,
                 );
               } catch (e) {
                 // 如果解析失败，则回退到原始的代码块显示
@@ -702,6 +718,7 @@ class MessageBubble extends StatelessWidget {
                   styleSheet: _getMarkdownStyleSheet(context, textColor),
                   inlineSyntaxes: _getMarkdownInlineSyntaxes(),
                   builders: _getMarkdownBuilders(textColor),
+                  onTapLink: _onTapLink,
                 );
               }
             }(),

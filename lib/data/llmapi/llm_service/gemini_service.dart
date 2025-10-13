@@ -311,7 +311,8 @@ class GeminiService implements BaseLlmService {
       return text;
     }
 
-    // 为了避免在插入时出现索引偏移，按结束索引从大到小排序
+    var citedText = text;
+
     final sortedSupports = List<Map<String, dynamic>>.from(supports);
     sortedSupports.sort((a, b) {
       final endA = a['segment']?['endIndex'] as int? ?? 0;
@@ -319,13 +320,13 @@ class GeminiService implements BaseLlmService {
       return endB.compareTo(endA);
     });
 
-    var citedText = text;
     for (final support in sortedSupports) {
       final segment = support['segment'] as Map?;
-      final endIndex = segment?['endIndex'] as int?;
+      final segmentText = segment?['text'] as String?;
       final chunkIndices = support['groundingChunkIndices'] as List?;
 
-      if (endIndex != null &&
+      if (segmentText != null &&
+          segmentText.isNotEmpty &&
           chunkIndices != null &&
           chunkIndices.isNotEmpty) {
         final citationLinks = <String>[];
@@ -340,10 +341,13 @@ class GeminiService implements BaseLlmService {
         }
 
         if (citationLinks.isNotEmpty) {
-          final citationString = citationLinks.join(''); // 直接拼接，例如(...)(...)
-          if (endIndex <= citedText.length) {
-            citedText =
-                citedText.substring(0, endIndex) + citationString + citedText.substring(endIndex);
+          final citationString = citationLinks.join('');
+          final lastIndex = citedText.lastIndexOf(segmentText);
+          if (lastIndex != -1) {
+            final insertionPoint = lastIndex + segmentText.length;
+            citedText = citedText.substring(0, insertionPoint) +
+                citationString +
+                citedText.substring(insertionPoint);
           }
         }
       }
