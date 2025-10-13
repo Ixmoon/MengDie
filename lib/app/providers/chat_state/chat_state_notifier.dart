@@ -46,10 +46,27 @@ class ChatStateNotifier extends StateNotifier<ChatScreenState>
   }
 
   void _initDbListener() {
-    // Start listening to the database stream.
-    final messageRepo = ref.read(messageRepositoryProvider);
-    _dbMessagesSubscription =
-        messageRepo.watchMessagesForChat(chatId).listen(_processMessagesFromDb);
+    // --- FUNDAMENTAL FIX ---
+    // Previously, the notifier created its own private stream from the repository,
+    // while the business logic (e.g., regenerateResponse) tried to read from
+    // the public `chatMessagesProvider`. This caused an inconsistency, as the
+    // public provider was never activated by the UI layer.
+    //
+    // The fix is to make the notifier listen to the *exact same provider* that
+    // the rest of the app uses. This ensures the provider is "watched" and kept
+    // alive, making its data available and consistent for all consumers,
+    // including synchronous `ref.read` calls in the business logic.
+    ref.listen<AsyncValue<List<Message>>>(chatMessagesProvider(chatId), (previous, next) {
+      next.when(
+        data: _processMessagesFromDb,
+        loading: () {
+          // Optionally handle loading state, e.g., set a flag in the state.
+        },
+        error: (e, s) {
+          // Optionally handle error state, e.g., show a top message.
+        },
+      );
+    });
   }
 
   void _processMessagesFromDb(List<Message> messages) {

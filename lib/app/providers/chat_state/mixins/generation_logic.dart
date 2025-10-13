@@ -42,44 +42,32 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
   Future<void> regenerateResponse(Message userMessage) async {
     if (!mounted) return;
+    if (state.isLoading) {
+      showTopMessage('正在生成中，请稍后...', backgroundColor: Colors.orange);
+      return;
+    }
 
+    // With the notifier now watching the correct provider, `ref.read` is safe
+    // as the provider is guaranteed to be active.
     final allMessages = ref.read(chatMessagesProvider(chatId)).value ?? [];
-
-    // 1. 检查是否可以重新生成
     final messageIndex = allMessages.indexWhere((m) => m.id == userMessage.id);
-    final isLastUserMsg =
-        userMessage.role == MessageRole.user &&
-        messageIndex >= 0 &&
-        (messageIndex == allMessages.length - 1 ||
-            (messageIndex == allMessages.length - 2 &&
-                allMessages.last.role == MessageRole.model));
 
-    if (!isLastUserMsg) {
+    if (!_isMessageRegeneratable(userMessage, messageIndex, allMessages)) {
       showTopMessage('只能为最后的用户消息重新生成回复', backgroundColor: Colors.orange);
       return;
     }
-    if (state.isLoading) {
-      return;
-    }
 
-    await cancelGeneration(); // 确保之前的任何生成都已停止
+    await cancelGeneration(); // Ensure any previous generation is stopped.
 
-    // 2. 删除之前的模型回复
+    // Delete subsequent model responses based on the authoritative list.
     try {
       final messageRepo = ref.read(messageRepositoryProvider);
-      List<int> messagesToDelete = [];
       if (messageIndex != -1 && messageIndex < allMessages.length - 1) {
         for (int i = messageIndex + 1; i < allMessages.length; i++) {
           if (allMessages[i].role == MessageRole.model) {
-            messagesToDelete.add(allMessages[i].id);
+            await messageRepo.deleteMessage(allMessages[i].id);
           }
         }
-      }
-      if (messagesToDelete.isNotEmpty) {
-        for (final msgId in messagesToDelete) {
-          await messageRepo.deleteMessage(msgId);
-        }
-        // 短暂延迟以确保数据库更新反映到流中
         await Future.delayed(const Duration(milliseconds: 100));
       }
     } catch (e) {
@@ -89,14 +77,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
 
     if (!mounted) return;
 
-    // 3. 根据当前模式调用正确的生成方法
-    clearHelpMeReplySuggestions(); // Clear suggestions before regenerating
+    clearHelpMeReplySuggestions();
 
     if (state.isImageGenerationMode) {
-      // 调用图片生成逻辑
       await (this as dynamic).generateImage(userMessage);
     } else {
-      // 调用文本生成逻辑
       await sendMessage(
         userMessage: userMessage,
         isRegeneration: true,
@@ -519,14 +504,14 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     required bool isUrlContextEnabled,
     required bool isCodeExecutionEnabled,
   }) async {
-    Message? messageToUpdate;
+    Message? placeholderMessage;
 
-    // --- Step 1: Create placeholder and set it as the UI-controlled message ---
+    // Step 1: Create and save a placeholder message.
     try {
       final messageRepo = ref.read(messageRepositoryProvider);
       if (messageToUpdateId != null) {
-        messageToUpdate = await messageRepo.getMessageById(messageToUpdateId);
-        if (messageToUpdate == null) throw Exception("Original message not found.");
+        placeholderMessage = await messageRepo.getMessageById(messageToUpdateId);
+        if (placeholderMessage == null) throw Exception("Original message not found.");
       } else {
         final placeholder = Message(
           chatId: chatId,
@@ -534,11 +519,12 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           parts: [MessagePart.text("...")],
         );
         final newId = await messageRepo.saveMessage(placeholder);
-        messageToUpdate = placeholder.copyWith(id: newId);
+        placeholderMessage = placeholder.copyWith(id: newId);
       }
+      // Set the placeholder for immediate UI feedback.
       state = state.copyWith(
-        uiControlledMessage: messageToUpdate,
-        isStreaming: true,
+        uiControlledMessage: placeholderMessage,
+        isStreaming: true, // Use isStreaming to indicate animation.
       );
     } catch (e) {
       showTopMessage('无法创建伪流式占位消息: $e', backgroundColor: Colors.red);
@@ -546,29 +532,48 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
       return;
     }
 
-    // --- Step 2: Get the full response first ---
-    final response = await llmService.sendMessageOnce(
-      llmContext: llmContext,
-      apiConfig: apiConfig,
-      requestThoughts: requestThoughts,
-      isGoogleSearchEnabled: isGoogleSearchEnabled,
-      isUrlContextEnabled: isUrlContextEnabled,
-      isCodeExecutionEnabled: isCodeExecutionEnabled,
-    );
+    // Step 2: Get the full response from the API.
+    try {
+      final response = await llmService.sendMessageOnce(
+        llmContext: llmContext,
+        apiConfig: apiConfig,
+        requestThoughts: requestThoughts,
+        isGoogleSearchEnabled: isGoogleSearchEnabled,
+        isUrlContextEnabled: isUrlContextEnabled,
+        isCodeExecutionEnabled: isCodeExecutionEnabled,
+      );
 
-    if (!mounted || state.isCancelled) {
-      _finalizeResponse(state.uiControlledMessage, isCancelled: true);
-      return;
-    }
+      if (!mounted || state.isCancelled) {
+        _finalizeResponse(state.uiControlledMessage, isCancelled: true);
+        return;
+      }
 
-    if (!response.isSuccess || response.parts.isEmpty) {
-      showTopMessage(response.error ?? "伪流式获取响应失败", backgroundColor: Colors.red);
+      if (!response.isSuccess || response.parts.isEmpty) {
+        showTopMessage(response.error ?? "伪流式获取响应失败", backgroundColor: Colors.red);
+        _finalizeResponse(state.uiControlledMessage, hasError: true);
+        return;
+      }
+
+      // Step 3 (Concurrent): Finalize and save the complete message to the DB.
+      final fullText = response.parts.map((p) => p.text ?? "").join("\n");
+      final finalMessage = placeholderMessage!.copyWith(
+        parts: [MessagePart.text(fullText)],
+      );
+      // This saves the final version to the DB and runs background tasks.
+      _finalizeResponse(finalMessage);
+
+      // Step 4 (Concurrent): Start the UI animation.
+      _animatePseudoStream(fullText, finalMessage);
+
+    } catch (e) {
+      if (mounted) {
+        showTopMessage('伪流式请求失败: $e', backgroundColor: Colors.red);
+      }
       _finalizeResponse(state.uiControlledMessage, hasError: true);
-      return;
     }
+  }
 
-    // --- Step 3: Animate the text update in the UI state ---
-    final fullText = response.parts.map((p) => p.text ?? "").join("\n");
+  void _animatePseudoStream(String fullText, Message finalMessage) {
     int charIndex = 0;
     const baseDelay = 50;
     final delay = (baseDelay / state.pseudoStreamSpeed).clamp(10, 500).toInt();
@@ -577,13 +582,15 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     pseudoStreamTimer = Timer.periodic(Duration(milliseconds: delay), (timer) {
       if (!mounted || state.isCancelled) {
         timer.cancel();
-        _finalizeResponse(state.uiControlledMessage, isCancelled: true);
+        // Don't call finalize here, just ensure the final state is set if cancelled mid-animation.
+        state = state.copyWith(uiControlledMessage: finalMessage);
         return;
       }
 
       if (charIndex < fullText.length) {
         charIndex++;
         final displayedText = fullText.substring(0, charIndex);
+        // The message ID remains the same, only the content updates for the animation.
         final updatedMessage = state.uiControlledMessage?.copyWith(
           parts: [MessagePart.text(displayedText)],
         );
@@ -592,12 +599,8 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         }
       } else {
         timer.cancel();
-        // Ensure the final text is set before finalizing
-        final finalMessage = state.uiControlledMessage?.copyWith(
-          parts: [MessagePart.text(fullText)],
-        );
+        // Animation finished, ensure the UI state shows the complete message.
         state = state.copyWith(uiControlledMessage: finalMessage);
-        _finalizeResponse(finalMessage);
       }
     });
   }
@@ -712,5 +715,24 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         stopUpdateTimer();
       }
     }
+  }
+
+  /// Checks if a message is eligible for regeneration based on architectural rules.
+  bool _isMessageRegeneratable(
+    Message message,
+    int index,
+    List<Message> allMessages,
+  ) {
+    if (allMessages.isEmpty || index < 0) {
+      return false;
+    }
+    if (message.role != MessageRole.user) {
+      return false;
+    }
+    final messageCount = allMessages.length;
+    final isLastMessage = index == messageCount - 1;
+    final isSecondToLastFollowedByModel =
+        (index == messageCount - 2 && allMessages.last.role == MessageRole.model);
+    return isLastMessage || isSecondToLastFollowedByModel;
   }
 }
