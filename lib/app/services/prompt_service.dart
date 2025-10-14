@@ -373,8 +373,11 @@ class PromptService extends StateNotifier<PromptState> {
           .map((json) => PromptItem.fromJson(json as Map<String, dynamic>))
           .toList();
 
-      final mergeResult =
-          _mergePrompts(state.globalItems, itemsToImport);
+      final mergeResult = _mergePrompts(
+        state.globalItems,
+        itemsToImport,
+        isGlobalTarget: true,
+      );
 
       state = state.copyWith(globalItems: mergeResult.items);
       await _saveGlobalItems();
@@ -395,8 +398,11 @@ class PromptService extends StateNotifier<PromptState> {
           .map((p) => PromptItem.fromJson(p as Map<String, dynamic>))
           .toList();
 
-      final mergeResult =
-          _mergePrompts(state.globalItems, itemsToImport);
+      final mergeResult = _mergePrompts(
+        state.globalItems,
+        itemsToImport,
+        isGlobalTarget: true,
+      );
       final idMap = mergeResult.idMap;
       
       var updatedChatStatuses = state.chatStatuses;
@@ -440,7 +446,11 @@ class PromptService extends StateNotifier<PromptState> {
           .toList();
       
       final currentChatItems = state.chatItems[chatId] ?? [];
-      final mergeResult = _mergePrompts(currentChatItems, itemsToImport);
+      final mergeResult = _mergePrompts(
+        currentChatItems,
+        itemsToImport,
+        isGlobalTarget: false,
+      );
 
       final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
       newChatItemsMap[chatId] = mergeResult.items;
@@ -452,8 +462,10 @@ class PromptService extends StateNotifier<PromptState> {
     }
   }
 
-  _MergeResult _mergePrompts(
-      List<PromptItem> existingItems, List<PromptItem> itemsToImport) {
+  _MergeResult _mergePrompts(List<PromptItem> existingItems,
+      List<PromptItem> itemsToImport, {
+      required bool isGlobalTarget,
+      }) {
     final updatedItems = List<PromptItem>.from(existingItems);
     final idMap = <String, String>{};
 
@@ -495,7 +507,9 @@ class PromptService extends StateNotifier<PromptState> {
         if (const SetEquality().equals(existingKeywords, importKeywords)) {
           // Case 1: Keywords also match -> Overwrite config
           updatedItems[existingItemIndex] = existingItem.copyWith(
-            status: itemToImport.status,
+            status: isGlobalTarget
+                ? itemToImport.status // Keep status for global items
+                : existingItem.status, // Preserve existing status for chat items
             injectionRole: itemToImport.injectionRole,
             injectionPosition: itemToImport.injectionPosition,
             matchMessageCount: itemToImport.matchMessageCount,
@@ -511,6 +525,9 @@ class PromptService extends StateNotifier<PromptState> {
         final newItem = itemToImport.copyWith(
           id: _uuid.v4(),
           order: updatedItems.length,
+          // When importing a chat-item to global, its status becomes the default.
+          // When importing a global-item to chat, its status is carried over.
+          status: itemToImport.status,
         );
         idMap[itemToImport.id] = newItem.id;
         updatedItems.add(newItem);

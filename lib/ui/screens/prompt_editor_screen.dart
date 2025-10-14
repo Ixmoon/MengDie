@@ -126,48 +126,91 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
 
       final String jsonString = utf8.decode(result.files.single.bytes!);
       bool success = false;
+      final decodedJson = jsonDecode(jsonString);
 
-      if (isGlobal) {
-        final Map<String, dynamic> decodedJson = jsonDecode(jsonString);
-        if (decodedJson.containsKey('prompts') &&
-            decodedJson.containsKey('statuses')) {
-          final importStatuses = await showDialog<bool>(
+      if (decodedJson is Map<String, dynamic> &&
+          decodedJson.containsKey('prompts')) {
+        // This is a global export with statuses structure
+        if (!isGlobal) {
+          // On chat tab, ask to import prompts only
+          final importPromptsOnly = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('检测到开关状态'),
-              content: const Text('此文件包含全局开关状态，是否要一并导入？这可能会覆盖您当前的设置。'),
+              title: const Text('导入全局提示词?'),
+              content: const Text(
+                  '这是一个全局提示词文件。您想只导入其中的提示词条目到当前聊天吗？\n(开关状态将被忽略)'),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('仅导入条目'),
-                ),
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('取消')),
                 TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('全部导入'),
-                ),
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('仅导入条目')),
               ],
             ),
           );
-
-          if (importStatuses == null) {
-            scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入已取消')));
+          if (importPromptsOnly == true) {
+            final promptsJson = jsonEncode(decodedJson['prompts']);
+            success =
+                await promptService.importChatPrompts(promptsJson, chatId);
+          } else {
+            scaffoldMessenger
+                .showSnackBar(const SnackBar(content: Text('导入已取消')));
             return;
           }
-          success = await promptService.importGlobalPromptsWithStatuses(jsonString,
-              importStatuses: importStatuses);
         } else {
-          // Old format or items_only format
+          // On global tab, handle normally
+          if (decodedJson.containsKey('statuses')) {
+            // with statuses
+            final importStatuses = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('检测到开关状态'),
+                content: const Text(
+                    '此文件包含全局开关状态，是否要一并导入？这可能会覆盖您当前的设置。'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('仅导入条目'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('全部导入'),
+                  ),
+                ],
+              ),
+            );
+            if (importStatuses == null) {
+              scaffoldMessenger
+                  .showSnackBar(const SnackBar(content: Text('导入已取消')));
+              return;
+            }
+            success = await promptService.importGlobalPromptsWithStatuses(
+                jsonString,
+                importStatuses: importStatuses);
+          } else {
+            // map with only 'prompts', no 'statuses'
+            final promptsJson = jsonEncode(decodedJson['prompts']);
+            success = await promptService.importGlobalPrompts(promptsJson);
+          }
+        }
+      } else if (decodedJson is List) {
+        // Simple list format (from chat or global-items-only)
+        if (isGlobal) {
           success = await promptService.importGlobalPrompts(jsonString);
+        } else {
+          success = await promptService.importChatPrompts(jsonString, chatId);
         }
       } else {
-        success = await promptService.importChatPrompts(jsonString, chatId);
+        // Invalid format
+        success = false;
       }
 
       if (success) {
         scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导入成功！')));
       } else {
-        scaffoldMessenger
-            .showSnackBar(const SnackBar(content: Text('导入失败，JSON格式可能不正确。')));
+        scaffoldMessenger.showSnackBar(
+            const SnackBar(content: Text('导入失败，JSON格式可能不正确。')));
       }
     } catch (e) {
       scaffoldMessenger.showSnackBar(SnackBar(content: Text('导入失败: $e')));
