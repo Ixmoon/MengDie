@@ -116,6 +116,20 @@ class MessageDao extends DatabaseAccessor<AppDatabase> with _$MessageDaoMixin {
     return await (delete(messages)..where((t) => t.id.equals(messageId))).go();
   }
 
+  Future<int> deleteMessagesAfter(int chatId, int messageId) {
+    return transaction(() async {
+      final targetMessage = await getMessageById(messageId);
+      if (targetMessage == null) return 0;
+
+      return (delete(messages)
+            ..where((t) => t.chatId.equals(chatId))
+            ..where((t) => t.timestamp.isBiggerThanValue(targetMessage.timestamp
+                .toUtc()
+                .microsecondsSinceEpoch)))
+          .go();
+    });
+  }
+
   /// Inserts a message at a specific index in the chat's timeline.
   Future<int> insertMessageAt(MessagesCompanion newMessage, int index) async {
     return transaction(() async {

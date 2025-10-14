@@ -101,6 +101,14 @@ class MessageRepository {
     return newId;
   }
 
+  Future<int> deleteMessagesAfter(int chatId, int messageId) async {
+    final deletedCount = await _messageDao.deleteMessagesAfter(chatId, messageId);
+    if (deletedCount > 0) {
+      await _chatDao.touchChat(chatId);
+    }
+    return deletedCount;
+  }
+
   // --- 数据库监听流 ---
   Stream<List<Message>> watchMessagesForChat(int chatId) {
     return _messageDao

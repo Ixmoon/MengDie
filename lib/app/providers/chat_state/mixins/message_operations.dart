@@ -191,4 +191,23 @@ mixin MessageOperations on StateNotifier<ChatScreenState> {
       return null;
     }
   }
+
+  Future<void> deleteMessagesAfter(int messageId) async {
+    if (!mounted) return;
+    try {
+      final messageRepo = ref.read(messageRepositoryProvider);
+      final count = await messageRepo.deleteMessagesAfter(chatId, messageId);
+      if (mounted) {
+        showTopMessage(
+          '已删除后续 $count 条消息',
+          backgroundColor: Colors.green,
+        );
+        clearHelpMeReplySuggestions();
+      }
+    } catch (e) {
+      if (mounted) {
+        showTopMessage('删除后续消息失败: $e', backgroundColor: Colors.red);
+      }
+    }
+  }
 }

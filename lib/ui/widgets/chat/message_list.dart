@@ -77,7 +77,7 @@ class _MessageListState extends ConsumerState<MessageList> {
         final isLatestUserMessage = message.id == latestUserMessageId;
 
         // Create a column of MessageBubble widgets, one for each part of the message.
-        final partWidgets = message.parts.map((part) {
+        final partWidgets = message.parts.mapIndexed((partIndex, part) {
           // Create a temporary message object for the bubble, containing only one part.
           final singlePartMessage = Message(
             id: message.id,
@@ -89,7 +89,7 @@ class _MessageListState extends ConsumerState<MessageList> {
             secondaryXmlContent: message.secondaryXmlContent,
           );
           return MessageBubble(
-            key: ValueKey(message.id), // Use the stable, permanent ID.
+            key: ValueKey('${message.id}_$partIndex'), // Use a unique key for each part.
             message: singlePartMessage,
             xmlRules: widget.xmlRules,
             isStreaming: isThisMessageStreaming,

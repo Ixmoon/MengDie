@@ -479,6 +479,49 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
           ),
         );
 
+        options.add(
+          ListTile(
+            leading:
+                Icon(Icons.delete_sweep_outlined, color: Colors.red.shade400),
+            title: Text(
+              '删除此后的消息',
+              style: TextStyle(color: Colors.red.shade400),
+            ),
+            onTap: () async {
+              Navigator.pop(modalContext);
+              final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('确认删除'),
+                      content: const Text('确定删除此消息之后的所有消息吗？此操作不可撤销。'),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          child: const Text('取消'),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(true),
+                          child: Text(
+                            '全部删除',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ) ??
+                  false;
+
+              if (confirm) {
+                ref
+                    .read(chatStateNotifierProvider(widget.chatId).notifier)
+                    .deleteMessagesAfter(message.id);
+              }
+            },
+          ),
+        );
+
         return SafeArea(child: Wrap(children: options));
       },
     );
@@ -492,38 +535,50 @@ class _ChatPageContentState extends ConsumerState<ChatPageContent> {
       chatPageNotifierProvider(widget.chatId).notifier,
     );
 
-    void insertAndEdit(int index, MessageRole role) {
-      Navigator.pop(modalContext);
-      pageNotifier.insertMessageAndEdit(
-        index: index,
-        role: role,
-        onMessageCreated: (newMessage) {
-          _showEditMessageDialog(newMessage);
-        },
+    Future<void> showRoleSelectionDialog(int index) async {
+      Navigator.pop(modalContext); // Dismiss the bottom sheet first
+      final MessageRole? selectedRole = await showDialog<MessageRole>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('选择消息类型'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('用户消息'),
+                onTap: () => Navigator.of(dialogContext).pop(MessageRole.user),
+              ),
+              ListTile(
+                title: const Text('模型消息'),
+                onTap: () => Navigator.of(dialogContext).pop(MessageRole.model),
+              ),
+            ],
+          ),
+        ),
       );
+
+      if (selectedRole != null) {
+        pageNotifier.insertMessageAndEdit(
+          index: index,
+          role: selectedRole,
+          onMessageCreated: (newMessage) {
+            _showEditMessageDialog(newMessage);
+          },
+        );
+      }
     }
 
     return [
       const Divider(),
       ListTile(
         leading: const Icon(Icons.vertical_align_top_outlined),
-        title: const Text('在此之前插入用户消息'),
-        onTap: () => insertAndEdit(messageIndex, MessageRole.user),
-      ),
-      ListTile(
-        leading: const Icon(Icons.vertical_align_top_outlined),
-        title: const Text('在此之前插入模型消息'),
-        onTap: () => insertAndEdit(messageIndex, MessageRole.model),
+        title: const Text('在此之前插入消息'),
+        onTap: () => showRoleSelectionDialog(messageIndex),
       ),
       ListTile(
         leading: const Icon(Icons.vertical_align_bottom_outlined),
-        title: const Text('在此之后插入用户消息'),
-        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.user),
-      ),
-      ListTile(
-        leading: const Icon(Icons.vertical_align_bottom_outlined),
-        title: const Text('在此之后插入模型消息'),
-        onTap: () => insertAndEdit(messageIndex + 1, MessageRole.model),
+        title: const Text('在此之后插入消息'),
+        onTap: () => showRoleSelectionDialog(messageIndex + 1),
       ),
     ];
   }
