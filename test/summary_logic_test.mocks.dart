@@ -3,24 +3,25 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i9;
-import 'dart:ui' as _i14;
+import 'dart:async' as _i10;
+import 'dart:ui' as _i15;
 
 import 'package:mengdie/app/providers/chat_state/chat_state_notifier.dart'
-    as _i11;
+    as _i12;
 import 'package:mengdie/app/providers/chat_state/special_action_type.dart'
-    as _i15;
+    as _i16;
 import 'package:mengdie/app/providers/chat_state_providers.dart' as _i5;
-import 'package:mengdie/app/repositories/chat_repository.dart' as _i10;
+import 'package:mengdie/app/repositories/chat_repository.dart' as _i11;
 import 'package:mengdie/app/tools/context_xml_service.dart' as _i4;
 import 'package:mengdie/data/llmapi/llm_models.dart' as _i3;
-import 'package:mengdie/data/llmapi/llm_service.dart' as _i8;
+import 'package:mengdie/data/llmapi/llm_service.dart' as _i9;
 import 'package:mengdie/domain/models/models.dart' as _i6;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i7;
-import 'package:riverpod/src/internals.dart' as _i2;
-import 'package:shared_preferences/shared_preferences.dart' as _i13;
-import 'package:state_notifier/state_notifier.dart' as _i12;
+import 'package:mockito/src/dummies.dart' as _i8;
+import 'package:riverpod/src/framework.dart' as _i2;
+import 'package:riverpod/src/internals.dart' as _i7;
+import 'package:shared_preferences/shared_preferences.dart' as _i14;
+import 'package:state_notifier/state_notifier.dart' as _i13;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -98,14 +99,28 @@ class _FakeMessage_10 extends _i1.SmartFake implements _i6.Message {
     : super(parent, parentInvocation);
 }
 
-/// A class which mocks [Ref].
+/// A class which mocks [ProviderRef].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockRef<State extends Object?> extends _i1.Mock
-    implements _i2.Ref<State> {
-  MockRef() {
+class MockProviderRef<State> extends _i1.Mock
+    implements _i7.ProviderRef<State> {
+  MockProviderRef() {
     _i1.throwOnMissingStub(this);
   }
+
+  @override
+  State get state =>
+      (super.noSuchMethod(
+            Invocation.getter(#state),
+            returnValue: _i8.dummyValue<State>(this, Invocation.getter(#state)),
+          )
+          as State);
+
+  @override
+  set state(State? newState) => super.noSuchMethod(
+    Invocation.setter(#state, newState),
+    returnValueForMissingStub: null,
+  );
 
   @override
   _i2.ProviderContainer get container =>
@@ -122,7 +137,7 @@ class MockRef<State extends Object?> extends _i1.Mock
   T refresh<T>(_i2.Refreshable<T>? provider) =>
       (super.noSuchMethod(
             Invocation.method(#refresh, [provider]),
-            returnValue: _i7.dummyValue<T>(
+            returnValue: _i8.dummyValue<T>(
               this,
               Invocation.method(#refresh, [provider]),
             ),
@@ -190,7 +205,7 @@ class MockRef<State extends Object?> extends _i1.Mock
   T read<T>(_i2.ProviderListenable<T>? provider) =>
       (super.noSuchMethod(
             Invocation.method(#read, [provider]),
-            returnValue: _i7.dummyValue<T>(
+            returnValue: _i8.dummyValue<T>(
               this,
               Invocation.method(#read, [provider]),
             ),
@@ -209,7 +224,7 @@ class MockRef<State extends Object?> extends _i1.Mock
   T watch<T>(_i2.ProviderListenable<T>? provider) =>
       (super.noSuchMethod(
             Invocation.method(#watch, [provider]),
-            returnValue: _i7.dummyValue<T>(
+            returnValue: _i8.dummyValue<T>(
               this,
               Invocation.method(#watch, [provider]),
             ),
@@ -255,13 +270,13 @@ class MockRef<State extends Object?> extends _i1.Mock
 /// A class which mocks [LlmService].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockLlmService extends _i1.Mock implements _i8.LlmService {
+class MockLlmService extends _i1.Mock implements _i9.LlmService {
   MockLlmService() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i9.Stream<_i3.LlmStreamChunk> sendMessageStream({
+  _i10.Stream<_i3.LlmStreamChunk> sendMessageStream({
     required List<_i3.LlmContent>? llmContext,
     required _i6.ApiConfig? apiConfig,
     bool? requestThoughts = false,
@@ -278,12 +293,36 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               #isUrlContextEnabled: isUrlContextEnabled,
               #isCodeExecutionEnabled: isCodeExecutionEnabled,
             }),
-            returnValue: _i9.Stream<_i3.LlmStreamChunk>.empty(),
+            returnValue: _i10.Stream<_i3.LlmStreamChunk>.empty(),
           )
-          as _i9.Stream<_i3.LlmStreamChunk>);
+          as _i10.Stream<_i3.LlmStreamChunk>);
 
   @override
-  _i9.Future<_i3.LlmResponse> sendMessageOnce({
+  _i10.Stream<_i3.LlmStreamChunk> sendParallelMessageStream({
+    required List<_i3.LlmContent>? llmContext,
+    required _i6.ApiConfig? apiConfig,
+    required int? parallelCount,
+    bool? requestThoughts = false,
+    bool? isGoogleSearchEnabled = false,
+    bool? isUrlContextEnabled = false,
+    bool? isCodeExecutionEnabled = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendParallelMessageStream, [], {
+              #llmContext: llmContext,
+              #apiConfig: apiConfig,
+              #parallelCount: parallelCount,
+              #requestThoughts: requestThoughts,
+              #isGoogleSearchEnabled: isGoogleSearchEnabled,
+              #isUrlContextEnabled: isUrlContextEnabled,
+              #isCodeExecutionEnabled: isCodeExecutionEnabled,
+            }),
+            returnValue: _i10.Stream<_i3.LlmStreamChunk>.empty(),
+          )
+          as _i10.Stream<_i3.LlmStreamChunk>);
+
+  @override
+  _i10.Future<_i3.LlmResponse> sendMessageOnce({
     required List<_i3.LlmContent>? llmContext,
     required _i6.ApiConfig? apiConfig,
     bool? requestThoughts = false,
@@ -300,7 +339,7 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               #isUrlContextEnabled: isUrlContextEnabled,
               #isCodeExecutionEnabled: isCodeExecutionEnabled,
             }),
-            returnValue: _i9.Future<_i3.LlmResponse>.value(
+            returnValue: _i10.Future<_i3.LlmResponse>.value(
               _FakeLlmResponse_3(
                 this,
                 Invocation.method(#sendMessageOnce, [], {
@@ -314,10 +353,47 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               ),
             ),
           )
-          as _i9.Future<_i3.LlmResponse>);
+          as _i10.Future<_i3.LlmResponse>);
 
   @override
-  _i9.Future<int> countTokens({
+  _i10.Future<_i3.LlmResponse> sendParallelMessageOnce({
+    required List<_i3.LlmContent>? llmContext,
+    required _i6.ApiConfig? apiConfig,
+    required int? parallelCount,
+    bool? requestThoughts = false,
+    bool? isGoogleSearchEnabled = false,
+    bool? isUrlContextEnabled = false,
+    bool? isCodeExecutionEnabled = false,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#sendParallelMessageOnce, [], {
+              #llmContext: llmContext,
+              #apiConfig: apiConfig,
+              #parallelCount: parallelCount,
+              #requestThoughts: requestThoughts,
+              #isGoogleSearchEnabled: isGoogleSearchEnabled,
+              #isUrlContextEnabled: isUrlContextEnabled,
+              #isCodeExecutionEnabled: isCodeExecutionEnabled,
+            }),
+            returnValue: _i10.Future<_i3.LlmResponse>.value(
+              _FakeLlmResponse_3(
+                this,
+                Invocation.method(#sendParallelMessageOnce, [], {
+                  #llmContext: llmContext,
+                  #apiConfig: apiConfig,
+                  #parallelCount: parallelCount,
+                  #requestThoughts: requestThoughts,
+                  #isGoogleSearchEnabled: isGoogleSearchEnabled,
+                  #isUrlContextEnabled: isUrlContextEnabled,
+                  #isCodeExecutionEnabled: isCodeExecutionEnabled,
+                }),
+              ),
+            ),
+          )
+          as _i10.Future<_i3.LlmResponse>);
+
+  @override
+  _i10.Future<int> countTokens({
     required List<_i3.LlmContent>? llmContext,
     required _i6.ApiConfig? apiConfig,
     bool? useRemoteCounter = false,
@@ -328,12 +404,12 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               #apiConfig: apiConfig,
               #useRemoteCounter: useRemoteCounter,
             }),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Stream<_i3.LlmStreamChunk> generateImageStream({
+  _i10.Stream<_i3.LlmStreamChunk> generateImageStream({
     required List<_i3.LlmContent>? llmContext,
     required _i6.ApiConfig? apiConfig,
     int? n = 1,
@@ -344,12 +420,12 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               #apiConfig: apiConfig,
               #n: n,
             }),
-            returnValue: _i9.Stream<_i3.LlmStreamChunk>.empty(),
+            returnValue: _i10.Stream<_i3.LlmStreamChunk>.empty(),
           )
-          as _i9.Stream<_i3.LlmStreamChunk>);
+          as _i10.Stream<_i3.LlmStreamChunk>);
 
   @override
-  _i9.Future<_i3.LlmImageResponse> generateImageOnce({
+  _i10.Future<_i3.LlmImageResponse> generateImageOnce({
     required List<_i3.LlmContent>? llmContext,
     required _i6.ApiConfig? apiConfig,
     int? n = 1,
@@ -360,7 +436,7 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               #apiConfig: apiConfig,
               #n: n,
             }),
-            returnValue: _i9.Future<_i3.LlmImageResponse>.value(
+            returnValue: _i10.Future<_i3.LlmImageResponse>.value(
               _FakeLlmImageResponse_4(
                 this,
                 Invocation.method(#generateImageOnce, [], {
@@ -371,52 +447,52 @@ class MockLlmService extends _i1.Mock implements _i8.LlmService {
               ),
             ),
           )
-          as _i9.Future<_i3.LlmImageResponse>);
+          as _i10.Future<_i3.LlmImageResponse>);
 
   @override
-  _i9.Future<void> cancelActiveRequest() =>
+  _i10.Future<void> cancelActiveRequest() =>
       (super.noSuchMethod(
             Invocation.method(#cancelActiveRequest, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 }
 
 /// A class which mocks [ChatRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockChatRepository extends _i1.Mock implements _i10.ChatRepository {
+class MockChatRepository extends _i1.Mock implements _i11.ChatRepository {
   MockChatRepository() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  _i9.Future<List<_i6.Chat>> getAllChats() =>
+  _i10.Future<List<_i6.Chat>> getAllChats() =>
       (super.noSuchMethod(
             Invocation.method(#getAllChats, []),
-            returnValue: _i9.Future<List<_i6.Chat>>.value(<_i6.Chat>[]),
+            returnValue: _i10.Future<List<_i6.Chat>>.value(<_i6.Chat>[]),
           )
-          as _i9.Future<List<_i6.Chat>>);
+          as _i10.Future<List<_i6.Chat>>);
 
   @override
-  _i9.Future<_i6.Chat?> getChat(int? chatId) =>
+  _i10.Future<_i6.Chat?> getChat(int? chatId) =>
       (super.noSuchMethod(
             Invocation.method(#getChat, [chatId]),
-            returnValue: _i9.Future<_i6.Chat?>.value(),
+            returnValue: _i10.Future<_i6.Chat?>.value(),
           )
-          as _i9.Future<_i6.Chat?>);
+          as _i10.Future<_i6.Chat?>);
 
   @override
-  _i9.Future<int> saveChat(_i6.Chat? chat) =>
+  _i10.Future<int> saveChat(_i6.Chat? chat) =>
       (super.noSuchMethod(
             Invocation.method(#saveChat, [chat]),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Future<int> addFolder({
+  _i10.Future<int> addFolder({
     required String? title,
     bool? isTemplate = false,
     int? parentFolderId,
@@ -427,45 +503,45 @@ class MockChatRepository extends _i1.Mock implements _i10.ChatRepository {
               #isTemplate: isTemplate,
               #parentFolderId: parentFolderId,
             }),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Future<bool> deleteChat(int? chatId) =>
+  _i10.Future<bool> deleteChat(int? chatId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteChat, [chatId]),
-            returnValue: _i9.Future<bool>.value(false),
+            returnValue: _i10.Future<bool>.value(false),
           )
-          as _i9.Future<bool>);
+          as _i10.Future<bool>);
 
   @override
-  _i9.Future<int> deleteChats(List<int>? chatIds) =>
+  _i10.Future<int> deleteChats(List<int>? chatIds) =>
       (super.noSuchMethod(
             Invocation.method(#deleteChats, [chatIds]),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Future<List<_i6.Chat>> getChatsInFolder(int? parentFolderId) =>
+  _i10.Future<List<_i6.Chat>> getChatsInFolder(int? parentFolderId) =>
       (super.noSuchMethod(
             Invocation.method(#getChatsInFolder, [parentFolderId]),
-            returnValue: _i9.Future<List<_i6.Chat>>.value(<_i6.Chat>[]),
+            returnValue: _i10.Future<List<_i6.Chat>>.value(<_i6.Chat>[]),
           )
-          as _i9.Future<List<_i6.Chat>>);
+          as _i10.Future<List<_i6.Chat>>);
 
   @override
-  _i9.Future<void> updateChatOrder(List<_i6.Chat>? chatsToUpdate) =>
+  _i10.Future<void> updateChatOrder(List<_i6.Chat>? chatsToUpdate) =>
       (super.noSuchMethod(
             Invocation.method(#updateChatOrder, [chatsToUpdate]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> moveChatsToNewParent({
+  _i10.Future<void> moveChatsToNewParent({
     required List<int>? chatIds,
     required int? newParentFolderId,
   }) =>
@@ -474,52 +550,52 @@ class MockChatRepository extends _i1.Mock implements _i10.ChatRepository {
               #chatIds: chatIds,
               #newParentFolderId: newParentFolderId,
             }),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Stream<List<_i6.Chat>> watchChatsInFolder(int? parentFolderId) =>
+  _i10.Stream<List<_i6.Chat>> watchChatsInFolder(int? parentFolderId) =>
       (super.noSuchMethod(
             Invocation.method(#watchChatsInFolder, [parentFolderId]),
-            returnValue: _i9.Stream<List<_i6.Chat>>.empty(),
+            returnValue: _i10.Stream<List<_i6.Chat>>.empty(),
           )
-          as _i9.Stream<List<_i6.Chat>>);
+          as _i10.Stream<List<_i6.Chat>>);
 
   @override
-  _i9.Stream<_i6.Chat?> watchChat(int? chatId) =>
+  _i10.Stream<_i6.Chat?> watchChat(int? chatId) =>
       (super.noSuchMethod(
             Invocation.method(#watchChat, [chatId]),
-            returnValue: _i9.Stream<_i6.Chat?>.empty(),
+            returnValue: _i10.Stream<_i6.Chat?>.empty(),
           )
-          as _i9.Stream<_i6.Chat?>);
+          as _i10.Stream<_i6.Chat?>);
 
   @override
-  _i9.Stream<List<_i6.Chat>> watchChatsForUser(
+  _i10.Stream<List<_i6.Chat>> watchChatsForUser(
     int? userId,
     int? parentFolderId,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#watchChatsForUser, [userId, parentFolderId]),
-            returnValue: _i9.Stream<List<_i6.Chat>>.empty(),
+            returnValue: _i10.Stream<List<_i6.Chat>>.empty(),
           )
-          as _i9.Stream<List<_i6.Chat>>);
+          as _i10.Stream<List<_i6.Chat>>);
 
   @override
-  _i9.Future<int> importChat(_i6.Chat? chat, {int? parentFolderId}) =>
+  _i10.Future<int> importChat(_i6.Chat? chat, {int? parentFolderId}) =>
       (super.noSuchMethod(
             Invocation.method(
               #importChat,
               [chat],
               {#parentFolderId: parentFolderId},
             ),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Future<int> createChatFromTemplate(
+  _i10.Future<int> createChatFromTemplate(
     int? templateChatId, {
     int? parentFolderId,
   }) =>
@@ -529,12 +605,12 @@ class MockChatRepository extends _i1.Mock implements _i10.ChatRepository {
               [templateChatId],
               {#parentFolderId: parentFolderId},
             ),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 
   @override
-  _i9.Future<int> duplicateChat(
+  _i10.Future<int> duplicateChat(
     int? sourceChatId, {
     int? upToMessageId,
     bool? asTemplate = false,
@@ -552,9 +628,9 @@ class MockChatRepository extends _i1.Mock implements _i10.ChatRepository {
                 #targetFolderId: targetFolderId,
               },
             ),
-            returnValue: _i9.Future<int>.value(0),
+            returnValue: _i10.Future<int>.value(0),
           )
-          as _i9.Future<int>);
+          as _i10.Future<int>);
 }
 
 /// A class which mocks [ContextXmlService].
@@ -566,7 +642,7 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
   }
 
   @override
-  _i9.Future<_i4.ApiRequestContext> buildApiRequestContext({
+  _i10.Future<_i4.ApiRequestContext> buildApiRequestContext({
     required int? chatId,
     required _i6.Message? currentUserMessage,
     String? lastMessageOverride,
@@ -587,7 +663,7 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
               #historyOverride: historyOverride,
               #isPrediction: isPrediction,
             }),
-            returnValue: _i9.Future<_i4.ApiRequestContext>.value(
+            returnValue: _i10.Future<_i4.ApiRequestContext>.value(
               _FakeApiRequestContext_5(
                 this,
                 Invocation.method(#buildApiRequestContext, [], {
@@ -603,28 +679,28 @@ class MockContextXmlService extends _i1.Mock implements _i4.ContextXmlService {
               ),
             ),
           )
-          as _i9.Future<_i4.ApiRequestContext>);
+          as _i10.Future<_i4.ApiRequestContext>);
 
   @override
-  _i9.Future<_i4.ContextPredictionResult> predictContextUsage({
+  _i10.Future<_i4.ContextPredictionResult> predictContextUsage({
     required int? chatId,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#predictContextUsage, [], {#chatId: chatId}),
-            returnValue: _i9.Future<_i4.ContextPredictionResult>.value(
+            returnValue: _i10.Future<_i4.ContextPredictionResult>.value(
               _FakeContextPredictionResult_6(
                 this,
                 Invocation.method(#predictContextUsage, [], {#chatId: chatId}),
               ),
             ),
           )
-          as _i9.Future<_i4.ContextPredictionResult>);
+          as _i10.Future<_i4.ContextPredictionResult>);
 }
 
 /// A class which mocks [ChatStateNotifier].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
+class MockChatStateNotifier extends _i1.Mock implements _i12.ChatStateNotifier {
   MockChatStateNotifier() {
     _i1.throwOnMissingStub(this);
   }
@@ -648,9 +724,15 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
 
   @override
   set llmStreamSubscription(
-    _i9.StreamSubscription<_i3.LlmStreamChunk>? _llmStreamSubscription,
+    _i10.StreamSubscription<_i3.LlmStreamChunk>? _llmStreamSubscription,
   ) => super.noSuchMethod(
     Invocation.setter(#llmStreamSubscription, _llmStreamSubscription),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  set pseudoStreamTimer(_i10.Timer? _pseudoStreamTimer) => super.noSuchMethod(
+    Invocation.setter(#pseudoStreamTimer, _pseudoStreamTimer),
     returnValueForMissingStub: null,
   );
 
@@ -666,12 +748,12 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
           as bool);
 
   @override
-  _i9.Stream<_i5.ChatScreenState> get stream =>
+  _i10.Stream<_i5.ChatScreenState> get stream =>
       (super.noSuchMethod(
             Invocation.getter(#stream),
-            returnValue: _i9.Stream<_i5.ChatScreenState>.empty(),
+            returnValue: _i10.Stream<_i5.ChatScreenState>.empty(),
           )
-          as _i9.Stream<_i5.ChatScreenState>);
+          as _i10.Stream<_i5.ChatScreenState>);
 
   @override
   _i5.ChatScreenState get state =>
@@ -701,7 +783,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
           as bool);
 
   @override
-  set onError(_i12.ErrorListener? _onError) => super.noSuchMethod(
+  set onError(_i13.ErrorListener? _onError) => super.noSuchMethod(
     Invocation.setter(#onError, _onError),
     returnValueForMissingStub: null,
   );
@@ -713,13 +795,13 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   );
 
   @override
-  set topMessageTimer(_i9.Timer? _topMessageTimer) => super.noSuchMethod(
+  set topMessageTimer(_i10.Timer? _topMessageTimer) => super.noSuchMethod(
     Invocation.setter(#topMessageTimer, _topMessageTimer),
     returnValueForMissingStub: null,
   );
 
   @override
-  set updateTimer(_i9.Timer? _updateTimer) => super.noSuchMethod(
+  set updateTimer(_i10.Timer? _updateTimer) => super.noSuchMethod(
     Invocation.setter(#updateTimer, _updateTimer),
     returnValueForMissingStub: null,
   );
@@ -740,13 +822,13 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
           as _i6.ApiConfig);
 
   @override
-  _i9.Future<void> calculateAndStoreTokenCount() =>
+  _i10.Future<void> calculateAndStoreTokenCount() =>
       (super.noSuchMethod(
             Invocation.method(#calculateAndStoreTokenCount, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
   void dispose() => super.noSuchMethod(
@@ -755,16 +837,16 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   );
 
   @override
-  _i9.Future<void> updateContextDebugInfo() =>
+  _i10.Future<void> updateContextDebugInfo() =>
       (super.noSuchMethod(
             Invocation.method(#updateContextDebugInfo, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> duplicateChat({
+  _i10.Future<void> duplicateChat({
     int? upToMessageId,
     bool? asTemplate = false,
   }) =>
@@ -773,10 +855,10 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               #upToMessageId: upToMessageId,
               #asTemplate: asTemplate,
             }),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
   bool updateShouldNotify(
@@ -790,8 +872,8 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
           as bool);
 
   @override
-  _i12.RemoveListener addListener(
-    _i12.Listener<_i5.ChatScreenState>? listener, {
+  _i13.RemoveListener addListener(
+    _i13.Listener<_i5.ChatScreenState>? listener, {
     bool? fireImmediately = true,
   }) =>
       (super.noSuchMethod(
@@ -802,10 +884,10 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
             ),
             returnValue: () {},
           )
-          as _i12.RemoveListener);
+          as _i13.RemoveListener);
 
   @override
-  void init(_i13.SharedPreferences? prefs) => super.noSuchMethod(
+  void init(_i14.SharedPreferences? prefs) => super.noSuchMethod(
     Invocation.method(#init, [prefs]),
     returnValueForMissingStub: null,
   );
@@ -813,7 +895,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   @override
   void showTopMessage(
     String? text, {
-    _i14.Color? backgroundColor,
+    _i15.Color? backgroundColor,
     Duration? duration = const Duration(seconds: 3),
   }) => super.noSuchMethod(
     Invocation.method(
@@ -833,6 +915,18 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   @override
   void toggleOutputMode() => super.noSuchMethod(
     Invocation.method(#toggleOutputMode, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void togglePseudoStreamMode() => super.noSuchMethod(
+    Invocation.method(#togglePseudoStreamMode, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setPseudoStreamSpeed(double? speed) => super.noSuchMethod(
+    Invocation.method(#setPseudoStreamSpeed, [speed]),
     returnValueForMissingStub: null,
   );
 
@@ -879,6 +973,18 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   );
 
   @override
+  void toggleParallelRequestMode() => super.noSuchMethod(
+    Invocation.method(#toggleParallelRequestMode, []),
+    returnValueForMissingStub: null,
+  );
+
+  @override
+  void setParallelRequestCount(int? count) => super.noSuchMethod(
+    Invocation.method(#setParallelRequestCount, [count]),
+    returnValueForMissingStub: null,
+  );
+
+  @override
   void setMessageListHeightMode(bool? isHalfHeight) => super.noSuchMethod(
     Invocation.method(#setMessageListHeightMode, [isHalfHeight]),
     returnValueForMissingStub: null,
@@ -909,16 +1015,16 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
   );
 
   @override
-  _i9.Future<void> deleteMessage(int? messageId) =>
+  _i10.Future<void> deleteMessage(int? messageId) =>
       (super.noSuchMethod(
             Invocation.method(#deleteMessage, [messageId]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> editMessage(
+  _i10.Future<void> editMessage(
     int? messageId, {
     String? newText,
     List<_i6.MessagePart>? newParts,
@@ -934,56 +1040,65 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
                 #updatedMessage: updatedMessage,
               },
             ),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> leaveChat() =>
+  _i10.Future<void> leaveChat() =>
       (super.noSuchMethod(
             Invocation.method(#leaveChat, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> cloneChatAsTemplate() =>
+  _i10.Future<void> cloneChatAsTemplate() =>
       (super.noSuchMethod(
             Invocation.method(#cloneChatAsTemplate, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<int?> cloneChatAsNew() =>
+  _i10.Future<int?> cloneChatAsNew() =>
       (super.noSuchMethod(
             Invocation.method(#cloneChatAsNew, []),
-            returnValue: _i9.Future<int?>.value(),
+            returnValue: _i10.Future<int?>.value(),
           )
-          as _i9.Future<int?>);
+          as _i10.Future<int?>);
 
   @override
-  _i9.Future<int?> insertMessage(int? index, _i6.MessageRole? role) =>
+  _i10.Future<int?> insertMessage(int? index, _i6.MessageRole? role) =>
       (super.noSuchMethod(
             Invocation.method(#insertMessage, [index, role]),
-            returnValue: _i9.Future<int?>.value(),
+            returnValue: _i10.Future<int?>.value(),
           )
-          as _i9.Future<int?>);
+          as _i10.Future<int?>);
 
   @override
-  _i9.Future<void> runAsyncProcessingTasks(_i6.Message? modelMessage) =>
+  _i10.Future<void> deleteMessagesAfter(int? messageId) =>
+      (super.noSuchMethod(
+            Invocation.method(#deleteMessagesAfter, [messageId]),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> runAsyncProcessingTasks(_i6.Message? modelMessage) =>
       (super.noSuchMethod(
             Invocation.method(#runAsyncProcessingTasks, [modelMessage]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i6.Message> getFinalProcessedMessage(
+  _i10.Future<_i6.Message> getFinalProcessedMessage(
     _i6.Chat? chat,
     _i6.Message? initialMessage,
   ) =>
@@ -992,7 +1107,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               chat,
               initialMessage,
             ]),
-            returnValue: _i9.Future<_i6.Message>.value(
+            returnValue: _i10.Future<_i6.Message>.value(
               _FakeMessage_10(
                 this,
                 Invocation.method(#getFinalProcessedMessage, [
@@ -1002,28 +1117,28 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               ),
             ),
           )
-          as _i9.Future<_i6.Message>);
+          as _i10.Future<_i6.Message>);
 
   @override
-  _i9.Future<void> regenerateResponse(_i6.Message? userMessage) =>
+  _i10.Future<void> regenerateResponse(_i6.Message? userMessage) =>
       (super.noSuchMethod(
             Invocation.method(#regenerateResponse, [userMessage]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> continueGeneration() =>
+  _i10.Future<void> continueGeneration() =>
       (super.noSuchMethod(
             Invocation.method(#continueGeneration, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> sendMessage({
+  _i10.Future<void> sendMessage({
     List<_i6.MessagePart>? userParts,
     _i6.Message? userMessage,
     bool? isRegeneration = false,
@@ -1046,22 +1161,22 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               #forceNonStreaming: forceNonStreaming,
               #requestThoughts: requestThoughts,
             }),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> cancelGeneration() =>
+  _i10.Future<void> cancelGeneration() =>
       (super.noSuchMethod(
             Invocation.method(#cancelGeneration, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> generateHelpMeReply({
+  _i10.Future<void> generateHelpMeReply({
     dynamic Function(List<String>)? onSuggestionsReady,
     bool? forceRefresh = false,
   }) =>
@@ -1070,16 +1185,16 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               #onSuggestionsReady: onSuggestionsReady,
               #forceRefresh: forceRefresh,
             }),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<String> executeSpecialAction({
+  _i10.Future<String> executeSpecialAction({
     required String? prompt,
     required _i6.ApiConfig? apiConfig,
-    required _i15.SpecialActionType? actionType,
+    required _i16.SpecialActionType? actionType,
     required _i6.Message? targetMessage,
   }) =>
       (super.noSuchMethod(
@@ -1089,8 +1204,8 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               #actionType: actionType,
               #targetMessage: targetMessage,
             }),
-            returnValue: _i9.Future<String>.value(
-              _i7.dummyValue<String>(
+            returnValue: _i10.Future<String>.value(
+              _i8.dummyValue<String>(
                 this,
                 Invocation.method(#executeSpecialAction, [], {
                   #prompt: prompt,
@@ -1101,19 +1216,19 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               ),
             ),
           )
-          as _i9.Future<String>);
+          as _i10.Future<String>);
 
   @override
-  _i9.Future<void> manuallySummarizeHistory() =>
+  _i10.Future<void> manuallySummarizeHistory() =>
       (super.noSuchMethod(
             Invocation.method(#manuallySummarizeHistory, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> executeSecondaryXmlGeneration(
+  _i10.Future<void> executeSecondaryXmlGeneration(
     _i6.Chat? chat,
     _i6.Message? targetMessage,
   ) =>
@@ -1122,21 +1237,21 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               chat,
               targetMessage,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<_i6.Chat?> executePreprocessing(_i6.Chat? chat) =>
+  _i10.Future<_i6.Chat?> executePreprocessing(_i6.Chat? chat) =>
       (super.noSuchMethod(
             Invocation.method(#executePreprocessing, [chat]),
-            returnValue: _i9.Future<_i6.Chat?>.value(),
+            returnValue: _i10.Future<_i6.Chat?>.value(),
           )
-          as _i9.Future<_i6.Chat?>);
+          as _i10.Future<_i6.Chat?>);
 
   @override
-  _i9.Future<String> summarizeMessages(
+  _i10.Future<String> summarizeMessages(
     List<_i6.Message>? messages,
     String? existingSummary, {
     List<_i6.Message>? followingMessages,
@@ -1147,8 +1262,8 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               [messages, existingSummary],
               {#followingMessages: followingMessages},
             ),
-            returnValue: _i9.Future<String>.value(
-              _i7.dummyValue<String>(
+            returnValue: _i10.Future<String>.value(
+              _i8.dummyValue<String>(
                 this,
                 Invocation.method(
                   #summarizeMessages,
@@ -1158,10 +1273,10 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               ),
             ),
           )
-          as _i9.Future<String>);
+          as _i10.Future<String>);
 
   @override
-  _i9.Future<void> executeAutoTitleGeneration(
+  _i10.Future<void> executeAutoTitleGeneration(
     _i6.Chat? chat,
     _i6.Message? currentModelMessage,
     List<_i6.Message>? allMessages,
@@ -1172,28 +1287,28 @@ class MockChatStateNotifier extends _i1.Mock implements _i11.ChatStateNotifier {
               currentModelMessage,
               allMessages,
             ]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> generateImage(_i6.Message? userMessage) =>
+  _i10.Future<void> generateImage(_i6.Message? userMessage) =>
       (super.noSuchMethod(
             Invocation.method(#generateImage, [userMessage]),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
-  _i9.Future<void> resumeGeneration() =>
+  _i10.Future<void> resumeGeneration() =>
       (super.noSuchMethod(
             Invocation.method(#resumeGeneration, []),
-            returnValue: _i9.Future<void>.value(),
-            returnValueForMissingStub: _i9.Future<void>.value(),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
           )
-          as _i9.Future<void>);
+          as _i10.Future<void>);
 
   @override
   void changeHelpMeReplyPage(int? delta) => super.noSuchMethod(
