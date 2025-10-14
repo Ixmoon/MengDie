@@ -615,39 +615,72 @@ class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                    controller: _keywordController,
-                    decoration: InputDecoration(
-                      labelText: '关键词',
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 14),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.fullscreen),
-                        tooltip: '全屏编辑',
-                        onPressed: () async {
-                          final newText = await showFullScreenTextEditor(
-                            context,
-                            initialText: item.keyword,
-                            chatId: widget.chatId,
-                            title: '编辑关键词',
-                            initialLanguage: 'text',
-                          );
-                          if (newText != null && newText != item.keyword) {
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (item.status == PromptItemStatus.match) ...[
+                      Tooltip(
+                        message:
+                            '如果勾选，则“关键词”中所有由逗号分隔的词\n都必须在上下文中出现才会触发注入。',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: item.critical,
+                              onChanged: (bool? newValue) {
+                                if (newValue != null) {
+                                  promptService.updatePromptItem(
+                                    item.copyWith(critical: newValue),
+                                    widget.chatId,
+                                  );
+                                }
+                              },
+                            ),
+                            const Text('全部匹配'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: TextFormField(
+                          controller: _keywordController,
+                          decoration: InputDecoration(
+                            labelText: '关键词',
+                            border: const OutlineInputBorder(),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 14),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.fullscreen),
+                              tooltip: '全屏编辑',
+                              onPressed: () async {
+                                final newText =
+                                    await showFullScreenTextEditor(
+                                  context,
+                                  initialText: item.keyword,
+                                  chatId: widget.chatId,
+                                  title: '编辑关键词',
+                                  initialLanguage: 'text',
+                                );
+                                if (newText != null &&
+                                    newText != item.keyword) {
+                                  promptService.updatePromptItem(
+                                    item.copyWith(keyword: newText),
+                                    widget.chatId,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                          onChanged: (value) {
                             promptService.updatePromptItem(
-                              item.copyWith(keyword: newText),
+                              item.copyWith(keyword: value),
                               widget.chatId,
                             );
-                          }
-                        },
-                      ),
+                          }),
                     ),
-                    onChanged: (value) {
-                      promptService.updatePromptItem(
-                        item.copyWith(keyword: value),
-                        widget.chatId,
-                      );
-                    }),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _textController,

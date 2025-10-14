@@ -492,8 +492,13 @@ class ContextXmlService {
             .where((k) => k.isNotEmpty);
         
         if (keywords.isNotEmpty &&
-            keywords.any((keyword) => searchableCorpus.contains(keyword))) {
-          // If a match is found, add the prompt to a success set for O(1) lookup later.
+            (prompt.critical
+                ? keywords
+                    .every((keyword) => searchableCorpus.contains(keyword))
+                : keywords
+                    .any((keyword) => searchableCorpus.contains(keyword)))) {
+          // If a match is found, add the prompt to a success set for O(1)
+          // lookup later.
           successfullyMatchedPrompts.add(prompt);
         }
       }

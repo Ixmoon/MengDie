@@ -18,6 +18,7 @@ class PromptItem {
   final int matchMessageCount;
   final String injectionTag; // New field for the XML tag
   final int order;
+  final bool critical;
   @JsonKey(includeFromJson: false, includeToJson: false)
   final bool isGlobal;
 
@@ -31,6 +32,7 @@ class PromptItem {
     this.matchMessageCount = 6,
     this.injectionTag = '', // Default to empty string
     this.order = 0,
+    this.critical = false,
     this.isGlobal = false,
   });
 
@@ -49,6 +51,7 @@ class PromptItem {
     int? matchMessageCount,
     String? injectionTag,
     int? order,
+    bool? critical,
     bool? isGlobal,
   }) {
     return PromptItem(
@@ -61,6 +64,7 @@ class PromptItem {
       matchMessageCount: matchMessageCount ?? this.matchMessageCount,
       injectionTag: injectionTag ?? this.injectionTag,
       order: order ?? this.order,
+      critical: critical ?? this.critical,
       isGlobal: isGlobal ?? this.isGlobal,
     );
   }

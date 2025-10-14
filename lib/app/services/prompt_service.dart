@@ -225,6 +225,7 @@ class PromptService extends StateNotifier<PromptState> {
                 injectionPosition: item.injectionPosition,
                 matchMessageCount: item.matchMessageCount,
                 injectionTag: item.injectionTag,
+                critical: item.critical,
               )
             else
               i,
@@ -244,6 +245,7 @@ class PromptService extends StateNotifier<PromptState> {
           injectionPosition: item.injectionPosition,
           matchMessageCount: item.matchMessageCount,
           injectionTag: item.injectionTag,
+          critical: item.critical,
         );
         final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
         newChatItemsMap[chatId] = chatItems;
