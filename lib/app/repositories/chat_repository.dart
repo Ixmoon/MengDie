@@ -11,6 +11,7 @@ import '../../data/mappers/chat_mapper.dart';
 import '../providers/auth_providers.dart';
 import '../providers/repository_providers.dart';
 import '../services/prompt_service.dart';
+import '../providers/core_providers.dart';
 
 // 本文件包含用于管理 Chat 数据集合的仓库类和提供者。
 
@@ -20,10 +21,7 @@ class ChatRepository {
   final ChatDao _chatDao;
   final UserDao _userDao;
 
-  ChatRepository(this._ref, this._chatDao, this._userDao) {
-    // 在仓库初始化时，异步执行一次清理操作
-    _cleanUpOrphanedChats();
-  }
+  ChatRepository(this._ref, this._chatDao, this._userDao);
 
   /// 检查当前用户登录状态，如果已登录，则将新创建的项目ID与其关联。
   Future<void> _bindItemToCurrentUser(int itemId) async {
@@ -78,12 +76,22 @@ class ChatRepository {
   }
 
   Future<bool> deleteChat(int chatId) async {
-    return await _chatDao.deleteChatAndMessages(chatId);
+    final success = await _chatDao.deleteChatAndMessages(chatId);
+    if (success) {
+      // 删除成功后，执行一次清理，以防被删除的是一个文件夹
+      await performSanityChecks();
+    }
+    return success;
   }
 
   Future<int> deleteChats(List<int> chatIds) async {
     if (chatIds.isEmpty) return 0;
-    return await _chatDao.deleteMultipleChatsAndMessages(chatIds);
+    final deletedCount = await _chatDao.deleteMultipleChatsAndMessages(chatIds);
+    if (deletedCount > 0) {
+      // 删除成功后，执行一次清理，以防被删除的包含文件夹
+      await performSanityChecks();
+    }
+    return deletedCount;
   }
 
   // 新增：非响应式地获取文件夹内容
@@ -332,8 +340,14 @@ class ChatRepository {
     }
   }
 
-  /// 清理孤儿聊天（其 parentFolderId 指向一个不存在的文件夹）。
-  Future<void> _cleanUpOrphanedChats() async {
+  /// 对数据库进行健全性检查和清理。
+  /// - 清理孤儿聊天（其 parentFolderId 指向一个不存在的文件夹）。
+  /// - 只有在非同步状态下才会执行。
+  Future<void> performSanityChecks() async {
+    // 如果正在同步，则跳过此操作以避免竞争条件
+    if (_ref.read(isSyncingProvider)) {
+      return;
+    }
     try {
       await _chatDao.cleanUpOrphanedItems();
     } catch (e) {

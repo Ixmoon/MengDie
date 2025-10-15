@@ -11,6 +11,8 @@ import 'handlers/user_sync_handler.dart';
 import 'handlers/api_config_sync_handler.dart';
 import 'handlers/chat_sync_handler.dart';
 import 'handlers/message_sync_handler.dart';
+import '../../app/providers/core_providers.dart';
+import '../../app/providers/repository_providers.dart';
 
 /// A helper class to hold the results of a sync comparison.
 class _SyncActions<T> {
@@ -106,120 +108,24 @@ class SyncService {
 
     return _SyncActions(toPull: toPull, toCreateLocally: toCreateLocally);
   }
-
-  /// A unified, efficient, and safe method to resolve ID conflicts between
-  /// local and remote metadata. It first identifies only the items that are
-  /// actually in conflict (same key, different creation time) and then
-  /// resolves them in the correct dependency order.
-  Future<
-    (
-      (List<SyncMeta>, List<SyncMeta>, List<SyncMeta>, List<SyncMeta>),
-      (List<SyncMeta>, List<SyncMeta>, List<SyncMeta>, List<SyncMeta>),
-    )
-  >
-  _resolveChanges(
-    Connection remoteConnection,
-    (List<SyncMeta>, List<SyncMeta>, List<SyncMeta>, List<SyncMeta>) localData,
-    (List<SyncMeta>, List<SyncMeta>, List<SyncMeta>, List<SyncMeta>) remoteData,
-  ) async {
-    var (
-      localApiConfigMetas,
-      localChatMetas,
-      localMessageMetas,
-      localUserMetas,
-    ) = localData;
-    final (
-      remoteApiConfigMetas,
-      remoteChatMetas,
-      remoteMessageMetas,
-      remoteUserMetas,
-    ) = remoteData;
-
-    // Helper to find conflicting metas
-    List<SyncMeta> findConflictingMetas(
-      List<SyncMeta> local,
-      List<SyncMeta> remote,
-    ) {
-      final remoteMap = {for (var meta in remote) meta.key: meta};
-      final conflicts = <SyncMeta>[];
-      for (final localMeta in local) {
-        final remoteMeta = remoteMap[localMeta.key];
-        if (remoteMeta != null &&
-            remoteMeta.createdAt.toUtc() != localMeta.createdAt.toUtc()) {
-          conflicts.add(localMeta);
-        }
-      }
-      return conflicts;
-    }
-
-    // Handlers are needed for the resolution logic
-    final userId = SettingsService.instance.currentUserId;
-    final apiConfigHandler = ApiConfigSyncHandler(
-      _db,
-      remoteConnection,
-      userId,
-    );
-    final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
-    final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
-    final userHandler = UserSyncHandler(_db, remoteConnection);
-
-    // Resolve conflicts in dependency order, but only on the conflicting subset of data.
-
-    final conflictingUserMetas = findConflictingMetas(
-      localUserMetas,
-      remoteUserMetas,
-    );
-    if (conflictingUserMetas.isNotEmpty) {
-      await userHandler.resolveConflicts(conflictingUserMetas, remoteUserMetas);
-    }
-
-    final conflictingApiConfigMetas = findConflictingMetas(
-      localApiConfigMetas,
-      remoteApiConfigMetas,
-    );
-    if (conflictingApiConfigMetas.isNotEmpty) {
-      final apiConfigChanges = await apiConfigHandler.resolveConflicts(
-        conflictingApiConfigMetas,
-        remoteApiConfigMetas,
-      );
-      if (apiConfigChanges.isNotEmpty) {
-        _updateMetasInMemory(localApiConfigMetas, apiConfigChanges);
+  
+  // Helper to find conflicting metas (ID is the same, but createdAt is different)
+  List<SyncMeta> _findConflictingMetas(
+    List<SyncMeta> local,
+    List<SyncMeta> remote,
+  ) {
+    // We use a composite key (id, createdAt) for this specific check
+    dynamic getKey(SyncMeta meta) => (meta.id, meta.createdAt.toUtc());
+    final remoteKeyMap = {for (var meta in remote) getKey(meta): meta};
+    
+    final conflicts = <SyncMeta>[];
+    for (final localMeta in local) {
+      final remoteMetaWithSameId = remote.where((rm) => rm.id == localMeta.id).firstOrNull;
+      if (remoteMetaWithSameId != null && remoteMetaWithSameId.createdAt.toUtc() != localMeta.createdAt.toUtc()) {
+        conflicts.add(localMeta);
       }
     }
-
-    final conflictingChatMetas = findConflictingMetas(
-      localChatMetas,
-      remoteChatMetas,
-    );
-    if (conflictingChatMetas.isNotEmpty) {
-      final chatChanges = await chatHandler.resolveConflicts(
-        conflictingChatMetas,
-        remoteChatMetas,
-      );
-      if (chatChanges.isNotEmpty) {
-        _updateMetasInMemory(localChatMetas, chatChanges);
-      }
-    }
-
-    final conflictingMessageMetas = findConflictingMetas(
-      localMessageMetas,
-      remoteMessageMetas,
-    );
-    if (conflictingMessageMetas.isNotEmpty) {
-      final messageChanges = await messageHandler.resolveConflicts(
-        conflictingMessageMetas,
-        remoteMessageMetas,
-      );
-      if (messageChanges.isNotEmpty) {
-        _updateMetasInMemory(localMessageMetas, messageChanges);
-      }
-    }
-
-    // Return the modified local data and original remote data
-    return (
-      (localApiConfigMetas, localChatMetas, localMessageMetas, localUserMetas),
-      remoteData,
-    );
+    return conflicts;
   }
 
   Future<void> syncWithRemote() async {
@@ -227,169 +133,170 @@ class SyncService {
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
       return;
     }
+    
+    // 同步前清理
+    await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
 
-    _initializeSnapshotCacheIfNeeded();
-
-    Connection? remoteConnection;
+    _providerContainer.read(isSyncingProvider.notifier).state = true;
     try {
-      remoteConnection = await _remoteConnectionFactory();
-      // First, clean up any orphan messages on the remote to prevent sync errors.
-      await _cleanupRemoteOrphanMessages(remoteConnection);
+      _initializeSnapshotCacheIfNeeded();
 
-      final userId = SettingsService.instance.currentUserId;
+      Connection? remoteConnection;
+      try {
+        remoteConnection = await _remoteConnectionFactory();
+        await _cleanupRemoteOrphanMessages(remoteConnection);
 
-      final apiConfigHandler = ApiConfigSyncHandler(
-        _db,
-        remoteConnection,
-        userId,
-      );
-      final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
-      final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
-      final userHandler = UserSyncHandler(_db, remoteConnection);
+        final userId = SettingsService.instance.currentUserId;
 
-      final (localData, remoteData) = await (
-        (
-          apiConfigHandler.getLocalMetas(),
-          chatHandler.getLocalMetas(),
-          messageHandler.getLocalMetas(),
-          userHandler.getLocalMetas(),
-        ).wait,
-        (
-          apiConfigHandler.getRemoteMetas(),
-          chatHandler.getRemoteMetas(),
-          messageHandler.getRemoteMetas(),
-          userHandler.getRemoteMetas(),
-        ).wait,
-      ).wait;
+        final apiConfigHandler = ApiConfigSyncHandler(
+          _db,
+          remoteConnection,
+          userId,
+        );
+        final chatHandler = ChatSyncHandler(_db, remoteConnection, userId);
+        final messageHandler = MessageSyncHandler(_db, remoteConnection, userId);
+        final userHandler = UserSyncHandler(_db, remoteConnection);
 
-      var (
-        localApiConfigMetas,
-        localChatMetas,
-        localMessageMetas,
-        localUserMetas,
-      ) = localData;
-      var (
-        remoteApiConfigMetas,
-        remoteChatMetas,
-        remoteMessageMetas,
-        remoteUserMetas,
-      ) = remoteData;
+        final (localData, remoteData) = await (
+          (
+            apiConfigHandler.getLocalMetas(),
+            chatHandler.getLocalMetas(),
+            messageHandler.getLocalMetas(),
+            userHandler.getLocalMetas(),
+          ).wait,
+          (
+            apiConfigHandler.getRemoteMetas(),
+            chatHandler.getRemoteMetas(),
+            messageHandler.getRemoteMetas(),
+            userHandler.getRemoteMetas(),
+          ).wait,
+        ).wait;
 
-      // --- Step 3: Optimization - Pre-check for changes before resolving conflicts ---
-      final preCheckApiConfigActions = _computeSyncActions(
-        localMetas: localApiConfigMetas,
-        remoteMetas: remoteApiConfigMetas,
-      );
-      final preCheckChatActions = _computeSyncActions(
-        localMetas: localChatMetas,
-        remoteMetas: remoteChatMetas,
-      );
-      final preCheckMessageActions = _computeSyncActions(
-        localMetas: localMessageMetas,
-        remoteMetas: remoteMessageMetas,
-      );
-      final preCheckUserActions = _computeSyncActions(
-        localMetas: localUserMetas,
-        remoteMetas: remoteUserMetas,
-      );
+        var (
+          localApiConfigMetas,
+          localChatMetas,
+          localMessageMetas,
+          localUserMetas,
+        ) = localData;
+        var (
+          remoteApiConfigMetas,
+          remoteChatMetas,
+          remoteMessageMetas,
+          remoteUserMetas,
+        ) = remoteData;
 
-      if (preCheckApiConfigActions.toPull.isEmpty &&
-          preCheckApiConfigActions.toCreateLocally.isEmpty &&
-          preCheckChatActions.toPull.isEmpty &&
-          preCheckChatActions.toCreateLocally.isEmpty &&
-          preCheckMessageActions.toPull.isEmpty &&
-          preCheckMessageActions.toCreateLocally.isEmpty &&
-          preCheckUserActions.toPull.isEmpty &&
-          preCheckUserActions.toCreateLocally.isEmpty) {
+        final preCheckApiConfigActions = _computeSyncActions(
+          localMetas: localApiConfigMetas,
+          remoteMetas: remoteApiConfigMetas,
+        );
+        final preCheckChatActions = _computeSyncActions(
+          localMetas: localChatMetas,
+          remoteMetas: remoteChatMetas,
+        );
+        final preCheckMessageActions = _computeSyncActions(
+          localMetas: localMessageMetas,
+          remoteMetas: remoteMessageMetas,
+        );
+        final preCheckUserActions = _computeSyncActions(
+          localMetas: localUserMetas,
+          remoteMetas: remoteUserMetas,
+        );
+
+        if (preCheckApiConfigActions.toPull.isEmpty &&
+            preCheckApiConfigActions.toCreateLocally.isEmpty &&
+            preCheckChatActions.toPull.isEmpty &&
+            preCheckChatActions.toCreateLocally.isEmpty &&
+            preCheckMessageActions.toPull.isEmpty &&
+            preCheckMessageActions.toCreateLocally.isEmpty &&
+            preCheckUserActions.toPull.isEmpty &&
+            preCheckUserActions.toCreateLocally.isEmpty) {
+          await _updateSnapshotCache(
+            localDataSource: localData,
+            remoteDataSource: remoteData,
+          );
+          return;
+        }
+
+        final apiConfigChanges = await apiConfigHandler.resolveConflicts(
+            localApiConfigMetas, remoteApiConfigMetas);
+        await userHandler.resolveConflicts(localUserMetas, remoteUserMetas);
+        
+        final conflictingChatMetas = _findConflictingMetas(localChatMetas, remoteChatMetas);
+        final conflictingMessageMetas = _findConflictingMetas(localMessageMetas, remoteMessageMetas);
+        
+        final chatChanges =
+            await chatHandler.resolveConflicts(conflictingChatMetas, remoteChatMetas);
+        final messageChanges = await messageHandler.resolveConflicts(
+            conflictingMessageMetas, remoteMessageMetas);
+
+        _updateMetasInMemory(localApiConfigMetas, apiConfigChanges);
+        _updateMetasInMemory(localChatMetas, chatChanges);
+        _updateMetasInMemory(localMessageMetas, messageChanges);
+
+        final apiConfigActions = _computeSyncActions(
+          localMetas: localApiConfigMetas,
+          remoteMetas: remoteApiConfigMetas,
+        );
+        final chatActions = _computeSyncActions(
+          localMetas: localChatMetas,
+          remoteMetas: remoteChatMetas,
+        );
+        final messageActions = _computeSyncActions(
+          localMetas: localMessageMetas,
+          remoteMetas: remoteMessageMetas,
+        );
+        final userActions = _computeSyncActions(
+          localMetas: localUserMetas,
+          remoteMetas: remoteUserMetas,
+        );
+
+        final apiConfigIdsToPull = {
+          ...apiConfigActions.toPull,
+          ...apiConfigActions.toCreateLocally,
+        }.toList();
+        final chatIdsToPull = {
+          ...chatActions.toPull,
+          ...chatActions.toCreateLocally,
+        }.toList();
+        final messageIdsToPull = {
+          ...messageActions.toPull,
+          ...messageActions.toCreateLocally,
+        }.toList();
+        final userIdsToPull = {
+          ...userActions.toPull,
+          ...userActions.toCreateLocally,
+        }.toList();
+
+        await _db.transaction(() async {
+          await Future.wait([
+            userHandler.pull(userIdsToPull),
+            apiConfigHandler.pull(apiConfigIdsToPull),
+            chatHandler.pull(chatIdsToPull),
+            messageHandler.pull(messageIdsToPull),
+          ]);
+        });
+
         await _updateSnapshotCache(
-          localDataSource: localData,
-          remoteDataSource: remoteData,
-        ); // Still update snapshot to align timestamps if needed
-        return;
+          localDataSource: (
+            localApiConfigMetas,
+            localChatMetas,
+            localMessageMetas,
+            localUserMetas,
+          ),
+          remoteDataSource: (
+            remoteApiConfigMetas,
+            remoteChatMetas,
+            remoteMessageMetas,
+            remoteUserMetas,
+          ),
+        );
+      } finally {
+        await remoteConnection?.close();
       }
-
-      // --- Step 4: Resolve ID Conflicts on differing items ---
-      final (
-        (
-          resolvedLocalApiMetas,
-          resolvedLocalChatMetas,
-          resolvedLocalMessageMetas,
-          resolvedLocalUserMetas,
-        ),
-        (
-          resolvedRemoteApiConfigMetas,
-          resolvedRemoteChatMetas,
-          resolvedRemoteMessageMetas,
-          resolvedRemoteUserMetas,
-        ),
-      ) = await _resolveChanges(
-        remoteConnection,
-        localData,
-        remoteData,
-      );
-
-      // --- Step 5: Compute Actions with resolved data ---
-      final apiConfigActions = _computeSyncActions(
-        localMetas: resolvedLocalApiMetas,
-        remoteMetas: resolvedRemoteApiConfigMetas,
-      );
-      final chatActions = _computeSyncActions(
-        localMetas: resolvedLocalChatMetas,
-        remoteMetas: resolvedRemoteChatMetas,
-      );
-      final messageActions = _computeSyncActions(
-        localMetas: resolvedLocalMessageMetas,
-        remoteMetas: resolvedRemoteMessageMetas,
-      );
-      final userActions = _computeSyncActions(
-        localMetas: resolvedLocalUserMetas,
-        remoteMetas: resolvedRemoteUserMetas,
-      );
-
-      // --- Step 5: Execute Pulls ---
-      final apiConfigIdsToPull = {
-        ...apiConfigActions.toPull,
-        ...apiConfigActions.toCreateLocally,
-      }.toList();
-      final chatIdsToPull = {
-        ...chatActions.toPull,
-        ...chatActions.toCreateLocally,
-      }.toList();
-      final messageIdsToPull = {
-        ...messageActions.toPull,
-        ...messageActions.toCreateLocally,
-      }.toList();
-      final userIdsToPull = {
-        ...userActions.toPull,
-        ...userActions.toCreateLocally,
-      }.toList();
-
-      await _db.transaction(() async {
-        await Future.wait([
-          userHandler.pull(userIdsToPull),
-          apiConfigHandler.pull(apiConfigIdsToPull),
-          chatHandler.pull(chatIdsToPull),
-          messageHandler.pull(messageIdsToPull),
-        ]);
-      });
-
-      // --- Step 6: Update snapshot after successful pull ---
-      await _updateSnapshotCache(
-        localDataSource: (
-          resolvedLocalApiMetas,
-          resolvedLocalChatMetas,
-          resolvedLocalMessageMetas,
-          resolvedLocalUserMetas,
-        ),
-        remoteDataSource: (
-          resolvedRemoteApiConfigMetas,
-          resolvedRemoteChatMetas,
-          resolvedRemoteMessageMetas,
-          resolvedRemoteUserMetas,
-        ),
-      );
     } finally {
-      await remoteConnection?.close();
+      _providerContainer.read(isSyncingProvider.notifier).state = false;
+      // 在同步结束后触发一次清理检查
+      await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
     }
   }
 
@@ -399,14 +306,26 @@ class SyncService {
       return false;
     }
 
-    _initializeSnapshotCacheIfNeeded();
+    // 同步前清理
+    await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
 
-    final isFirstSync = _snapshotCache!.values.every((map) => map.isEmpty);
+    _providerContainer.read(isSyncingProvider.notifier).state = true;
+    try {
+      _initializeSnapshotCacheIfNeeded();
 
-    if (isFirstSync) {
-      return _performInitialMergeSync();
-    } else {
-      return _performDifferentialPush();
+      final isFirstSync = _snapshotCache!.values.every((map) => map.isEmpty);
+
+      bool success;
+      if (isFirstSync) {
+        success = await _performInitialMergeSync();
+      } else {
+        success = await _performDifferentialPush();
+      }
+      return success;
+    } finally {
+      _providerContainer.read(isSyncingProvider.notifier).state = false;
+      // 在同步结束后触发一次清理检查
+      await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
     }
   }
 
@@ -467,8 +386,6 @@ class SyncService {
     final Map<String, DateTime> userSnapshotData;
 
     if (remoteDataSource != null) {
-      // After a pull, the snapshot's keys should match the remote state.
-      // For timestamps, use local if newer, otherwise use remote.
       final (
         remoteApiConfigMetas,
         remoteChatMetas,
@@ -476,7 +393,6 @@ class SyncService {
         remoteUserMetas,
       ) = remoteDataSource;
 
-      // OPTIMIZATION: Use provided local data if available, otherwise fetch it.
       final (
         localApiConfigMetas,
         localChatMetas,
@@ -504,12 +420,10 @@ class SyncService {
         Map<dynamic, SyncMeta> localMap,
       ) {
         final localMeta = localMap[remoteMeta.key];
-        // If local is newer than remote, use local timestamp.
         if (localMeta != null &&
             localMeta.updatedAt.toUtc().isAfter(remoteMeta.updatedAt.toUtc())) {
           return localMeta.updatedAt.toUtc();
         }
-        // Otherwise, use the remote timestamp.
         return remoteMeta.updatedAt.toUtc();
       }
 
@@ -530,7 +444,6 @@ class SyncService {
           meta.key.toString(): resolveTimestamp(meta, localUserMap),
       };
     } else {
-      // After a push, or when no remote data is provided, snapshot the current local state.
       final (apiConfigMetas, chatMetas, messageMetas, userMetas) = await (
         tempApiConfigHandler.getLocalMetas(),
         tempChatHandler.getLocalMetas(),
@@ -636,7 +549,6 @@ class SyncService {
         remoteUserMetas,
       ) = remoteData;
 
-      // Optimization: Pre-check for changes before resolving conflicts
       final preCheckApiConfigActions = _computeMergeActions(
         localMetas: localApiConfigMetas,
         remoteMetas: remoteApiConfigMetas,
@@ -662,50 +574,45 @@ class SyncService {
           preCheckMessageActions.toPush.isEmpty &&
           preCheckUserActions.toPull.isEmpty &&
           preCheckUserActions.toPush.isEmpty) {
-        await _updateSnapshotCache(); // Update snapshot to mark the sync as "done"
+        await _updateSnapshotCache();
         return true;
       }
 
-      final (
-        (
-          resolvedLocalApiMetas,
-          resolvedLocalChatMetas,
-          resolvedLocalMessageMetas,
-          resolvedLocalUserMetas,
-        ),
-        (
-          resolvedRemoteApiConfigMetas,
-          resolvedRemoteChatMetas,
-          resolvedRemoteMessageMetas,
-          resolvedRemoteUserMetas,
-        ),
-      ) = await _resolveChanges(
-        remoteConnection,
-        localData,
-        remoteData,
-      );
+      final apiConfigChanges = await apiConfigHandler.resolveConflicts(
+          localApiConfigMetas, remoteApiConfigMetas);
+      await userHandler.resolveConflicts(localUserMetas, remoteUserMetas);
+      
+      final conflictingChatMetas = _findConflictingMetas(localChatMetas, remoteChatMetas);
+      final conflictingMessageMetas = _findConflictingMetas(localMessageMetas, remoteMessageMetas);
+
+      final chatChanges =
+          await chatHandler.resolveConflicts(conflictingChatMetas, remoteChatMetas);
+      final messageChanges = await messageHandler.resolveConflicts(
+          conflictingMessageMetas, remoteMessageMetas);
+
+      _updateMetasInMemory(localApiConfigMetas, apiConfigChanges);
+      _updateMetasInMemory(localChatMetas, chatChanges);
+      _updateMetasInMemory(localMessageMetas, messageChanges);
 
       final apiConfigActions = _computeMergeActions(
-        localMetas: resolvedLocalApiMetas,
-        remoteMetas: resolvedRemoteApiConfigMetas,
+        localMetas: localApiConfigMetas,
+        remoteMetas: remoteApiConfigMetas,
       );
       final chatActions = _computeMergeActions(
-        localMetas: resolvedLocalChatMetas,
-        remoteMetas: resolvedRemoteChatMetas,
+        localMetas: localChatMetas,
+        remoteMetas: remoteChatMetas,
       );
       final messageActions = _computeMergeActions(
-        localMetas: resolvedLocalMessageMetas,
-        remoteMetas: resolvedRemoteMessageMetas,
+        localMetas: localMessageMetas,
+        remoteMetas: remoteMessageMetas,
       );
       final userActions = _computeMergeActions(
-        localMetas: resolvedLocalUserMetas,
-        remoteMetas: resolvedRemoteUserMetas,
+        localMetas: localUserMetas,
+        remoteMetas: remoteUserMetas,
       );
 
       await remoteConnection.execute('BEGIN');
       try {
-        // --- Execute Actions in Parallel within the same transaction ---
-        // Pull operations
         await Future.wait([
           userHandler.pull(userActions.toPull),
           apiConfigHandler.pull(apiConfigActions.toPull),
@@ -713,7 +620,6 @@ class SyncService {
           messageHandler.pull(messageActions.toPull),
         ]);
 
-        // Push operations
         await Future.wait([
           userHandler.push(userActions.toPush),
           apiConfigHandler.push(apiConfigActions.toPush),
@@ -755,7 +661,6 @@ class SyncService {
     final tempUserHandler = UserSyncHandler(_db, null);
 
     try {
-      // Step 1: Fetch local metadata
       final (
         localApiConfigMetas,
         localChatMetas,
@@ -774,7 +679,6 @@ class SyncService {
       final messageSnapshot = _snapshotCache![tempMessageHandler.entityType]!;
       final userSnapshot = _snapshotCache![tempUserHandler.entityType]!;
 
-      // Step 2: Compute differences
       final messagesToPush = localMessageMetas
           .where(
             (m) =>
@@ -857,9 +761,6 @@ class SyncService {
         );
         final userHandler = UserSyncHandler(_db, remoteConnection);
 
-        // Step 3: Resolve conflicts for NEW items before pushing
-
-        // Helper to filter for new metas
         List<SyncMeta> getNewMetas(
           List<SyncMeta> metas,
           Map<String, DateTime> snapshot,
@@ -911,7 +812,6 @@ class SyncService {
           remoteMessageMetas,
         );
 
-        // Apply ID changes to the complete "toPush" lists
         if (apiConfigIdChanges.isNotEmpty) {
           _updateMetasInMemory(apiConfigsToPush, apiConfigIdChanges);
         }
@@ -921,17 +821,14 @@ class SyncService {
         if (messageIdChanges.isNotEmpty) {
           _updateMetasInMemory(messagesToPush, messageIdChanges);
         }
-        // Note: user id changes are int->int, but sync meta uses uuid, so no update needed for user metas list
 
         final apiConfigsToPushIds = apiConfigsToPush.map((m) => m.id).toList();
         final chatsToPushIds = chatsToPush.map((m) => m.id).toList();
         final messagesToPushIds = messagesToPush.map((m) => m.id).toList();
         final usersToPushIds = usersToPush.map((m) => m.id).toList();
 
-        // Step 4: Execute deletions and pushes in a transaction
         await remoteConnection.execute('BEGIN');
         try {
-          // Deletions first, in parallel.
           await Future.wait([
             messageHandler.deleteRemotely(messageKeysToDelete),
             chatHandler.deleteRemotely(chatKeysToDelete),
@@ -939,7 +836,6 @@ class SyncService {
             userHandler.deleteRemotely(userKeysToDelete),
           ]);
 
-          // Then pushes, in parallel.
           await Future.wait([
             userHandler.push(usersToPushIds),
             apiConfigHandler.push(apiConfigsToPushIds),
@@ -949,7 +845,6 @@ class SyncService {
 
           await remoteConnection.execute('COMMIT');
 
-          // Step 5: Update snapshot on success
           await _updateSnapshotCache();
           return true;
         } catch (e) {
@@ -976,26 +871,18 @@ class SyncService {
           id: newId,
           createdAt: meta.createdAt,
           updatedAt: meta
-              .updatedAt, // Should be updated by the conflict resolution logic if needed
+              .updatedAt,
         );
       }
     }
   }
 
-  /// Deletes messages from the remote database that have a null chat_id or
-  /// a chat_id that does not correspond to an existing chat.
   Future<void> _cleanupRemoteOrphanMessages(Connection remoteConnection) async {
     try {
-      // Delete messages where chat_id is explicitly NULL.
-      // This is a safeguard for data that might have been created before the NOT NULL constraint was strictly enforced.
       await remoteConnection.execute(
         Sql('DELETE FROM messages WHERE chat_id IS NULL'),
       );
 
-      // With `ON DELETE CASCADE` in place, we no longer need to manually delete messages
-      // where the chat_id is invalid, as deleting an orphan chat would cascade.
-      // However, running this is a good practice to clean up any existing inconsistencies
-      // that were created before the foreign key constraint was added.
       await remoteConnection.execute(
         Sql('''
         DELETE FROM messages
@@ -1004,52 +891,50 @@ class SyncService {
       );
     } catch (e) {
       // Log the error but don't let it stop the entire sync process.
-      // The main sync logic might still work if the orphan messages don't affect it.
     }
   }
 
-  /// Synchronizes only the user data from the remote server.
-  ///
-  /// This method is designed to be called from the login screen on a new device,
-  /// where only user information is needed to populate the login form. It does
-  /// not sync chats, messages, or API configs to prevent data inconsistency
-  /// before a user is properly authenticated.
   Future<void> syncAllUsers() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
       return;
     }
+    
+    // 同步前清理
+    await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
 
-    Connection? remoteConnection;
+    _providerContainer.read(isSyncingProvider.notifier).state = true;
     try {
-      remoteConnection = await _remoteConnectionFactory();
-      final userHandler = UserSyncHandler(_db, remoteConnection);
+      Connection? remoteConnection;
+      try {
+        remoteConnection = await _remoteConnectionFactory();
+        final userHandler = UserSyncHandler(_db, remoteConnection);
 
-      // 1. Fetch metadata
-      final localMetas = await userHandler.getLocalMetas();
-      final remoteMetas = await userHandler.getRemoteMetas();
+        final localMetas = await userHandler.getLocalMetas();
+        final remoteMetas = await userHandler.getRemoteMetas();
 
-      // 2. Compute actions (only pull/create locally)
-      final actions = _computeSyncActions(
-        localMetas: localMetas,
-        remoteMetas: remoteMetas,
-      );
-      final userIdsToPull = {
-        ...actions.toPull,
-        ...actions.toCreateLocally,
-      }.toList();
+        final actions = _computeSyncActions(
+          localMetas: localMetas,
+          remoteMetas: remoteMetas,
+        );
+        final userIdsToPull = {
+          ...actions.toPull,
+          ...actions.toCreateLocally,
+        }.toList();
 
-      if (userIdsToPull.isEmpty) {
-        return;
+        if (userIdsToPull.isEmpty) {
+          return;
+        }
+
+        await userHandler.pull(userIdsToPull);
+      } catch (e) {
+        rethrow;
+      } finally {
+        await remoteConnection?.close();
       }
-
-      // 3. Execute pull
-      await userHandler.pull(userIdsToPull);
-    } catch (e) {
-      // Re-throw to allow the UI to catch and display the error
-      rethrow;
     } finally {
-      await remoteConnection?.close();
+      _providerContainer.read(isSyncingProvider.notifier).state = false;
+      await _providerContainer.read(chatRepositoryProvider).performSanityChecks();
     }
   }
 }

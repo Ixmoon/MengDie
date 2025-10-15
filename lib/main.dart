@@ -61,13 +61,14 @@ void main() async {
     container,
   );
 
-  // 在应用启动时，异步执行一次全面的数据同步。
-  // 这是一个“即发即忘”的操作，不会阻塞应用的启动流程。
+  // 应用启动流程：先清理，再同步
+  // 1. 执行一次数据健全性检查。
+  await container.read(chatRepositoryProvider).performSanityChecks();
+  
+  // 2. 在清理完成后，异步执行一次全面的数据同步。
+  //    这是一个“即发即忘”的操作，不会阻塞应用的启动流程。
   SyncService.instance.syncWithRemote().catchError((e, s) {});
 
-  // 读取 ChatRepositoryProvider 以触发其构造函数中的清理逻辑。
-  // 这是一个“即发即忘”的操作，因为它在构造函数内部异步执行。
-  container.read(chatRepositoryProvider);
 
   // 运行 Flutter 应用。
   // 使用 UncontrolledProviderScope 将已创建的 container 传递给应用，

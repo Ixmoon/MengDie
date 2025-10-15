@@ -18,7 +18,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
         await (db.selectOnly(db.users)
               ..where(db.users.id.isNotValue(0)) // Always exclude guest user
               ..addColumns([
-                db.users.uuid,
+                db.users.username,
                 db.users.createdAt,
                 db.users.updatedAt,
               ]))
@@ -26,7 +26,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     return rows
         .map(
           (row) => SyncMeta(
-            id: row.read(db.users.uuid)!,
+            id: row.read(db.users.username)!,
             createdAt: const MicrosecondDateTimeConverter().fromSql(
               row.read(db.users.createdAt)!,
             ),
@@ -44,7 +44,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     // as we need to know about new users created on other devices.
     // The `localIds` parameter is ignored here.
     final rows = await remoteConnection!.execute(
-      'SELECT uuid, created_at, updated_at FROM users',
+      'SELECT username, created_at, updated_at FROM users',
     );
     return rows
         .map(
@@ -62,7 +62,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     if (ids.isEmpty) return;
     final usersToPush =
         await (db.select(db.users)
-              ..where((t) => t.uuid.isIn(ids.cast<String>()))
+              ..where((t) => t.username.isIn(ids.cast<String>()))
               ..where((t) => t.id.isNotValue(0)))
             .get();
     if (usersToPush.isEmpty) return;
@@ -74,7 +74,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
   Future<void> pull(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final rows = await remoteConnection!.execute(
-      Sql.named('SELECT * FROM users WHERE uuid = ANY(@ids)'),
+      Sql.named('SELECT * FROM users WHERE username = ANY(@ids)'),
       parameters: {'ids': ids},
     );
     final usersToPull = rows
@@ -119,71 +119,21 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
     List<SyncMeta> localMetas,
     List<SyncMeta> remoteMetas,
   ) async {
-    final localIdMap = {for (var meta in localMetas) meta.id: meta};
-    final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
-    final conflictingUuids = <String>{};
-
-    for (final uuid in localIdMap.keys) {
-      if (remoteIdMap.containsKey(uuid)) {
-        final localMeta = localIdMap[uuid]!;
-        final remoteMeta = remoteIdMap[uuid]!;
-        if (localMeta.createdAt.toUtc() != remoteMeta.createdAt.toUtc()) {
-          conflictingUuids.add(uuid as String);
-        }
-      }
-    }
-
-    final idChangeMap = <int, int>{};
-    if (conflictingUuids.isNotEmpty) {
-      await db.transaction(() async {
-        for (final uuid in conflictingUuids) {
-          final change = await _resolveUserConflict(uuid);
-          if (change != null) {
-            idChangeMap.addAll(change);
-          }
-        }
-      });
-    }
-    return idChangeMap;
+    // For users, conflicts are now handled by `ON CONFLICT (username) DO UPDATE`
+    // during the push operation. This method is now a no-op but is kept
+    // for consistency with the base handler.
+    return {};
   }
 
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    // For users, the key is the UUID.
-    final uuidsToDelete = keys;
+    // For users, the key is now the username.
+    final usernamesToDelete = keys;
     await remoteConnection!.execute(
-      Sql.named('DELETE FROM users WHERE uuid = ANY(@ids)'),
-      parameters: {'ids': uuidsToDelete},
+      Sql.named('DELETE FROM users WHERE username = ANY(@ids)'),
+      parameters: {'ids': usernamesToDelete},
     );
-  }
-
-  // ============== CONFLICT RESOLUTION HELPER ==============
-
-  Future<Map<int, int>?> _resolveUserConflict(String oldUuid) async {
-    final user = await (db.select(
-      db.users,
-    )..where((tbl) => tbl.uuid.equals(oldUuid))).getSingleOrNull();
-    if (user == null) {
-      return null;
-    }
-    final oldId = user.id;
-
-    // Create a new user record with a new auto-incremented ID
-    final newUserCompanion = user
-        .toCompanion(false)
-        .copyWith(id: const Value.absent());
-    final newUser = await db.into(db.users).insertReturning(newUserCompanion);
-    final newId = newUser.id;
-
-    // Cascade the ID change to related tables (api_configs)
-    await (db.update(db.apiConfigs)..where((tbl) => tbl.userId.equals(oldId)))
-        .write(ApiConfigsCompanion(userId: Value(newId)));
-
-    // Delete the old user record
-    await (db.delete(db.users)..where((tbl) => tbl.id.equals(oldId))).go();
-
-    return {oldId: newId};
   }
 
   // ============== BATCH PUSH HELPER ==============
@@ -214,8 +164,7 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
           enable_auto_title_generation, title_generation_prompt, title_generation_api_config_id,
           enable_resume, resume_prompt, resume_api_config_id, gemini_api_keys
         )
-        ON CONFLICT (uuid) DO UPDATE SET
-          username = EXCLUDED.username,
+        ON CONFLICT (username) DO UPDATE SET
           password_hash = EXCLUDED.password_hash,
           chat_ids = EXCLUDED.chat_ids,
           enable_auto_title_generation = EXCLUDED.enable_auto_title_generation,

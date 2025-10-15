@@ -36,3 +36,9 @@ final coreAsyncInitializersProvider = Provider<List<ProviderListenable>>((ref) {
     summaryRatioProvider.notifier,
   ];
 });
+
+// --- 全局同步状态 Provider ---
+// 这个 Provider 用于跟踪应用当前是否正在进行数据同步。
+// true = 正在同步, false = 未在同步。
+// 这可以用来防止在同步过程中执行某些数据清理或回退逻辑，避免数据不一致。
+final isSyncingProvider = StateProvider<bool>((ref) => false);

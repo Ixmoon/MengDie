@@ -21,7 +21,7 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
   Future<List<SyncMeta>> getLocalMetas() async {
     final rows =
         await (db.selectOnly(db.apiConfigs)..addColumns([
-              db.apiConfigs.id,
+              db.apiConfigs.name,
               db.apiConfigs.createdAt,
               db.apiConfigs.updatedAt,
             ]))
@@ -29,7 +29,7 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     return rows
         .map(
           (row) => SyncMeta(
-            id: row.read(db.apiConfigs.id)!,
+            id: row.read(db.apiConfigs.name)!,
             createdAt: const MicrosecondDateTimeConverter().fromSql(
               row.read(db.apiConfigs.createdAt)!,
             ),
@@ -50,13 +50,13 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
       }
       rows = await remoteConnection!.execute(
         Sql.named(
-          'SELECT id, created_at, updated_at FROM api_configs WHERE id = ANY(@ids)',
+          'SELECT name, created_at, updated_at FROM api_configs WHERE name = ANY(@ids)',
         ),
         parameters: {'ids': localIds},
       );
     } else {
       rows = await remoteConnection!.execute(
-        Sql.named('SELECT id, created_at, updated_at FROM api_configs'),
+        Sql.named('SELECT name, created_at, updated_at FROM api_configs'),
       );
     }
 
@@ -76,7 +76,7 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     if (ids.isEmpty) return;
     final configsToPush = await (db.select(
       db.apiConfigs,
-    )..where((t) => t.id.isIn(ids.cast<String>()))).get();
+    )..where((t) => t.name.isIn(ids.cast<String>()))).get();
     if (configsToPush.isEmpty) return;
 
     await _batchPushApiConfigs(remoteConnection!, configsToPush);
@@ -86,7 +86,7 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
   Future<void> pull(List<dynamic> ids) async {
     if (ids.isEmpty) return;
     final rows = await remoteConnection!.execute(
-      Sql.named('SELECT * FROM api_configs WHERE id = ANY(@ids)'),
+      Sql.named('SELECT * FROM api_configs WHERE name = ANY(@ids)'),
       parameters: {'ids': ids},
     );
     final configsToPull = rows.map((r) {
@@ -141,93 +141,21 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     List<SyncMeta> localMetas,
     List<SyncMeta> remoteMetas,
   ) async {
-    final localIdMap = {for (var meta in localMetas) meta.id: meta};
-    final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
-    final conflictingIds = <String>{};
-
-    for (final id in localIdMap.keys) {
-      if (remoteIdMap.containsKey(id)) {
-        final localMeta = localIdMap[id]!;
-        final remoteMeta = remoteIdMap[id]!;
-        if (localMeta.createdAt.toUtc() != remoteMeta.createdAt.toUtc()) {
-          conflictingIds.add(id as String);
-        }
-      }
-    }
-
-    final idChangeMap = <String, String>{};
-    if (conflictingIds.isNotEmpty) {
-      await db.transaction(() async {
-        for (final id in conflictingIds) {
-          final newId = await _resolveApiConfigConflict(id);
-          if (newId != null) {
-            idChangeMap[id] = newId;
-          }
-        }
-      });
-    }
-    return idChangeMap;
+    // For API configs, conflicts are now handled by `ON CONFLICT (name) DO UPDATE`
+    // during the push operation. This method is now a no-op but is kept
+    // for consistency with the base handler.
+    return {};
   }
 
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    final idsToDelete = keys;
+    // For API configs, the key is now the name.
+    final namesToDelete = keys;
     await remoteConnection!.execute(
-      Sql.named('DELETE FROM api_configs WHERE id = ANY(@ids)'),
-      parameters: {'ids': idsToDelete},
+      Sql.named('DELETE FROM api_configs WHERE name = ANY(@ids)'),
+      parameters: {'ids': namesToDelete},
     );
-  }
-
-  String _generateUuid() {
-    final random = Random();
-    String hex(int val, int len) => val.toRadixString(16).padLeft(len, '0');
-
-    final b = List<int>.generate(16, (i) => random.nextInt(256));
-    b[6] = (b[6] & 0x0f) | 0x40; // Version 4
-    b[8] = (b[8] & 0x3f) | 0x80; // Variant 1
-
-    return '${hex(b[0], 2)}${hex(b[1], 2)}${hex(b[2], 2)}${hex(b[3], 2)}-'
-        '${hex(b[4], 2)}${hex(b[5], 2)}-'
-        '${hex(b[6], 2)}${hex(b[7], 2)}-'
-        '${hex(b[8], 2)}${hex(b[9], 2)}-'
-        '${hex(b[10], 2)}${hex(b[11], 2)}${hex(b[12], 2)}${hex(b[13], 2)}${hex(b[14], 2)}${hex(b[15], 2)}';
-  }
-
-  Future<String?> _resolveApiConfigConflict(String oldId) async {
-    final newId = _generateUuid();
-
-    final oldCompanion =
-        (await (db.select(
-              db.apiConfigs,
-            )..where((tbl) => tbl.id.equals(oldId))).getSingleOrNull())
-            ?.toCompanion(true);
-    if (oldCompanion == null) {
-      return null;
-    }
-
-    await db
-        .into(db.apiConfigs)
-        .insert(oldCompanion.copyWith(id: Value(newId)));
-    await (db.update(db.chats)..where((tbl) => tbl.apiConfigId.equals(oldId)))
-        .write(ChatsCompanion(apiConfigId: Value(newId)));
-    await (db.update(db.chats)
-          ..where((tbl) => tbl.preprocessingApiConfigId.equals(oldId)))
-        .write(ChatsCompanion(preprocessingApiConfigId: Value(newId)));
-    await (db.update(db.chats)
-          ..where((tbl) => tbl.secondaryXmlApiConfigId.equals(oldId)))
-        .write(ChatsCompanion(secondaryXmlApiConfigId: Value(newId)));
-    await (db.update(db.chats)
-          ..where((tbl) => tbl.helpMeReplyApiConfigId.equals(oldId)))
-        .write(ChatsCompanion(helpMeReplyApiConfigId: Value(newId)));
-    await (db.update(db.users)
-          ..where((tbl) => tbl.titleGenerationApiConfigId.equals(oldId)))
-        .write(UsersCompanion(titleGenerationApiConfigId: Value(newId)));
-    await (db.update(db.users)
-          ..where((tbl) => tbl.resumeApiConfigId.equals(oldId)))
-        .write(UsersCompanion(resumeApiConfigId: Value(newId)));
-    await (db.delete(db.apiConfigs)..where((tbl) => tbl.id.equals(oldId))).go();
-    return newId;
   }
 
   Future<void> _batchPushApiConfigs(
@@ -262,8 +190,8 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
           enable_reasoning_effort, reasoning_effort, thinking_budget, tool_config, tool_choice, use_default_safety_settings,
           created_at, updated_at
         )
-        ON CONFLICT (id) DO UPDATE SET
-          name = EXCLUDED.name, api_type = EXCLUDED.api_type,
+        ON CONFLICT (name) DO UPDATE SET
+          api_type = EXCLUDED.api_type,
           model = EXCLUDED.model, api_key = EXCLUDED.api_key, base_url = EXCLUDED.base_url,
           use_custom_temperature = EXCLUDED.use_custom_temperature, temperature = EXCLUDED.temperature,
           use_custom_top_p = EXCLUDED.use_custom_top_p, top_p = EXCLUDED.top_p,

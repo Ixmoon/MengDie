@@ -56,21 +56,54 @@ class ChatDao extends DatabaseAccessor<AppDatabase> with _$ChatDaoMixin {
     );
   }
 
+  /// Deletes a single chat or folder (recursively).
   Future<bool> deleteChatAndMessages(int chatId) async {
-    final count = await db.transaction(() async {
-      await (delete(messages)..where((t) => t.chatId.equals(chatId))).go();
-      return await (delete(chats)..where((t) => t.id.equals(chatId))).go();
-    });
+    final count = await deleteMultipleChatsAndMessages([chatId]);
     return count > 0;
   }
 
+  /// Recursively finds all descendant chat and folder IDs for a given list of initial IDs.
+  Future<Set<int>> _getAllDescendantIds(List<int> initialIds) async {
+    final idsToDelete = Set<int>.from(initialIds);
+    var currentLevelIds = List<int>.from(initialIds);
+
+    while (currentLevelIds.isNotEmpty) {
+      final children = await (select(chats)
+            ..where((t) => t.parentFolderId.isIn(currentLevelIds)))
+          .get();
+
+      if (children.isEmpty) {
+        break;
+      }
+
+      currentLevelIds = [];
+      for (final child in children) {
+        if (idsToDelete.add(child.id)) {
+          // Only add to the next level if it's a new ID, preventing infinite loops
+          currentLevelIds.add(child.id);
+        }
+      }
+    }
+    return idsToDelete;
+  }
+
+  /// Deletes multiple chats or folders (recursively) and their associated messages.
   Future<int> deleteMultipleChatsAndMessages(List<int> chatIds) async {
     if (chatIds.isEmpty) return 0;
+
+    // First, find all descendant IDs to ensure recursive deletion
+    final allIdsToDelete = await _getAllDescendantIds(chatIds);
+
     return db.transaction(() async {
-      await (delete(messages)..where((t) => t.chatId.isIn(chatIds))).go();
-      return await (delete(chats)..where((t) => t.id.isIn(chatIds))).go();
+      // Delete all messages associated with the identified chats/folders
+      await (delete(messages)..where((t) => t.chatId.isIn(allIdsToDelete)))
+          .go();
+      // Delete all the chats/folders themselves
+      return await (delete(chats)..where((t) => t.id.isIn(allIdsToDelete)))
+          .go();
     });
   }
+
 
   Future<void> updateChatOrder(List<ChatsCompanion> chatsToUpdate) async {
     if (chatsToUpdate.isEmpty) return;

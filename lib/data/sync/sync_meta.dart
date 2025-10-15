@@ -11,7 +11,6 @@ class SyncMeta {
     required this.updatedAt,
   });
 
-  // Use a composite key for accurate identification.
-  // IMPORTANT: Always convert DateTime to UTC for comparison to avoid timezone issues.
-  dynamic get key => (id, createdAt.toUtc());
+ // Use the id directly as the key, which can now be a business key like username or name.
+ dynamic get key => id;
 }
