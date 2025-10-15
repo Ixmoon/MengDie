@@ -4,6 +4,7 @@ import 'package:postgres/postgres.dart';
 import '../../database/app_database.dart';
 import '../sync_meta.dart';
 import 'base_sync_handler.dart';
+import '../../../domain/models/user.dart';
 import '../../database/type_converters.dart';
 
 class UserSyncHandler extends BaseSyncHandler<DriftUser> {
@@ -143,6 +144,50 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
       Sql.named('DELETE FROM users WHERE username = ANY(@ids)'),
       parameters: {'ids': usernamesToDelete},
     );
+  }
+
+  /// Deletes a user and all their associated data from the remote database.
+  Future<void> deleteUserRemotely(User user) async {
+    final c = remoteConnection!;
+    await c.execute('BEGIN');
+    try {
+      final chatIds = user.chatIds;
+
+      // We need to fetch api_config_ids from remote as they are not on the User model
+      final apiConfigsResult = await c.execute(
+        Sql.named('SELECT id FROM api_configs WHERE user_id = @userId'),
+        parameters: {'userId': user.id},
+      );
+      final apiConfigIds =
+          apiConfigsResult.map((row) => row[0] as String).toList();
+
+      if (chatIds.isNotEmpty) {
+        await c.execute(
+          Sql.named('DELETE FROM messages WHERE chat_id = ANY(@ids)'),
+          parameters: {'ids': chatIds},
+        );
+        await c.execute(
+          Sql.named('DELETE FROM chats WHERE id = ANY(@ids)'),
+          parameters: {'ids': chatIds},
+        );
+      }
+
+      if (apiConfigIds.isNotEmpty) {
+        await c.execute(
+          Sql.named('DELETE FROM api_configs WHERE id = ANY(@ids)'),
+          parameters: {'ids': apiConfigIds},
+        );
+      }
+
+      await c.execute(
+        Sql.named('DELETE FROM users WHERE id = @id'),
+        parameters: {'id': user.id},
+      );
+      await c.execute('COMMIT');
+    } catch (e) {
+      await c.execute('ROLLBACK');
+      rethrow;
+    }
   }
 
   // ============== BATCH PUSH HELPER ==============

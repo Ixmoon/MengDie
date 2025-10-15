@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'; // for Scaffold
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // for Provider
 import 'package:go_router/go_router.dart'; // for GoRouter, GoRoute
 
+import '../app/providers/auth_providers.dart';
 import '../domain/enums.dart'; // 导入枚举
 // 导入需要导航到的屏幕
 import 'screens/main_screen.dart';
@@ -33,11 +34,37 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final authNotifier = ref.watch(authProvider.notifier);
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/', // 总是从启动页开始
     debugLogDiagnostics: kDebugMode,
-    // refreshListenable 和 redirect 已被移除，所有重定向逻辑现在由 StartupScreen 处理
+    refreshListenable: GoRouterRefreshStream(authNotifier.stream),
+    redirect: (BuildContext context, GoRouterState state) {
+      final authState = ref.read(authProvider);
+      // A user is considered authenticated if they have a currentUser,
+      // which includes guest mode.
+      final bool isAuthenticated = authState.currentUser != null;
+      
+      final bool isStartup = state.matchedLocation == '/';
+      final bool isLoggingIn = state.matchedLocation == '/login';
+
+      // If the user is not authenticated at all, they should only be able to access the
+      // startup and login pages.
+      if (!isAuthenticated && !isLoggingIn && !isStartup) {
+        return '/login';
+      }
+
+      // If the user is authenticated (either as a guest or a real user),
+      // they should not be able to access the startup or login pages.
+      if (isAuthenticated && (isLoggingIn || isStartup)) {
+        return '/list';
+      }
+
+      // In all other cases, no redirect is necessary.
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/login', // 登录页

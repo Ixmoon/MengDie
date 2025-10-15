@@ -203,4 +203,48 @@ class UserRepository {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_lastLoggedInUserIdKey);
   }
+
+  /// 删除用户及其所有关联数据（本地和远程）。
+  Future<void> deleteUserAndData(int userId) async {
+    final db = _userDao.db;
+    final user = await getUserById(userId);
+    if (user == null) return; // User already deleted
+
+    // Step 1: Perform local deletion within a transaction
+    await db.transaction(() async {
+      final chatIds = user.chatIds;
+      final apiConfigIds =
+          (await db.apiConfigDao.getAllApiConfigs(userId)).map((c) => c.id).toList();
+
+      // Delete associated data first to maintain integrity
+      if (chatIds.isNotEmpty) {
+        // Correct way to delete messages using the DAO's db instance
+        await (db.delete(db.messages)..where((t) => t.chatId.isIn(chatIds))).go();
+        // This method correctly handles recursive deletion of chats and their messages
+        await db.chatDao.deleteMultipleChatsAndMessages(chatIds);
+      }
+      if (apiConfigIds.isNotEmpty) {
+        await db.apiConfigDao.clearAllApiConfigs(userId);
+      }
+
+      // Finally, delete the user using the correct Drift syntax
+      await (db.delete(db.users)..where((t) => t.id.equals(userId))).go();
+    });
+
+    // Step 2: Perform remote deletion if sync is enabled
+    final syncSettings = _ref.read(syncSettingsProvider);
+    if (syncSettings.isEnabled && syncSettings.connectionString.isNotEmpty) {
+      Connection? remoteConnection;
+      try {
+        remoteConnection = await connectRemote(syncSettings.connectionString);
+        final handler = UserSyncHandler(db, remoteConnection);
+        await handler.deleteUserRemotely(user);
+      } catch (e) {
+        // Log or handle remote deletion failure, but local deletion is already done.
+        print('Failed to delete user data remotely: $e');
+      } finally {
+        await remoteConnection?.close();
+      }
+    }
+  }
 }

@@ -285,36 +285,57 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
                 Consumer(
                   builder: (context, ref, child) {
                     final authState = ref.watch(authProvider);
-                    // 无论是注册用户还是游客，都需要一个登出/切换账户的选项。
-                    // 唯一的区别是显示的文本。
                     final bool isGuest = authState.isGuestMode;
 
-                    return ListTile(
-                      leading: Icon(isGuest ? Icons.login : Icons.logout),
-                      title: Text(isGuest ? '登录或注册' : '登出'),
-                      subtitle: Text(
-                        isGuest
-                            ? '当前为游客模式'
-                            : '当前用户: ${authState.currentUser?.username ?? ""}',
-                      ),
-                      trailing: const Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        size: 16,
-                      ),
-                      onTap: () {
-                        // 对于游客和注册用户，操作是相同的：
-                        // 1. 清除当前会话（无论是游客还是注册用户）。
-                        // 2. 返回到登录页面。
-                        ref.read(authProvider.notifier).logout();
-                        context.go('/login');
-                      },
-                      shape: RoundedRectangleBorder(
-                        side: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                          width: 0.5,
+                    return Column(
+                      children: [
+                        ListTile(
+                          leading: Icon(isGuest ? Icons.login : Icons.logout),
+                          title: Text(isGuest ? '登录或注册' : '登出'),
+                          subtitle: Text(
+                            isGuest
+                                ? '当前为游客模式'
+                                : '当前用户: ${authState.currentUser?.username ?? ""}',
+                          ),
+                          trailing: const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 16,
+                          ),
+                          onTap: () {
+                            ref.read(authProvider.notifier).logout();
+                            context.go('/login');
+                          },
+                          shape: RoundedRectangleBorder(
+                            side: BorderSide(
+                              color: Theme.of(context).dividerColor,
+                              width: 0.5,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                        if (!isGuest) ...[
+                          const SizedBox(height: 10),
+                          ListTile(
+                            leading: Icon(Icons.delete_forever,
+                                color: Theme.of(context).colorScheme.error),
+                            title: Text(
+                              '删除账户',
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error),
+                            ),
+                            subtitle: const Text(
+                                '将永久删除此账户及其所有本地和远程数据'),
+                            onTap: () => _showDeleteConfirmationDialog(context),
+                            shape: RoundedRectangleBorder(
+                              side: BorderSide(
+                                color: Theme.of(context).dividerColor,
+                                width: 0.5,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ]
+                      ],
                     );
                   },
                 ),
@@ -323,6 +344,67 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // 显示删除确认对话框
+  Future<void> _showDeleteConfirmationDialog(BuildContext context) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // 用户必须选择一个选项
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('确认删除账户'),
+          content: const SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text('此操作不可逆！'),
+                SizedBox(height: 8),
+                Text('将删除您的账户以及所有关联的 API 配置、聊天记录和消息。'),
+                SizedBox(height: 8),
+                Text('如果启用了同步，远程数据也将被一并删除。'),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('取消'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error,
+              ),
+              child: const Text('确认删除'),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop(); // Close the dialog
+                try {
+                  // Call the actual deletion logic
+                  await ref.read(authProvider.notifier).deleteCurrentUser();
+                  
+                  // Navigate to login screen after successful deletion
+                  // The logout() call inside deleteCurrentUser will reset the auth state,
+                  // and the router will automatically redirect.
+                  // We can add a snackbar for feedback.
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('账户已成功删除')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('删除失败: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -165,6 +165,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     }
   }
+
+  /// 删除当前用户及其所有数据
+  ///
+  /// 这是一个破坏性操作，会删除本地和远程的所有用户数据。
+  /// 操作成功后，会自动登出。
+  Future<void> deleteCurrentUser() async {
+    final userToDelete = state.currentUser;
+    if (userToDelete == null || state.isGuestMode) {
+      // 游客模式下不应有删除选项，但作为安全检查
+      throw Exception("Cannot delete guest user or no user is logged in.");
+    }
+
+    await _ref
+        .read(userRepositoryProvider)
+        .deleteUserAndData(userToDelete.id);
+
+    // 删除成功后，执行登出逻辑
+    await logout();
+  }
 }
 
 /// 全局认证状态提供者
