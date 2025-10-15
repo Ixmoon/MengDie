@@ -22,14 +22,11 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   }
 
   @override
-  Future<List<SyncMeta>> getLocalMetas({bool bypassUserCheck = false}) async {
+  Future<List<SyncMeta>> getLocalMetas() async {
     final chatIds = await _getChatIdsForCurrentUser();
-    if (chatIds.isEmpty && !bypassUserCheck) return [];
+    if (chatIds.isEmpty) return [];
 
-    final query = db.selectOnly(db.chats);
-    if (!bypassUserCheck) {
-      query.where(db.chats.id.isIn(chatIds));
-    }
+    final query = db.selectOnly(db.chats)..where(db.chats.id.isIn(chatIds));
     final rows =
         await (query..addColumns([
               db.chats.id,
@@ -54,26 +51,7 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   }
 
   @override
-  Future<List<SyncMeta>> getRemoteMetas({
-    List<dynamic>? localIds,
-    bool bypassUserCheck = false,
-  }) async {
-    if (bypassUserCheck) {
-      // Fetch all chats from remote, ignoring user association
-      final rows = await remoteConnection!.execute(
-        'SELECT id, created_at, updated_at FROM chats',
-      );
-      return rows
-          .map(
-            (row) => SyncMeta(
-              id: row[0] as int,
-              createdAt: row[1] as DateTime,
-              updatedAt: row[2] as DateTime,
-            ),
-          )
-          .toList();
-    }
-
+  Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
     final chatIds = await _getChatIdsForCurrentUser();
     if (chatIds.isEmpty) return [];
 
@@ -233,28 +211,6 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
         parameters: {'ids': chatIdsToDelete},
       );
     }
-  }
-
-  /// Fetches the UUIDs of all users associated with the given chat IDs.
-  Future<Set<String>> getAssociatedUserIds(List<int> chatIds) async {
-    if (chatIds.isEmpty) return {};
-
-    // This is not the most efficient way for large user bases, but given the
-    // expected scale, it's acceptable. It avoids complex SQL queries on JSON/array fields.
-    final allUsers = await db.select(db.users).get();
-    final associatedUserIds = <String>{};
-
-    for (final user in allUsers) {
-      if (user.chatIds != null) {
-        for (final chatId in chatIds) {
-          if (user.chatIds!.contains(chatId)) {
-            associatedUserIds.add(user.uuid);
-            break; // Move to the next user once a match is found
-          }
-        }
-      }
-    }
-    return associatedUserIds;
   }
 
   // ============== CONFLICT RESOLUTION HELPER (moved from SyncService) ==============

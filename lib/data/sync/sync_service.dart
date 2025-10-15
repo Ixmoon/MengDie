@@ -359,27 +359,15 @@ class SyncService {
         ...messageActions.toPull,
         ...messageActions.toCreateLocally,
       }.toList();
-      final chatIdsForUserCheck = {
-        ...chatActions.toPull,
-        ...chatActions.toCreateLocally,
-      }.toList();
-      final associatedUserIds =
-          await chatHandler.getAssociatedUserIds(chatIdsForUserCheck.cast<int>());
-
       final userIdsToPull = {
         ...userActions.toPull,
         ...userActions.toCreateLocally,
-        ...associatedUserIds,
       }.toList();
 
       await _db.transaction(() async {
-        // First, pull all users and API configs as they are dependencies for others.
         await Future.wait([
           userHandler.pull(userIdsToPull),
           apiConfigHandler.pull(apiConfigIdsToPull),
-        ]);
-        // Then, pull chats and messages which may depend on the users/api_configs.
-        await Future.wait([
           chatHandler.pull(chatIdsToPull),
           messageHandler.pull(messageIdsToPull),
         ]);
@@ -716,13 +704,11 @@ class SyncService {
 
       await remoteConnection.execute('BEGIN');
       try {
-        // --- Execute Actions in dependency order within the same transaction ---
+        // --- Execute Actions in Parallel within the same transaction ---
         // Pull operations
         await Future.wait([
           userHandler.pull(userActions.toPull),
           apiConfigHandler.pull(apiConfigActions.toPull),
-        ]);
-        await Future.wait([
           chatHandler.pull(chatActions.toPull),
           messageHandler.pull(messageActions.toPull),
         ]);
@@ -731,8 +717,6 @@ class SyncService {
         await Future.wait([
           userHandler.push(userActions.toPush),
           apiConfigHandler.push(apiConfigActions.toPush),
-        ]);
-        await Future.wait([
           chatHandler.push(chatActions.toPush),
           messageHandler.push(messageActions.toPush),
         ]);
@@ -822,22 +806,6 @@ class SyncService {
                 m.updatedAt.toUtc().isAfter(userSnapshot[m.key.toString()]!),
           )
           .toList();
-
-      if (chatsToPush.isNotEmpty) {
-        final chatIdsForUserCheck = chatsToPush.map((c) => c.id as int).toList();
-        final associatedUserIds =
-            await tempChatHandler.getAssociatedUserIds(chatIdsForUserCheck);
-        final existingUserIds = usersToPush.map((u) => u.id).toSet();
-        for (final userId in associatedUserIds) {
-          if (!existingUserIds.contains(userId)) {
-            final userMeta =
-                localUserMetas.firstWhere((m) => m.id == userId, orElse: () {
-              throw Exception("failed to find user meta for id $userId");
-            });
-            usersToPush.add(userMeta);
-          }
-        }
-      }
 
       final localUserKeys = localUserMetas.map((m) => m.key.toString()).toSet();
       final localApiConfigKeys = localApiConfigMetas
@@ -963,22 +931,18 @@ class SyncService {
         // Step 4: Execute deletions and pushes in a transaction
         await remoteConnection.execute('BEGIN');
         try {
-          // Deletions first, in reverse dependency order.
+          // Deletions first, in parallel.
           await Future.wait([
             messageHandler.deleteRemotely(messageKeysToDelete),
             chatHandler.deleteRemotely(chatKeysToDelete),
-          ]);
-          await Future.wait([
             apiConfigHandler.deleteRemotely(apiConfigKeysToDelete),
             userHandler.deleteRemotely(userKeysToDelete),
           ]);
 
-          // Then pushes, in dependency order.
+          // Then pushes, in parallel.
           await Future.wait([
             userHandler.push(usersToPushIds),
             apiConfigHandler.push(apiConfigsToPushIds),
-          ]);
-          await Future.wait([
             chatHandler.push(chatsToPushIds),
             messageHandler.push(messagesToPushIds),
           ]);
@@ -1044,12 +1008,13 @@ class SyncService {
     }
   }
 
-  /// Synchronizes all users and their associated chats from the remote server.
+  /// Synchronizes only the user data from the remote server.
   ///
-  /// This method is designed for the initial sync on a new device. It ensures
-  /// that after fetching user profiles, their corresponding chat lists are
-  /// also populated.
-  Future<void> syncUsersAndChats() async {
+  /// This method is designed to be called from the login screen on a new device,
+  /// where only user information is needed to populate the login form. It does
+  /// not sync chats, messages, or API configs to prevent data inconsistency
+  /// before a user is properly authenticated.
+  Future<void> syncAllUsers() async {
     final syncSettings = _providerContainer.read(syncSettingsProvider);
     if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
       return;
@@ -1058,50 +1023,31 @@ class SyncService {
     Connection? remoteConnection;
     try {
       remoteConnection = await _remoteConnectionFactory();
-
-      // Step 1: Sync all users, similar to syncAllUsers
       final userHandler = UserSyncHandler(_db, remoteConnection);
-      final localUserMetas = await userHandler.getLocalMetas();
-      final remoteUserMetas = await userHandler.getRemoteMetas();
-      final userActions = _computeSyncActions(
-        localMetas: localUserMetas,
-        remoteMetas: remoteUserMetas,
+
+      // 1. Fetch metadata
+      final localMetas = await userHandler.getLocalMetas();
+      final remoteMetas = await userHandler.getRemoteMetas();
+
+      // 2. Compute actions (only pull/create locally)
+      final actions = _computeSyncActions(
+        localMetas: localMetas,
+        remoteMetas: remoteMetas,
       );
       final userIdsToPull = {
-        ...userActions.toPull,
-        ...userActions.toCreateLocally,
+        ...actions.toPull,
+        ...actions.toCreateLocally,
       }.toList();
 
-      if (userIdsToPull.isNotEmpty) {
-        await userHandler.pull(userIdsToPull);
+      if (userIdsToPull.isEmpty) {
+        return;
       }
 
-      // Step 2: Fetch all remote chats associated with ANY user.
-      // This is simpler than mapping users to chats on the client-side and
-      // ensures all necessary data is pulled.
-      final chatHandler =
-          ChatSyncHandler(_db, remoteConnection, 0); // userId 0 to bypass filtering
-      final remoteChatMetas =
-          await chatHandler.getRemoteMetas(bypassUserCheck: true);
-      if (remoteChatMetas.isEmpty) return;
-
-      // Step 3: Pull all remote chats that don't exist locally or are outdated.
-      final localChatMetas =
-          await chatHandler.getLocalMetas(bypassUserCheck: true);
-      final chatActions = _computeSyncActions(
-        localMetas: localChatMetas,
-        remoteMetas: remoteChatMetas,
-      );
-      final chatIdsToPull = {
-        ...chatActions.toPull,
-        ...chatActions.toCreateLocally,
-      }.toList();
-
-      if (chatIdsToPull.isNotEmpty) {
-        await chatHandler.pull(chatIdsToPull);
-      }
+      // 3. Execute pull
+      await userHandler.pull(userIdsToPull);
     } catch (e) {
-      rethrow; // Re-throw to allow UI to handle it
+      // Re-throw to allow the UI to catch and display the error
+      rethrow;
     } finally {
       await remoteConnection?.close();
     }
