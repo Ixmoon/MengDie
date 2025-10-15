@@ -1,14 +1,16 @@
 import 'package:drift/drift.dart';
 
+import 'users.dart';
 import '../type_converters.dart';
 
 // 统一的 API 配置表
 // 该表合并了 Gemini 和 OpenAI 的配置，并包含了各自的高级生成设置
 @DataClassName('ApiConfig')
+@TableIndex(name: 'user_name_idx', columns: {#userId, #name}, unique: true)
 class ApiConfigs extends Table {
   // --- Foreign Key ---
   IntColumn get userId =>
-      integer().nullable()(); // Made nullable for safer migration
+      integer().references(Users, #id)();
 
   // --- 通用字段 ---
   TextColumn get id => text().clientDefault(() => 'temp_id')();

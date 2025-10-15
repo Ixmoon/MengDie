@@ -228,10 +228,10 @@ class SyncService {
             await chatHandler.resolveConflicts(conflictingChatMetas, remoteChatMetas);
         final messageChanges = await messageHandler.resolveConflicts(
             conflictingMessageMetas, remoteMessageMetas);
-
-        _updateMetasInMemory(localApiConfigMetas, apiConfigChanges);
-        _updateMetasInMemory(localChatMetas, chatChanges);
-        _updateMetasInMemory(localMessageMetas, messageChanges);
+        
+        _updateRemoteMetasInMemory(remoteApiConfigMetas, apiConfigChanges);
+        _updateRemoteMetasInMemory(remoteChatMetas, chatChanges);
+        _updateRemoteMetasInMemory(remoteMessageMetas, messageChanges);
 
         final apiConfigActions = _computeSyncActions(
           localMetas: localApiConfigMetas,
@@ -590,9 +590,9 @@ class SyncService {
       final messageChanges = await messageHandler.resolveConflicts(
           conflictingMessageMetas, remoteMessageMetas);
 
-      _updateMetasInMemory(localApiConfigMetas, apiConfigChanges);
-      _updateMetasInMemory(localChatMetas, chatChanges);
-      _updateMetasInMemory(localMessageMetas, messageChanges);
+      _updateRemoteMetasInMemory(remoteApiConfigMetas, apiConfigChanges);
+      _updateRemoteMetasInMemory(remoteChatMetas, chatChanges);
+      _updateRemoteMetasInMemory(remoteMessageMetas, messageChanges);
 
       final apiConfigActions = _computeMergeActions(
         localMetas: localApiConfigMetas,
@@ -778,49 +778,13 @@ class SyncService {
         final newMessageMetas = getNewMetas(messagesToPush, messageSnapshot);
         final newUserMetas = getNewMetas(usersToPush, userSnapshot);
 
-        final (
-          remoteApiConfigMetas,
-          remoteChatMetas,
-          remoteMessageMetas,
-          remoteUserMetas,
-        ) = await (
-          apiConfigHandler.getRemoteMetas(
-            localIds: newApiConfigMetas.map((m) => m.id).toList(),
-          ),
-          chatHandler.getRemoteMetas(
-            localIds: newChatMetas.map((m) => m.id).toList(),
-          ),
-          messageHandler.getRemoteMetas(
-            localIds: newMessageMetas.map((m) => m.id).toList(),
-          ),
-          userHandler.getRemoteMetas(
-            localIds: newUserMetas.map((m) => m.id).toList(),
-          ),
-        ).wait;
-
-        await userHandler.resolveConflicts(newUserMetas, remoteUserMetas);
-        final apiConfigIdChanges = await apiConfigHandler.resolveConflicts(
-          newApiConfigMetas,
-          remoteApiConfigMetas,
-        );
-        final chatIdChanges = await chatHandler.resolveConflicts(
-          newChatMetas,
-          remoteChatMetas,
-        );
-        final messageIdChanges = await messageHandler.resolveConflicts(
-          newMessageMetas,
-          remoteMessageMetas,
-        );
-
-        if (apiConfigIdChanges.isNotEmpty) {
-          _updateMetasInMemory(apiConfigsToPush, apiConfigIdChanges);
-        }
-        if (chatIdChanges.isNotEmpty) {
-          _updateMetasInMemory(chatsToPush, chatIdChanges);
-        }
-        if (messageIdChanges.isNotEmpty) {
-          _updateMetasInMemory(messagesToPush, messageIdChanges);
-        }
+        // This block is now removed. Conflict resolution for chats and messages
+        // is handled on the remote side, and it's triggered by the push operation itself
+        // if a conflict is detected. The logic inside the handlers is correct.
+        // The previous implementation was flawed because it tried to resolve conflicts
+        // before the push, and incorrectly updated local metadata.
+        // By removing this, we allow the push operation's ON CONFLICT clause (for updates)
+        // and the handler's remote conflict resolution (for ID clashes) to work as intended.
 
         final apiConfigsToPushIds = apiConfigsToPush.map((m) => m.id).toList();
         final chatsToPushIds = chatsToPush.map((m) => m.id).toList();
@@ -872,6 +836,23 @@ class SyncService {
           createdAt: meta.createdAt,
           updatedAt: meta
               .updatedAt,
+        );
+      }
+    }
+  }
+
+  void _updateRemoteMetasInMemory(
+    List<SyncMeta> remoteMetas,
+    Map<dynamic, dynamic> changes,
+  ) {
+    for (int i = 0; i < remoteMetas.length; i++) {
+      final meta = remoteMetas[i];
+      if (changes.containsKey(meta.id)) {
+        final newId = changes[meta.id];
+        remoteMetas[i] = SyncMeta(
+          id: newId,
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
         );
       }
     }

@@ -160,10 +160,12 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     final remoteIdMap = {for (var meta in remoteMetas) meta.id: meta};
     final conflictingIds = <int>{};
 
+    // Find conflicts (same ID, different createdAt)
     for (final id in localIdMap.keys) {
       if (remoteIdMap.containsKey(id)) {
         final localMeta = localIdMap[id]!;
         final remoteMeta = remoteIdMap[id]!;
+        // If local is newer, it wins. We modify the remote record.
         if (localMeta.createdAt.toUtc() != remoteMeta.createdAt.toUtc()) {
           conflictingIds.add(id as int);
         }
@@ -172,17 +174,20 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
 
     final idChangeMap = <int, int>{};
     if (conflictingIds.isNotEmpty) {
-      // Optimization: Fetch all potentially affected users into memory once.
-      final allUsers = await (db.select(db.users)).get();
-
-      await db.transaction(() async {
+      await remoteConnection!.execute('BEGIN');
+      try {
         for (final id in conflictingIds) {
-          final newId = await _resolveChatConflict(id, allUsers);
+          // Pass the connection itself as the execution context
+          final newId = await _resolveRemoteChatConflict(remoteConnection!, id);
           if (newId != null) {
             idChangeMap[id] = newId;
           }
         }
-      });
+        await remoteConnection!.execute('COMMIT');
+      } catch (e) {
+        await remoteConnection!.execute('ROLLBACK');
+        rethrow; // Propagate the error
+      }
     }
     return idChangeMap;
   }
@@ -190,31 +195,189 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
   @override
   Future<void> deleteRemotely(List<String> keys) async {
     if (keys.isEmpty) return;
-    final chatIdsToDelete = keys
-        .map((key) {
-          try {
-            return int.tryParse(key.substring(1, key.indexOf(','))) ?? -1;
-          } catch (e) {
-            return -1;
-          }
-        })
-        .where((id) => id != -1)
-        .toList();
+    // 1. Correctly parse the integer IDs from the string keys.
+    final chatIdsToDelete =
+        keys.map((key) => int.tryParse(key) ?? -1).where((id) => id != -1).toSet().toList();
 
     if (chatIdsToDelete.isNotEmpty) {
-      await remoteConnection!.execute(
+      final c = remoteConnection!;
+      
+      // 2. Before deleting, update the chat_ids array in the users table.
+      // This prevents orphaned IDs and maintains data integrity.
+      final allUsersResult = await c.execute(Sql('SELECT id, chat_ids FROM users'));
+      
+      for (final row in allUsersResult) {
+        final userId = row[0] as int;
+        final rawChatIds = row[1];
+        List<int> currentChatIds = [];
+
+        if (rawChatIds is String && rawChatIds.startsWith('{') && rawChatIds.endsWith('}')) {
+          final idsString = rawChatIds.substring(1, rawChatIds.length - 1);
+          if (idsString.isNotEmpty) {
+            currentChatIds = idsString.split(',').map((idStr) => int.tryParse(idStr.trim()) ?? 0).where((id) => id != 0).toList();
+          }
+        } else if (rawChatIds is List) {
+          currentChatIds = rawChatIds.cast<int>();
+        }
+
+        final newChatIds = currentChatIds.where((id) => !chatIdsToDelete.contains(id)).toList();
+
+        // Only update if the list has actually changed.
+        if (newChatIds.length != currentChatIds.length) {
+          final newChatIdsLiteral = newChatIds.isEmpty ? '{}' : '{${newChatIds.join(',')}}';
+          await c.execute(
+            Sql.named('UPDATE users SET chat_ids = @newChatIds::integer[] WHERE id = @userId'),
+            parameters: {'newChatIds': newChatIdsLiteral, 'userId': userId},
+          );
+        }
+      }
+
+      // 3. Delete associated messages first.
+      await c.execute(
         Sql.named('DELETE FROM messages WHERE chat_id = ANY(@ids)'),
         parameters: {'ids': chatIdsToDelete},
       );
-      await remoteConnection!.execute(
+      // 4. Finally, delete the chats themselves.
+      await c.execute(
         Sql.named('DELETE FROM chats WHERE id = ANY(@ids)'),
         parameters: {'ids': chatIdsToDelete},
       );
     }
   }
 
-  // ============== CONFLICT RESOLUTION HELPER (moved from SyncService) ==============
+  // ============== CONFLICT RESOLUTION HELPERS ==============
 
+  /// Resolves a chat ID conflict on the remote database.
+  /// This gives precedence to the local data by creating a new ID for the
+  /// conflicting remote data and updating all its foreign key references.
+  Future<int?> _resolveRemoteChatConflict(
+    Connection c,
+    int oldId,
+  ) async {
+    try {
+      // 1. Re-insert the conflicting chat to get a new ID
+      final newIdResult = await c.execute(Sql.named('''
+        INSERT INTO chats (
+          title, system_prompt, created_at, updated_at,
+          order_index, is_folder, parent_folder_id,
+          background_image_path, context_config, xml_rules, api_config_id,
+          enable_preprocessing, preprocessing_prompt, context_summary, last_summarized_message_id, preprocessing_api_config_id,
+          enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
+          continue_prompt, enable_help_me_reply, help_me_reply_prompt,
+          help_me_reply_api_config_id, help_me_reply_trigger_mode
+        )
+        SELECT
+          title, system_prompt, created_at, updated_at,
+          order_index, is_folder, parent_folder_id,
+          background_image_path, context_config, xml_rules, api_config_id,
+          enable_preprocessing, preprocessing_prompt, context_summary, last_summarized_message_id, preprocessing_api_config_id,
+          enable_secondary_xml, secondary_xml_prompt, secondary_xml_api_config_id,
+          continue_prompt, enable_help_me_reply, help_me_reply_prompt,
+          help_me_reply_api_config_id, help_me_reply_trigger_mode
+        FROM chats WHERE id = @oldId::integer
+        RETURNING id;
+      '''), parameters: {'oldId': oldId});
+
+      if (newIdResult.isEmpty || newIdResult.first.isEmpty) return null;
+      final newId = newIdResult.first.first as int;
+
+      // 2. Re-create all messages from the old chat under the new chat.
+      // This ensures messages also get new unique IDs, aligning with the "copy" strategy.
+      await c.execute(
+        Sql.named('''
+          INSERT INTO messages (chat_id, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content)
+          SELECT @newId::integer, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content
+          FROM messages WHERE chat_id = @oldId::integer
+        '''),
+        parameters: {'newId': newId, 'oldId': oldId},
+      );
+      
+      // Once messages are copied, delete the originals.
+      await c.execute(
+        Sql.named('DELETE FROM messages WHERE chat_id = @oldId::integer'),
+        parameters: {'oldId': oldId},
+      );
+
+      // 3. Update foreign keys in other related tables
+      await c.execute(
+        Sql.named(
+            'UPDATE chats SET parent_folder_id = @newId::integer WHERE parent_folder_id = @oldId::integer'),
+        parameters: {'newId': newId, 'oldId': oldId},
+      );
+
+      // 4. Update the chat_ids array in the users table.
+      // We revert to a "read-process-write" pattern, but with a robust SELECT query
+      // that uses array_position() to avoid the type inference bug with the ANY operator.
+      // Fetch ALL users and perform the check in Dart. This is a robust but less efficient
+      // workaround for the persistent driver/DB issue with array parameters in WHERE clauses.
+      final allUsersResult = await c.execute(
+        Sql('SELECT id, chat_ids FROM users'),
+      );
+
+      for (final row in allUsersResult) {
+        final userId = row[0] as int;
+        final rawChatIds = row[1];
+        List<int> oldChatIds = [];
+
+        // Manually parse the PostgreSQL array string format: '{1,2,3}'
+        if (rawChatIds is String &&
+            rawChatIds.startsWith('{') &&
+            rawChatIds.endsWith('}')) {
+          final idsString = rawChatIds.substring(1, rawChatIds.length - 1);
+          if (idsString.isNotEmpty) {
+            oldChatIds = idsString
+                .split(',')
+                .map((idStr) => int.tryParse(idStr.trim()) ?? 0)
+                .where((id) => id != 0)
+                .toList();
+          }
+        } else if (rawChatIds is List) {
+          // Handle cases where the driver might return a list directly
+          oldChatIds = rawChatIds.cast<int>();
+        }
+
+        // Check if this user is affected
+        if (oldChatIds.contains(oldId)) {
+          final newChatIds =
+              oldChatIds.map((id) => id == oldId ? newId : id).toList();
+          // Manually format the list into a PostgreSQL-compatible array literal string
+          final newChatIdsLiteral = '{${newChatIds.join(',')}}';
+          await c.execute(
+            Sql.named(
+                'UPDATE users SET chat_ids = @newChatIds::integer[] WHERE id = @userId'),
+            parameters: {
+              'newChatIds': newChatIdsLiteral,
+              'userId': userId,
+            },
+          );
+        }
+      }
+
+      // 5. Re-create all messages from the old chat under the new chat.
+      await c.execute(
+        Sql.named('''
+          INSERT INTO messages (chat_id, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content)
+          SELECT @newId::integer, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content
+          FROM messages WHERE chat_id = @oldId::integer
+        '''),
+        parameters: {'newId': newId, 'oldId': oldId},
+      );
+
+      // 6. Delete the old chat record (and its messages, thanks to CASCADE)
+      await c.execute(
+        Sql.named('DELETE FROM chats WHERE id = @oldId::integer'),
+        parameters: {'oldId': oldId},
+      );
+
+      return newId;
+    } catch (e) {
+      // If any part of the transaction fails, it will be rolled back.
+      // We rethrow to make the SyncService aware of the failure.
+      rethrow;
+    }
+  }
+
+  /// (Old method, now unused) Resolves a chat ID conflict on the local database.
   Future<int?> _resolveChatConflict(int oldId, List<DriftUser> allUsers) async {
     final chat = await (db.select(
       db.chats,
@@ -227,9 +390,8 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
       db.messages,
     )..where((tbl) => tbl.chatId.equals(oldId))).get();
 
-    final newChatCompanion = chat
-        .toCompanion(false)
-        .copyWith(id: const Value.absent());
+    final newChatCompanion =
+        chat.toCompanion(false).copyWith(id: const Value.absent());
     final newChat = await db.into(db.chats).insertReturning(newChatCompanion);
     final newId = newChat.id;
 
@@ -243,8 +405,6 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
           ..where((tbl) => tbl.parentFolderId.equals(oldId)))
         .write(ChatsCompanion(parentFolderId: Value(newId)));
 
-    // Optimization: Instead of querying the DB for each conflict, we now filter the pre-fetched user list in memory.
-    // This significantly reduces DB load when many chat conflicts occur.
     final affectedUsers = allUsers
         .where((user) => user.chatIds?.contains(oldId) ?? false)
         .toList();
@@ -252,9 +412,8 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     if (affectedUsers.isNotEmpty) {
       await db.batch((batch) {
         for (final user in affectedUsers) {
-          final newChatIds = user.chatIds!
-              .map((id) => id == oldId ? newId : id)
-              .toList();
+          final newChatIds =
+              user.chatIds!.map((id) => id == oldId ? newId : id).toList();
           batch.update(
             db.users,
             UsersCompanion(chatIds: Value(newChatIds)),
@@ -275,6 +434,45 @@ class ChatSyncHandler extends BaseSyncHandler<ChatData> {
     List<ChatData> chats,
   ) async {
     if (chats.isEmpty) return;
+
+    // --- START: Manual Conflict Resolution ---
+    // Before pushing, check for ID conflicts with different creation times.
+    final chatIdsToPush = chats.map((c) => c.id).toList();
+    final remoteMetasResult = await remoteConnection.execute(
+      Sql.named(
+        'SELECT id, created_at FROM chats WHERE id = ANY(@ids)',
+      ),
+      parameters: {'ids': chatIdsToPush},
+    );
+
+    final remoteMetas = remoteMetasResult.map((row) => SyncMeta(
+          id: row[0] as int,
+          createdAt: row[1] as DateTime,
+          updatedAt: DateTime.now(), // Not used for this check
+        )).toList();
+        
+    final localMetas = chats.map((c) => SyncMeta(
+      id: c.id,
+      createdAt: c.createdAt,
+      updatedAt: c.updatedAt,
+    )).toList();
+
+    final conflictingIds = <int>{};
+    final remoteMetaMap = {for (var meta in remoteMetas) meta.id: meta};
+
+    for (final localMeta in localMetas) {
+      final remoteMeta = remoteMetaMap[localMeta.id];
+      if (remoteMeta != null && remoteMeta.createdAt.toUtc() != localMeta.createdAt.toUtc()) {
+        conflictingIds.add(localMeta.id);
+      }
+    }
+
+    if (conflictingIds.isNotEmpty) {
+      for (final id in conflictingIds) {
+        await _resolveRemoteChatConflict(remoteConnection, id);
+      }
+    }
+    // --- END: Manual Conflict Resolution ---
 
     await remoteConnection.execute(
       Sql.named('''

@@ -38,6 +38,15 @@ class UserSyncHandler extends BaseSyncHandler<DriftUser> {
         .toList();
   }
 
+  Future<bool> remoteUsernameExists(String username) async {
+    if (remoteConnection == null) return false;
+    final result = await remoteConnection!.execute(
+      Sql.named('SELECT 1 FROM users WHERE username = @username'),
+      parameters: {'username': username},
+    );
+    return result.isNotEmpty;
+  }
+
   @override
   Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
     // For users, we fetch all remote metas regardless of local IDs,

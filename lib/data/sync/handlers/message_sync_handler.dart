@@ -159,18 +159,19 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
 
     final idChangeMap = <int, int>{};
     if (conflictingIds.isNotEmpty) {
-      // Pre-fetch any data needed for foreign key updates, similar to ChatSyncHandler.
-      // final allSomeOtherEntities = await (db.select(db.someOtherEntities)).get();
-
-      await db.transaction(() async {
+      await remoteConnection!.execute('BEGIN');
+      try {
         for (final id in conflictingIds) {
-          // Pass the pre-fetched data to the conflict resolution helper.
-          final newId = await _resolveMessageConflict(id);
+          final newId = await _resolveRemoteMessageConflict(remoteConnection!, id);
           if (newId != null) {
             idChangeMap[id] = newId;
           }
         }
-      });
+        await remoteConnection!.execute('COMMIT');
+      } catch (e) {
+        await remoteConnection!.execute('ROLLBACK');
+        rethrow;
+      }
     }
     return idChangeMap;
   }
@@ -198,6 +199,34 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     }
   }
 
+  Future<int?> _resolveRemoteMessageConflict(Connection c, int oldId) async {
+    try {
+      // 1. Re-insert the conflicting message to get a new ID.
+      final newIdResult = await c.execute(
+        Sql.named('''
+          INSERT INTO messages (chat_id, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content)
+          SELECT chat_id, role, raw_text, "timestamp", updated_at, original_xml_content, secondary_xml_content
+          FROM messages WHERE id = @oldId
+          RETURNING id;
+        '''),
+        parameters: {'oldId': oldId},
+      );
+
+      if (newIdResult.isEmpty || newIdResult.first.isEmpty) return null;
+      final newId = newIdResult.first.first as int;
+
+      // 2. Since no other tables reference message.id, we can just delete the old one.
+      await c.execute(
+        Sql.named('DELETE FROM messages WHERE id = @oldId'),
+        parameters: {'oldId': oldId},
+      );
+
+      return newId;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<int?> _resolveMessageConflict(int oldId) async {
     final message = await (db.select(
       db.messages,
@@ -207,12 +236,10 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     }
 
     // 1. Create a new message with a new ID
-    final newMessageCompanion = message
-        .toCompanion(false)
-        .copyWith(id: const Value.absent());
-    final newMessage = await db
-        .into(db.messages)
-        .insertReturning(newMessageCompanion);
+    final newMessageCompanion =
+        message.toCompanion(false).copyWith(id: const Value.absent());
+    final newMessage =
+        await db.into(db.messages).insertReturning(newMessageCompanion);
     final newId = newMessage.id;
 
     // 2. **LINKED UPDATE**: Update all foreign key references in other tables.
@@ -234,6 +261,44 @@ class MessageSyncHandler extends BaseSyncHandler<MessageData> {
     List<MessageData> messages,
   ) async {
     if (messages.isEmpty) return;
+
+    // --- START: Manual Conflict Resolution ---
+    final messageIdsToPush = messages.map((m) => m.id).toList();
+    final remoteMetasResult = await remoteConnection.execute(
+      Sql.named(
+        'SELECT id, "timestamp", updated_at FROM messages WHERE id = ANY(@ids)',
+      ),
+      parameters: {'ids': messageIdsToPush},
+    );
+
+    final remoteMetas = remoteMetasResult.map((row) {
+      final createdAt = row[1] as DateTime;
+      final updatedAt = row[2] is DateTime ? row[2] as DateTime : createdAt;
+      return SyncMeta(id: row[0] as int, createdAt: createdAt, updatedAt: updatedAt);
+    }).toList();
+
+    final localMetas = messages.map((m) => SyncMeta(
+      id: m.id,
+      createdAt: m.timestamp,
+      updatedAt: m.updatedAt ?? m.timestamp,
+    )).toList();
+
+    final conflictingIds = <int>{};
+    final remoteMetaMap = {for (var meta in remoteMetas) meta.id: meta};
+
+    for (final localMeta in localMetas) {
+      final remoteMeta = remoteMetaMap[localMeta.id];
+      if (remoteMeta != null && remoteMeta.createdAt.toUtc() != localMeta.createdAt.toUtc()) {
+        conflictingIds.add(localMeta.id);
+      }
+    }
+
+    if (conflictingIds.isNotEmpty) {
+      for (final id in conflictingIds) {
+        await _resolveRemoteMessageConflict(remoteConnection, id);
+      }
+    }
+    // --- END: Manual Conflict Resolution ---
 
     await remoteConnection.execute(
       Sql.named('''

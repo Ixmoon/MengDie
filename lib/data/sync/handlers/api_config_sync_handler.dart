@@ -19,17 +19,19 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
 
   @override
   Future<List<SyncMeta>> getLocalMetas() async {
-    final rows =
-        await (db.selectOnly(db.apiConfigs)..addColumns([
-              db.apiConfigs.name,
-              db.apiConfigs.createdAt,
-              db.apiConfigs.updatedAt,
-            ]))
-            .get();
+    if (userId == null) return [];
+    final rows = await (db.selectOnly(db.apiConfigs)
+          ..where(db.apiConfigs.userId.equals(userId!))
+          ..addColumns([
+            db.apiConfigs.name,
+            db.apiConfigs.createdAt,
+            db.apiConfigs.updatedAt,
+          ]))
+        .get();
     return rows
         .map(
           (row) => SyncMeta(
-            id: row.read(db.apiConfigs.name)!,
+            id: (userId, row.read(db.apiConfigs.name)!),
             createdAt: const MicrosecondDateTimeConverter().fromSql(
               row.read(db.apiConfigs.createdAt)!,
             ),
@@ -43,27 +45,28 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
 
   @override
   Future<List<SyncMeta>> getRemoteMetas({List<dynamic>? localIds}) async {
-    Result rows;
-    if (localIds != null) {
-      if (localIds.isEmpty) {
-        return [];
-      }
-      rows = await remoteConnection!.execute(
-        Sql.named(
-          'SELECT name, created_at, updated_at FROM api_configs WHERE name = ANY(@ids)',
-        ),
-        parameters: {'ids': localIds},
-      );
+    if (userId == null) return [];
+    
+    // localIds will be a list of tuples like [(userId, name1), (userId, name2)]
+    // We only need the names for the query.
+    final names = localIds?.map((id) => (id as (int, String)).$2).toList();
+
+    String query;
+    Map<String, dynamic> params = {'user_id': userId};
+
+    if (names != null && names.isNotEmpty) {
+      query = 'SELECT name, created_at, updated_at FROM api_configs WHERE user_id = @user_id AND name = ANY(@names)';
+      params['names'] = names;
     } else {
-      rows = await remoteConnection!.execute(
-        Sql.named('SELECT name, created_at, updated_at FROM api_configs'),
-      );
+      query = 'SELECT name, created_at, updated_at FROM api_configs WHERE user_id = @user_id';
     }
+
+    final rows = await remoteConnection!.execute(Sql.named(query), parameters: params);
 
     return rows
         .map(
           (row) => SyncMeta(
-            id: row[0] as String,
+            id: (userId, row[0] as String),
             createdAt: row[1] as DateTime,
             updatedAt: row[2] as DateTime,
           ),
@@ -73,10 +76,13 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
 
   @override
   Future<void> push(List<dynamic> ids) async {
-    if (ids.isEmpty) return;
-    final configsToPush = await (db.select(
-      db.apiConfigs,
-    )..where((t) => t.name.isIn(ids.cast<String>()))).get();
+    if (ids.isEmpty || userId == null) return;
+    // ids are tuples (userId, name)
+    final names = ids.map((id) => (id as (int, String)).$2).toList();
+    final configsToPush = await (db.select(db.apiConfigs)
+          ..where((t) => t.userId.equals(userId!))
+          ..where((t) => t.name.isIn(names)))
+        .get();
     if (configsToPush.isEmpty) return;
 
     await _batchPushApiConfigs(remoteConnection!, configsToPush);
@@ -84,10 +90,14 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
 
   @override
   Future<void> pull(List<dynamic> ids) async {
-    if (ids.isEmpty) return;
+    if (ids.isEmpty || userId == null) return;
+    // ids are tuples (userId, name)
+    final names = ids.map((id) => (id as (int, String)).$2).toList();
+    if (names.isEmpty) return;
+
     final rows = await remoteConnection!.execute(
-      Sql.named('SELECT * FROM api_configs WHERE name = ANY(@ids)'),
-      parameters: {'ids': ids},
+      Sql.named('SELECT * FROM api_configs WHERE user_id = @user_id AND name = ANY(@names)'),
+      parameters: {'user_id': userId, 'names': names},
     );
     final configsToPull = rows.map((r) {
       final map = r.toColumnMap();
@@ -141,20 +151,35 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
     List<SyncMeta> localMetas,
     List<SyncMeta> remoteMetas,
   ) async {
-    // For API configs, conflicts are now handled by `ON CONFLICT (name) DO UPDATE`
-    // during the push operation. This method is now a no-op but is kept
-    // for consistency with the base handler.
+    // With a composite key (user_id, name), true conflicts (same key, different
+    // createdAt) are extremely unlikely unless there's a bug or manual DB tampering.
+    // The `ON CONFLICT` clause in push handles the normal update case.
+    // We can leave this as a no-op for now.
     return {};
   }
 
   @override
   Future<void> deleteRemotely(List<String> keys) async {
-    if (keys.isEmpty) return;
-    // For API configs, the key is now the name.
-    final namesToDelete = keys;
+    if (keys.isEmpty || userId == null) return;
+    // keys are now string representations of the tuple, e.g., "(userId, name)"
+    // We only need the names for deletion.
+    final namesToDelete = keys
+        .map((k) {
+          try {
+            return k.split(',')[1].trim().replaceAll(')', '');
+          } catch (e) {
+            return null;
+          }
+        })
+        .where((n) => n != null)
+        .cast<String>()
+        .toList();
+
+    if (namesToDelete.isEmpty) return;
+
     await remoteConnection!.execute(
-      Sql.named('DELETE FROM api_configs WHERE name = ANY(@ids)'),
-      parameters: {'ids': namesToDelete},
+      Sql.named('DELETE FROM api_configs WHERE user_id = @user_id AND name = ANY(@names)'),
+      parameters: {'user_id': userId, 'names': namesToDelete},
     );
   }
 
@@ -190,7 +215,7 @@ class ApiConfigSyncHandler extends BaseSyncHandler<ApiConfig> {
           enable_reasoning_effort, reasoning_effort, thinking_budget, tool_config, tool_choice, use_default_safety_settings,
           created_at, updated_at
         )
-        ON CONFLICT (name) DO UPDATE SET
+        ON CONFLICT (user_id, name) DO UPDATE SET
           api_type = EXCLUDED.api_type,
           model = EXCLUDED.model, api_key = EXCLUDED.api_key, base_url = EXCLUDED.base_url,
           use_custom_temperature = EXCLUDED.use_custom_temperature, temperature = EXCLUDED.temperature,

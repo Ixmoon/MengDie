@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/settings_service.dart';
 import '../../domain/models/user.dart';
 import 'repository_providers.dart';
+import 'settings_providers.dart';
 
 /// 认证状态
 ///
@@ -111,6 +112,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// [password] 密码。
   /// 成功注册后，自动为新用户登录，并持久化其ID。
   Future<void> register(String username, String password) async {
+    final syncSettings = _ref.read(syncSettingsProvider);
+    if (syncSettings.isEnabled && syncSettings.connectionString.isNotEmpty) {
+      final remoteExists = await _ref
+          .read(userRepositoryProvider)
+          .checkRemoteUsernameExists(username);
+      if (remoteExists) {
+        throw Exception('Username already exists on the remote server');
+      }
+    }
+
     final newUser = await _ref
         .read(userRepositoryProvider)
         .createUser(username, password);

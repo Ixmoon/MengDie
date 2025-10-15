@@ -3,9 +3,13 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:postgres/postgres.dart';
 
 import '../../data/database/app_database.dart';
 import '../../data/database/daos/user_dao.dart';
+import '../../data/database/connections/remote.dart';
+import '../../data/sync/handlers/user_sync_handler.dart';
+import '../providers/settings_providers.dart';
 import '../../data/mappers/user_mapper.dart';
 import '../../domain/models/user.dart';
 import '../providers/auth_providers.dart';
@@ -99,6 +103,25 @@ class UserRepository {
         .insertReturning(newUserCompanion, mode: InsertMode.insertOrReplace);
 
     return UserMapper.fromDrift(driftUser);
+  }
+
+  Future<bool> checkRemoteUsernameExists(String username) async {
+    final syncSettings = _ref.read(syncSettingsProvider);
+    if (!syncSettings.isEnabled || syncSettings.connectionString.isEmpty) {
+      return false; // Cannot check if sync is disabled
+    }
+    Connection? remoteConnection;
+    try {
+      remoteConnection = await connectRemote(syncSettings.connectionString);
+      final handler = UserSyncHandler(_userDao.db, remoteConnection);
+      return await handler.remoteUsernameExists(username);
+    } catch (e) {
+      // Could not connect or query, assume user does not exist remotely for now.
+      // Let the sync process handle the conflict later if it was a temp issue.
+      return false;
+    } finally {
+      await remoteConnection?.close();
+    }
   }
 
   /// 获取或创建游客用户（ID为0）。
