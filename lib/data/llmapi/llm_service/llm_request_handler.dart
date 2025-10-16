@@ -80,6 +80,7 @@ class LlmRequestHandler {
     HttpRequestPayload payload, {
     required String Function(Map<String, dynamic> json) textExtractor,
     String Function(String, Map<String, dynamic>)? citationApplier,
+    bool allowEmptyResponseOnDone = false,
   }) async* {
     try {
       final response = await _dio.post<ResponseBody>(
@@ -95,6 +96,7 @@ class LlmRequestHandler {
         stream: response.data!.stream,
         textExtractor: textExtractor,
         citationApplier: citationApplier,
+        allowEmptyResponseOnDone: allowEmptyResponseOnDone,
       );
     } on DioException catch (e) {
       yield* _handleStreamDioError(e, payload.apiConfig.apiType.name);
@@ -357,6 +359,7 @@ class LlmRequestHandler {
     required Stream<List<int>> stream,
     required String Function(Map<String, dynamic> json) textExtractor,
     String Function(String, Map<String, dynamic>)? citationApplier,
+    bool allowEmptyResponseOnDone = false,
   }) async* {
     String accumulatedResponse = "";
     String carryOverBuffer = '';
@@ -379,6 +382,13 @@ class LlmRequestHandler {
             final jsonData = line.substring('data: '.length).trim();
 
             if (jsonData == '[DONE]') {
+              if (!allowEmptyResponseOnDone && accumulatedResponse.trim().isEmpty) {
+                yield LlmStreamChunk.error(
+                  "API returned an empty response.",
+                  accumulatedResponse,
+                );
+                return;
+              }
               if (citationApplier != null && lastGroundingMetadata != null) {
                 accumulatedResponse =
                     citationApplier(accumulatedResponse, lastGroundingMetadata!);

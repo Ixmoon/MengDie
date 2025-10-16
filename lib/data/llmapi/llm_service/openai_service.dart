@@ -41,6 +41,9 @@ class OpenAIService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: true,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeStream(
@@ -64,6 +67,9 @@ class OpenAIService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: true,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeParallelStream(
@@ -90,6 +96,9 @@ class OpenAIService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: false,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeOnce(
@@ -113,6 +122,9 @@ class OpenAIService implements BaseLlmService {
       generationParams: generationParams,
       llmContext: llmContext,
       stream: false,
+      isGoogleSearchEnabled: isGoogleSearchEnabled,
+      isUrlContextEnabled: isUrlContextEnabled,
+      isCodeExecutionEnabled: isCodeExecutionEnabled,
     );
 
     return _requestHandler.executeParallelOnce(
@@ -223,11 +235,13 @@ class OpenAIService implements BaseLlmService {
     if (choices != null && choices.isNotEmpty) {
       final message = choices.first['message'] as Map<String, dynamic>?;
       final content = message?['content'] as String?;
-      if (content != null) {
+      if (content != null && content.isNotEmpty) {
         return LlmResponse(parts: [MessagePart.text(content)]);
       }
     }
-    return const LlmResponse.error("Invalid response format from OpenAI.");
+    return const LlmResponse.error(
+      "Invalid response from OpenAI: No valid content found.",
+    );
   }
 
   // This method is kept separate as it's a distinct 'GET' utility
@@ -299,9 +313,15 @@ abstract class OpenAIPayload extends HttpRequestPayload {
 
 class OpenAIChatPayload extends OpenAIPayload {
   final bool stream;
+  final bool isGoogleSearchEnabled;
+  final bool isUrlContextEnabled;
+  final bool isCodeExecutionEnabled;
 
   OpenAIChatPayload({
     required this.stream,
+    this.isGoogleSearchEnabled = false,
+    this.isUrlContextEnabled = false,
+    this.isCodeExecutionEnabled = false,
     required super.apiConfig,
     required super.generationParams,
     required super.llmContext,
@@ -318,6 +338,7 @@ class OpenAIChatPayload extends OpenAIPayload {
       "stream": stream,
     };
 
+    // Gather all generation parameters from both generationParams and apiConfig
     final config = <String, dynamic>{};
     if (generationParams['temperature'] != null) {
       config['temperature'] = generationParams['temperature'];
@@ -331,12 +352,48 @@ class OpenAIChatPayload extends OpenAIPayload {
     if (generationParams['stopSequences'] != null) {
       config['stop'] = generationParams['stopSequences'];
     }
+    // For Gemini's OpenAI-compatible layer
     if (generationParams['reasoning_effort'] != null) {
       config['reasoning_effort'] = generationParams['reasoning_effort'];
+    }
+    // Add support for structured JSON output
+    if (generationParams['response_format'] != null) {
+      config['response_format'] = generationParams['response_format'];
     }
 
     requestBody.addAll(config);
 
+    // Add tools if configured
+    List<dynamic> tools = [];
+    if (apiConfig.toolConfig != null && apiConfig.toolConfig!.isNotEmpty) {
+      try {
+        final toolConfigJson = jsonDecode(apiConfig.toolConfig!);
+        if (toolConfigJson is List) {
+          tools.addAll(toolConfigJson);
+        } else if (toolConfigJson is Map<String, dynamic>) {
+          tools.add(toolConfigJson);
+        }
+      } catch (e) {
+        // Ignore invalid JSON
+      }
+    }
+
+    // Add Gemini-like tools based on flags for compatibility
+    if (isGoogleSearchEnabled) {
+      tools.add({"google_search": {}});
+    }
+    if (isUrlContextEnabled) {
+      tools.add({"url_context": {}});
+    }
+    if (isCodeExecutionEnabled) {
+      tools.add({"code_execution": {}});
+    }
+
+    if (tools.isNotEmpty) {
+      requestBody['tools'] = tools;
+    }
+
+    // Add tool_choice if configured
     if (apiConfig.toolChoice != null && apiConfig.toolChoice!.isNotEmpty) {
       // It could be a simple string like "auto" or a JSON object.
       try {
@@ -347,7 +404,6 @@ class OpenAIChatPayload extends OpenAIPayload {
         requestBody['tool_choice'] = apiConfig.toolChoice;
       }
     }
-
     return requestBody;
   }
 

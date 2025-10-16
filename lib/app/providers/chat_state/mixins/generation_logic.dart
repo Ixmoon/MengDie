@@ -411,6 +411,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     }
 
     llmStreamSubscription?.cancel();
+    bool streamHasError = false; // Flag to track errors within the stream data
     llmStreamSubscription = stream.listen(
       (chunk) {
         if (!mounted || state.isCancelled) return;
@@ -424,6 +425,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
             state = state.copyWith(uiControlledMessage: updatedMessage);
           }
         } else if (chunk.type == LlmStreamChunkType.error) {
+          streamHasError = true;
           showTopMessage('消息流错误: ${chunk.error}', backgroundColor: Colors.red);
         } else if (chunk.type == LlmStreamChunkType.finishReason) {
           showTopMessage('输出因 ${chunk.textChunk} 而中断', backgroundColor: Colors.orange);
@@ -436,7 +438,11 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
         _finalizeResponse(state.uiControlledMessage, hasError: true);
       },
       onDone: () {
-        _finalizeResponse(state.uiControlledMessage, isCancelled: state.isCancelled);
+        _finalizeResponse(
+          state.uiControlledMessage,
+          isCancelled: state.isCancelled,
+          hasError: streamHasError, // Pass the flag here
+        );
       },
       cancelOnError: true,
     );

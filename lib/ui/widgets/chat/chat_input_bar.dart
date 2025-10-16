@@ -428,6 +428,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             child: InkWell(
               onTap: notifier.toggleOutputMode,
               onLongPress: () {
+                final chatStateForMenu =
+                    ref.read(chatStateNotifierProvider(widget.chatId));
                 final RenderBox button =
                     buttonContext.findRenderObject() as RenderBox;
                 final RenderBox overlay =
@@ -514,40 +516,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       ),
                     ),
                     PopupMenuItem(
-                      enabled: false,
-                      child: Consumer(
-                        builder: (context, ref, child) {
-                          final watchedChatState = ref
-                              .watch(chatStateNotifierProvider(widget.chatId));
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('并行数'),
-                              SizedBox(
-                                width: 100,
-                                child: TextField(
-                                  controller: TextEditingController(
-                                    text: watchedChatState
-                                        .parallelRequestCount
-                                        .toString(),
-                                  ),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly
-                                  ],
-                                  decoration: const InputDecoration(
-                                    isDense: true,
-                                  ),
-                                  onSubmitted: (value) {
-                                    final count = int.tryParse(value) ?? 3;
-                                    notifier.setParallelRequestCount(count);
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
+                      enabled: chatStateForMenu.isParallelRequestEnabled,
+                      child: _ParallelCountEditor(chatId: widget.chatId),
                     ),
                   ],
                 );
@@ -948,6 +918,90 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 _buildActionButtons(),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+
+class _ParallelCountEditor extends ConsumerStatefulWidget {
+  final int chatId;
+
+  const _ParallelCountEditor({required this.chatId});
+
+  @override
+  ConsumerState<_ParallelCountEditor> createState() =>
+      __ParallelCountEditorState();
+}
+
+class __ParallelCountEditorState extends ConsumerState<_ParallelCountEditor> {
+  late final TextEditingController _controller;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    final initialCount = ref
+        .read(chatStateNotifierProvider(widget.chatId))
+        .parallelRequestCount;
+    _controller = TextEditingController(text: initialCount.toString());
+
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_focusNode.hasFocus) {
+      _saveValue();
+    }
+  }
+
+  void _saveValue() {
+    final count = int.tryParse(_controller.text) ?? 3;
+    ref
+        .read(chatStateNotifierProvider(widget.chatId).notifier)
+        .setParallelRequestCount(count);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(chatStateNotifierProvider(widget.chatId), (previous, next) {
+      if (previous?.parallelRequestCount != next.parallelRequestCount) {
+        final newText = next.parallelRequestCount.toString();
+        if (_controller.text != newText) {
+          _controller.text = newText;
+        }
+      }
+    });
+
+    final watchedChatState = ref.watch(chatStateNotifierProvider(widget.chatId));
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text('并行数'),
+        SizedBox(
+          width: 100,
+          child: TextField(
+            controller: _controller,
+            focusNode: _focusNode,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              isDense: true,
+            ),
+            onSubmitted: (value) {
+              _saveValue();
+            },
           ),
         ),
       ],

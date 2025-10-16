@@ -252,6 +252,7 @@ class GeminiService implements BaseLlmService {
     return _requestHandler.executeStream(
       payload,
       textExtractor: _extractTextOrImageFromChunk,
+      allowEmptyResponseOnDone: true,
     );
   }
 

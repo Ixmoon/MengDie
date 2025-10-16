@@ -81,7 +81,7 @@ class LlmService {
     bool isCodeExecutionEnabled = false,
   }) {
     final generationParams = _prepareGenerationParams(apiConfig);
-    generationParams['includeThoughts'] = requestThoughts;
+    generationParams['includeThoughts'] = requestThoughts; // Keep for Gemini native
 
     _activeServiceType = apiConfig.apiType;
 
@@ -121,7 +121,7 @@ class LlmService {
     bool isCodeExecutionEnabled = false,
   }) {
     final generationParams = _prepareGenerationParams(apiConfig);
-    generationParams['includeThoughts'] = requestThoughts;
+    generationParams['includeThoughts'] = requestThoughts; // Keep for Gemini native
 
     _activeServiceType = apiConfig.apiType;
 
@@ -164,7 +164,7 @@ class LlmService {
   }) async {
     final generationParams = _prepareGenerationParams(apiConfig);
     // 将摘要请求状态传递给参数 map
-    generationParams['includeThoughts'] = requestThoughts;
+    generationParams['includeThoughts'] = requestThoughts; // Keep for Gemini native
 
     _activeServiceType = apiConfig.apiType;
 
@@ -197,7 +197,7 @@ class LlmService {
     bool isCodeExecutionEnabled = false,
   }) async {
     final generationParams = _prepareGenerationParams(apiConfig);
-    generationParams['includeThoughts'] = requestThoughts;
+    generationParams['includeThoughts'] = requestThoughts; // Keep for Gemini native
 
     _activeServiceType = apiConfig.apiType;
 
