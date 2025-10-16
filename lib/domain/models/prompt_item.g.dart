@@ -8,6 +8,10 @@ part of 'prompt_item.dart';
 
 PromptItem _$PromptItemFromJson(Map<String, dynamic> json) => PromptItem(
   id: json['id'] as String,
+  type:
+      $enumDecodeNullable(_$PromptItemTypeEnumMap, json['type']) ??
+      PromptItemType.item,
+  parentId: json['parentId'] as String?,
   status:
       $enumDecodeNullable(_$PromptItemStatusEnumMap, json['status']) ??
       PromptItemStatus.off,
@@ -20,11 +24,14 @@ PromptItem _$PromptItemFromJson(Map<String, dynamic> json) => PromptItem(
   matchMessageCount: (json['matchMessageCount'] as num?)?.toInt() ?? 6,
   injectionTag: json['injectionTag'] as String? ?? '',
   order: (json['order'] as num?)?.toInt() ?? 0,
+  critical: json['critical'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$PromptItemToJson(PromptItem instance) =>
     <String, dynamic>{
       'id': instance.id,
+      'type': _$PromptItemTypeEnumMap[instance.type]!,
+      'parentId': instance.parentId,
       'status': _$PromptItemStatusEnumMap[instance.status]!,
       'keyword': instance.keyword,
       'text': instance.text,
@@ -33,7 +40,13 @@ Map<String, dynamic> _$PromptItemToJson(PromptItem instance) =>
       'matchMessageCount': instance.matchMessageCount,
       'injectionTag': instance.injectionTag,
       'order': instance.order,
+      'critical': instance.critical,
     };
+
+const _$PromptItemTypeEnumMap = {
+  PromptItemType.item: 'item',
+  PromptItemType.folder: 'folder',
+};
 
 const _$PromptItemStatusEnumMap = {
   PromptItemStatus.off: 'off',

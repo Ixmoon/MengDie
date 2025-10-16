@@ -170,47 +170,129 @@ class PromptService extends StateNotifier<PromptState> {
     await _prefs.setString(_chatStatusesKey, jsonEncode(encodedStatuses));
   }
 
-  List<PromptItem> getItemsForChat(int chatId) {
-    final chatSpecificItems = (state.chatItems[chatId] ?? [])
-        .map((item) => item.copyWith(isGlobal: false))
-        .toList();
+  /// NEW: A private helper to recursively build a flattened list for the UI.
+  List<PromptItem> _getFlattenedItems({
+    required List<PromptItem> allItems,
+    required bool isGlobal,
+    Map<String, PromptItemStatus>? chatStatusMap,
+    String? parentId,
+    PromptItemStatus? parentStatus,
+  }) {
+    final List<PromptItem> result = [];
+    final children = allItems
+        .where((item) => item.parentId == parentId)
+        .toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
 
-    final chatStatusMap = state.chatStatuses[chatId] ?? {};
-    final globalItems = state.globalItems.map((item) {
-      return item.copyWith(
-        status: chatStatusMap[item.id] ?? item.status,
-        isGlobal: true,
-      );
-    }).toList();
-
-    final combinedItems = [...chatSpecificItems, ...globalItems];
-    combinedItems.sort((a, b) {
-      // 聊天专属条目 (isGlobal: false) 总是优先于全局条目 (isGlobal: true)
-      if (a.isGlobal != b.isGlobal) {
-        return a.isGlobal ? 1 : -1;
+    for (final item in children) {
+      var effectiveStatus = item.status;
+      if (isGlobal) {
+        effectiveStatus = chatStatusMap?[item.id] ?? item.status;
       }
-      // 如果类型相同，则按其内部顺序排序
-      return a.order.compareTo(b.order);
-    });
+      
+      // Folder status overrides children's status if the folder is off.
+      if (parentStatus == PromptItemStatus.off) {
+        effectiveStatus = PromptItemStatus.off;
+      }
 
-    return combinedItems;
+      final updatedItem = item.copyWith(
+        status: effectiveStatus,
+        isGlobal: isGlobal,
+      );
+      result.add(updatedItem);
+
+      if (item.type == PromptItemType.folder) {
+        result.addAll(_getFlattenedItems(
+          allItems: allItems,
+          isGlobal: isGlobal,
+          chatStatusMap: chatStatusMap,
+          parentId: item.id,
+          parentStatus: effectiveStatus, // Pass down the folder's effective status
+        ));
+      }
+    }
+    return result;
+  }
+  
+  List<PromptItem> getItemsForChat(int chatId) {
+    final chatSpecificItems = state.chatItems[chatId] ?? [];
+    final chatStatusMap = state.chatStatuses[chatId] ?? {};
+    final globalItems = state.globalItems;
+
+    final flattenedChatItems = _getFlattenedItems(
+      allItems: chatSpecificItems,
+      isGlobal: false,
+      parentId: null, // Start from the root
+    );
+    
+    final flattenedGlobalItems = _getFlattenedItems(
+      allItems: globalItems,
+      isGlobal: true,
+      chatStatusMap: chatStatusMap,
+      parentId: null, // Start from the root
+    );
+
+    // The sorting is now handled by the recursive flattening function.
+    // We just need to combine the two lists.
+    return [...flattenedChatItems, ...flattenedGlobalItems];
   }
 
-  Future<void> addGlobalPromptItem() async {
-    final newItem =
-        PromptItem(id: _uuid.v4(), order: state.globalItems.length);
+  Future<void> addGlobalPromptItem({String? parentId}) async {
+    final siblings = state.globalItems.where((i) => i.parentId == parentId);
+    final newItem = PromptItem(
+      id: _uuid.v4(),
+      order: siblings.length,
+      parentId: parentId,
+      isGlobal: true, // FIX: Explicitly set isGlobal flag
+    );
     state = state.copyWith(globalItems: [...state.globalItems, newItem]);
     await _saveGlobalItems();
   }
 
-  Future<void> addChatPromptItem(int chatId) async {
+  Future<void> addGlobalPromptFolder({String? parentId}) async {
+    final siblings = state.globalItems.where((i) => i.parentId == parentId);
+    final newItem = PromptItem(
+      id: _uuid.v4(),
+      order: siblings.length,
+      parentId: parentId,
+      type: PromptItemType.folder,
+      keyword: 'New Folder', // Default name
+      isGlobal: true, // FIX: Explicitly set isGlobal flag
+    );
+    state = state.copyWith(globalItems: [...state.globalItems, newItem]);
+    await _saveGlobalItems();
+  }
+
+  Future<void> addChatPromptItem(int chatId, {String? parentId}) async {
     final currentChatItems = state.chatItems[chatId] ?? [];
-    final newItem = PromptItem(id: _uuid.v4(), order: currentChatItems.length);
+    final siblings = currentChatItems.where((i) => i.parentId == parentId);
+    final newItem = PromptItem(
+      id: _uuid.v4(),
+      order: siblings.length,
+      parentId: parentId,
+    );
     final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
     newChatItemsMap[chatId] = [...currentChatItems, newItem];
     state = state.copyWith(chatItems: newChatItemsMap);
     await _saveChatItems();
   }
+
+  Future<void> addChatPromptFolder(int chatId, {String? parentId}) async {
+    final currentChatItems = state.chatItems[chatId] ?? [];
+    final siblings = currentChatItems.where((i) => i.parentId == parentId);
+    final newItem = PromptItem(
+      id: _uuid.v4(),
+      order: siblings.length,
+      parentId: parentId,
+      type: PromptItemType.folder,
+      keyword: 'New Folder', // Default name
+    );
+    final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+    newChatItemsMap[chatId] = [...currentChatItems, newItem];
+    state = state.copyWith(chatItems: newChatItemsMap);
+    await _saveChatItems();
+  }
+
 
   Future<void> updatePromptItem(PromptItem item, int chatId) async {
     if (item.isGlobal) {
@@ -218,6 +300,7 @@ class PromptService extends StateNotifier<PromptState> {
         globalItems: [
           for (final i in state.globalItems)
             if (i.id == item.id)
+              // Ensure we don't overwrite parentId/type unintentionally
               i.copyWith(
                 keyword: item.keyword,
                 text: item.text,
@@ -287,11 +370,40 @@ class PromptService extends StateNotifier<PromptState> {
   }
 
   Future<void> deletePromptItem(String id, bool isGlobal, int chatId) async {
+    debugPrint(
+        '[PromptService] Deleting item. ID: $id, isGlobal: $isGlobal, chatId: $chatId');
+
+    // Helper to find all descendants of a folder
+    List<String> findAllDescendantIds(String folderId, List<PromptItem> items) {
+      final List<String> idsToDelete = [folderId];
+      // Use a queue for iterative traversal to avoid deep recursion issues
+      final queue = <String>[folderId];
+      while (queue.isNotEmpty) {
+        final currentFolderId = queue.removeAt(0);
+        final children =
+            items.where((item) => item.parentId == currentFolderId).toList();
+        for (final child in children) {
+          idsToDelete.add(child.id);
+          if (child.type == PromptItemType.folder) {
+            queue.add(child.id);
+          }
+        }
+      }
+      return idsToDelete;
+    }
+
     if (isGlobal) {
+      final itemToDelete = state.globalItems.firstWhereOrNull((i) => i.id == id);
+      if (itemToDelete == null) return;
+      
+      final idsToDelete = itemToDelete.type == PromptItemType.folder
+          ? findAllDescendantIds(id, state.globalItems)
+          : [id];
+
       state = state.copyWith(
-        globalItems: state.globalItems.where((item) => item.id != id).toList(),
+        globalItems: state.globalItems.where((item) => !idsToDelete.contains(item.id)).toList(),
         chatStatuses: state.chatStatuses.map((chatId, statusMap) {
-          statusMap.remove(id);
+          idsToDelete.forEach(statusMap.remove);
           return MapEntry(chatId, statusMap);
         }),
       );
@@ -299,56 +411,239 @@ class PromptService extends StateNotifier<PromptState> {
       await _saveStatuses();
     } else {
       final chatItems = List<PromptItem>.from(state.chatItems[chatId] ?? []);
-      chatItems.removeWhere((item) => item.id == id);
+      final itemToDelete = chatItems.firstWhereOrNull((i) => i.id == id);
+      if (itemToDelete == null) return;
+
+      final idsToDelete = itemToDelete.type == PromptItemType.folder
+          ? findAllDescendantIds(id, chatItems)
+          : [id];
+
+      final updatedChatItems = chatItems.where((item) => !idsToDelete.contains(item.id)).toList();
       final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
-      newChatItemsMap[chatId] = chatItems;
+      newChatItemsMap[chatId] = updatedChatItems;
       state = state.copyWith(chatItems: newChatItemsMap);
       await _saveChatItems();
     }
   }
 
-  Future<void> reorderChatPromptItem(
-      int chatId, int oldIndex, int newIndex) async {
-    final chatItems = List<PromptItem>.from(state.chatItems[chatId] ?? []);
-    if (chatItems.isEmpty) return;
+  Future<void> movePromptItem({
+    required int chatId,
+    required bool isGlobal,
+    required String itemId,
+    required String? newParentId,
+    required int newIndex,
+  }) async {
+    final List<PromptItem> sourceList = isGlobal
+        ? List.from(state.globalItems)
+        : List.from(state.chatItems[chatId] ?? []);
 
-    if (oldIndex < newIndex) newIndex -= 1;
-    final item = chatItems.removeAt(oldIndex);
-    chatItems.insert(newIndex, item);
+    final itemToMove = sourceList.firstWhereOrNull((i) => i.id == itemId);
+    if (itemToMove == null) return;
 
-    final updatedItems = [
-      for (int i = 0; i < chatItems.length; i++) chatItems[i].copyWith(order: i)
-    ];
+    // Prevent dragging a folder into itself
+    var currentParentId = newParentId;
+    while(currentParentId != null) {
+      if (currentParentId == itemId) {
+        return; // Invalid move
+      }
+      currentParentId = sourceList.firstWhereOrNull((i) => i.id == currentParentId)?.parentId;
+    }
 
-    final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
-    newChatItemsMap[chatId] = updatedItems;
-    state = state.copyWith(chatItems: newChatItemsMap);
+    // --- Main Logic ---
+    // 1. Remove the item from the list first.
+    sourceList.removeWhere((i) => i.id == itemId);
+
+    // 2. Reorder the original siblings if the parent has changed.
+    if (itemToMove.parentId != newParentId) {
+      final originalSiblings = sourceList
+          .where((i) => i.parentId == itemToMove.parentId)
+          .sortedBy<num>((i) => i.order)
+          .toList();
+
+      for (int i = 0; i < originalSiblings.length; i++) {
+        final index = sourceList.indexWhere((item) => item.id == originalSiblings[i].id);
+        if (index != -1) {
+          sourceList[index] = sourceList[index].copyWith(order: i);
+        }
+      }
+    }
+
+    // 3. Get the new siblings and determine the correct insertion point.
+    final newSiblings = sourceList
+        .where((i) => i.parentId == newParentId)
+        .sortedBy<num>((i) => i.order)
+        .toList();
+
+    // Clamp newIndex to be within bounds
+    int targetIndex = newIndex.clamp(0, newSiblings.length);
+
+    // 4. Insert the moved item with its new parent and temporary order.
+    final updatedItem = itemToMove.copyWith(
+      parentId: newParentId,
+      order: -1, // Temporary order
+      setParentIdToNull: newParentId == null,
+    );
+    newSiblings.insert(targetIndex, updatedItem);
+
+    // 5. Reorder all items in the new sibling list.
+    for (int i = 0; i < newSiblings.length; i++) {
+      final item = newSiblings[i];
+      // If it's the item we just moved, we add it back to the source list.
+      if (item.id == itemId) {
+         // This is the new, updated item. We add it back.
+         sourceList.add(item.copyWith(order: i));
+      } else {
+        // Otherwise, we find the existing item and update its order.
+        final index = sourceList.indexWhere((sourceItem) => sourceItem.id == item.id);
+        if (index != -1) {
+          sourceList[index] = sourceList[index].copyWith(order: i);
+        }
+      }
+    }
+
+    // --- Update state ---
+    if (isGlobal) {
+      state = state.copyWith(globalItems: sourceList);
+      await _saveGlobalItems();
+    } else {
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId] = sourceList;
+      state = state.copyWith(chatItems: newChatItemsMap);
+      await _saveChatItems();
+    }
+  }
+
+  Future<void> convertPromptType({
+    required int chatId,
+    required String itemId,
+    required bool isSourceGlobal,
+  }) async {
+    final List<PromptItem> sourceList = isSourceGlobal
+        ? List.from(state.globalItems)
+        : List.from(state.chatItems[chatId] ?? []);
+    
+    final List<PromptItem> targetList = isSourceGlobal
+        ? List.from(state.chatItems[chatId] ?? [])
+        : List.from(state.globalItems);
+
+    final itemToConvert = sourceList.firstWhereOrNull((i) => i.id == itemId);
+    if (itemToConvert == null) return;
+
+    // 1. Find all descendants if it's a folder
+    final idsToConvert = <String>[];
+    final itemsToConvert = <PromptItem>[];
+
+    if (itemToConvert.type == PromptItemType.folder) {
+      final descendants = _findAllDescendants(itemId, sourceList);
+      itemsToConvert.addAll(descendants);
+    } else {
+      itemsToConvert.add(itemToConvert);
+    }
+    idsToConvert.addAll(itemsToConvert.map((e) => e.id));
+
+
+    // 2. Remove items from the source list and re-order siblings
+    final originalParentId = itemToConvert.parentId;
+    sourceList.removeWhere((i) => idsToConvert.contains(i.id));
+    
+    final originalSiblings = sourceList
+        .where((i) => i.parentId == originalParentId)
+        .sortedBy<num>((i) => i.order)
+        .toList();
+    for (int i = 0; i < originalSiblings.length; i++) {
+      final index = sourceList.indexWhere((item) => item.id == originalSiblings[i].id);
+      if (index != -1) {
+        sourceList[index] = sourceList[index].copyWith(order: i);
+      }
+    }
+
+    // 3. Update items and add to the target list
+    final newOrderStart = targetList.where((i) => i.parentId == null).length;
+    final convertedItems = itemsToConvert.map((item) {
+      // Reset parentId for the top-level item being moved
+      final newParentId = (item.id == itemId) ? null : item.parentId;
+      // Reset status to default when moving from chat-specific to global
+      final newStatus = isSourceGlobal ? item.status : PromptItemStatus.on;
+      final newIsGlobal = !isSourceGlobal; // FIX: Invert the isGlobal flag
+
+      return item.copyWith(
+        parentId: newParentId,
+        status: newStatus,
+        isGlobal: newIsGlobal, // FIX: Apply the correct isGlobal status
+        order:
+            newOrderStart + itemsToConvert.indexWhere((e) => e.id == item.id),
+        setParentIdToNull: newParentId == null,
+      );
+    }).toList();
+
+    targetList.addAll(convertedItems);
+
+    // 4. Update state
+    if (isSourceGlobal) {
+      // Moved from Global to Chat
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId] = targetList;
+      state = state.copyWith(globalItems: sourceList, chatItems: newChatItemsMap);
+    } else {
+      // Moved from Chat to Global
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId] = sourceList;
+      state = state.copyWith(globalItems: targetList, chatItems: newChatItemsMap);
+    }
+
+    await _saveGlobalItems();
     await _saveChatItems();
   }
 
-  Future<void> reorderGlobalPromptItem(int oldIndex, int newIndex) async {
-    final globalItems = List<PromptItem>.from(state.globalItems);
-    if (globalItems.isEmpty) return;
-
-    if (oldIndex < newIndex) newIndex -= 1;
-    final item = globalItems.removeAt(oldIndex);
-    globalItems.insert(newIndex, item);
-
-    final updatedItems = [
-      for (int i = 0; i < globalItems.length; i++)
-        globalItems[i].copyWith(order: i)
-    ];
-
-    state = state.copyWith(globalItems: updatedItems);
-    await _saveGlobalItems();
+  // Helper to find all descendants including the parent
+  List<PromptItem> _findAllDescendants(String folderId, List<PromptItem> items) {
+    final List<PromptItem> result = [];
+    final parent = items.firstWhereOrNull((item) => item.id == folderId);
+    if (parent == null) return [];
+    
+    result.add(parent);
+    final children = items.where((item) => item.parentId == folderId).toList();
+    for (final child in children) {
+      if (child.type == PromptItemType.folder) {
+        result.addAll(_findAllDescendants(child.id, items));
+      } else {
+        result.add(child);
+      }
+    }
+    return result;
   }
+
 
   // --- Import/Export Logic ---
 
-  String exportGlobalPrompts() {
-    final items = state.globalItems;
-    final jsonList = items.map((item) => item.toJson()).toList();
-    return const JsonEncoder.withIndent('  ').convert(jsonList);
+  String exportPrompts({
+    required bool isGlobal,
+    required int chatId,
+    String? parentId,
+  }) {
+    final sourceList =
+        isGlobal ? state.globalItems : (state.chatItems[chatId] ?? []);
+
+    if (parentId == null) {
+      // Export all items
+      final jsonList = sourceList.map((item) => item.toJson()).toList();
+      return const JsonEncoder.withIndent('  ').convert(jsonList);
+    } else {
+      // Export specific folder and its descendants
+      final itemsToExport = _findAllDescendants(parentId, sourceList);
+      
+      // We need to adjust the parentId of the top-level folder to be null
+      // so it can be imported into other folders correctly.
+      final processedItems = itemsToExport.map((item) {
+        if (item.id == parentId) {
+          // Use a temporary object for JSON conversion without modifying the state
+          return item.copyWith(setParentIdToNull: true).toJson();
+        }
+        return item.toJson();
+      }).toList();
+
+      return const JsonEncoder.withIndent('  ').convert(processedItems);
+    }
   }
 
   String exportGlobalPromptsWithStatuses() {
@@ -362,35 +657,31 @@ class PromptService extends StateNotifier<PromptState> {
     return const JsonEncoder.withIndent('  ').convert(exportData);
   }
 
-  String exportChatPrompts(int chatId) {
-    final items = state.chatItems[chatId] ?? [];
-    final jsonList = items.map((item) => item.toJson()).toList();
-    return const JsonEncoder.withIndent('  ').convert(jsonList);
-  }
-
-  Future<bool> importGlobalPrompts(String jsonString) async {
+  Future<bool> importGlobalPrompts(String jsonString, {String? parentId}) async {
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       final itemsToImport = jsonList
           .map((json) => PromptItem.fromJson(json as Map<String, dynamic>))
           .toList();
 
-      final mergeResult = _mergePrompts(
-        state.globalItems,
-        itemsToImport,
-        isGlobalTarget: true,
+      final updatedItems = _mergePrompts(
+        existingItems: state.globalItems,
+        itemsToImport: itemsToImport,
+        targetParentId: parentId,
+        isTargetGlobal: true,
       );
 
-      state = state.copyWith(globalItems: mergeResult.items);
+      state = state.copyWith(globalItems: updatedItems);
       await _saveGlobalItems();
       return true;
     } catch (e) {
+      debugPrint('Error importing global prompts: $e');
       return false;
     }
   }
 
   Future<bool> importGlobalPromptsWithStatuses(String jsonString,
-      {bool importStatuses = true}) async {
+      {bool importStatuses = true, String? parentId}) async {
     try {
       final Map<String, dynamic> decodedJson = jsonDecode(jsonString);
       final List<dynamic> promptListJson = decodedJson['prompts'] ?? [];
@@ -400,16 +691,22 @@ class PromptService extends StateNotifier<PromptState> {
           .map((p) => PromptItem.fromJson(p as Map<String, dynamic>))
           .toList();
 
-      final mergeResult = _mergePrompts(
-        state.globalItems,
-        itemsToImport,
-        isGlobalTarget: true,
+      // Note: With hierarchical import, merging statuses becomes complex if only a sub-folder is imported.
+      // For now, we only merge statuses when importing to the root.
+      final shouldMergeStatuses = importStatuses && parentId == null;
+
+      final idMap = <String, String>{};
+      final updatedItems = _mergePrompts(
+        existingItems: state.globalItems,
+        itemsToImport: itemsToImport,
+        targetParentId: parentId,
+        isTargetGlobal: true,
+        idMap: idMap,
       );
-      final idMap = mergeResult.idMap;
-      
+
       var updatedChatStatuses = state.chatStatuses;
 
-      if (importStatuses) {
+      if (shouldMergeStatuses) {
         updatedChatStatuses = Map.from(state.chatStatuses);
         statusesJson.forEach((chatIdStr, statusMapJson) {
           final chatId = int.parse(chatIdStr);
@@ -426,21 +723,22 @@ class PromptService extends StateNotifier<PromptState> {
       }
 
       state = state.copyWith(
-        globalItems: mergeResult.items,
+        globalItems: updatedItems,
         chatStatuses: updatedChatStatuses,
       );
 
       await _saveGlobalItems();
-      if (importStatuses) {
+      if (shouldMergeStatuses) {
         await _saveStatuses();
       }
       return true;
     } catch (e) {
+      debugPrint('Error importing global prompts with statuses: $e');
       return false;
     }
   }
 
-  Future<bool> importChatPrompts(String jsonString, int chatId) async {
+  Future<bool> importChatPrompts(String jsonString, int chatId, {String? parentId}) async {
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       final itemsToImport = jsonList
@@ -448,102 +746,86 @@ class PromptService extends StateNotifier<PromptState> {
           .toList();
       
       final currentChatItems = state.chatItems[chatId] ?? [];
-      final mergeResult = _mergePrompts(
-        currentChatItems,
-        itemsToImport,
-        isGlobalTarget: false,
+      final updatedItems = _mergePrompts(
+        existingItems: currentChatItems,
+        itemsToImport: itemsToImport,
+        targetParentId: parentId,
+        isTargetGlobal: false,
       );
 
       final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
-      newChatItemsMap[chatId] = mergeResult.items;
+      newChatItemsMap[chatId] = updatedItems;
       state = state.copyWith(chatItems: newChatItemsMap);
       await _saveChatItems();
       return true;
     } catch (e) {
+      debugPrint('Error importing chat prompts: $e');
       return false;
     }
   }
 
-  _MergeResult _mergePrompts(List<PromptItem> existingItems,
-      List<PromptItem> itemsToImport, {
-      required bool isGlobalTarget,
-      }) {
+  List<PromptItem> _mergePrompts({
+    required List<PromptItem> existingItems,
+    required List<PromptItem> itemsToImport,
+    required String? targetParentId,
+    required bool isTargetGlobal, // Know where we are importing to.
+    Map<String, String>? idMap, // Optional: for status merging
+  }) {
+    debugPrint(
+        '[PromptService] Merging prompts. TargetParentID: $targetParentId. Items to import: ${itemsToImport.length}');
     final updatedItems = List<PromptItem>.from(existingItems);
-    final idMap = <String, String>{};
+    final newIdMap = idMap ?? <String, String>{};
 
-    // --- Optimization Start ---
-    // Create a lookup map for existing items to achieve O(1) average lookup time.
-    // The key is the prompt text, and the value is the index in the `updatedItems` list.
-    // We only add the first occurrence to mimic the behavior of `firstWhereOrNull`.
-    final existingItemIndexMap = <String, int>{};
-    for (int i = 0; i < updatedItems.length; i++) {
-      final itemText = updatedItems[i].text;
-      if (!existingItemIndexMap.containsKey(itemText)) {
-        existingItemIndexMap[itemText] = i;
+    // 1. Create a map of old parentId to list of children.
+    final importParentMap = <String?, List<PromptItem>>{};
+    for (final item in itemsToImport) {
+      (importParentMap[item.parentId] ??= []).add(item);
+    }
+
+    // 2. Generate new IDs and create a map from old ID to new PromptItem.
+    //    This is the ideal place to fix the isGlobal flag.
+    final oldIdToNewItemMap = <String, PromptItem>{};
+    for (final item in itemsToImport) {
+      final newId = _uuid.v4();
+      newIdMap[item.id] = newId;
+      oldIdToNewItemMap[item.id] =
+          item.copyWith(id: newId, isGlobal: isTargetGlobal);
+    }
+
+    // 3. Recursively build the new structure.
+    final List<PromptItem> itemsToAdd = [];
+    final int orderStart =
+        updatedItems.where((i) => i.parentId == targetParentId).length;
+
+    void buildHierarchy(String? oldParentId, String? newParentId, int depth) {
+      final children = importParentMap[oldParentId] ?? [];
+      int orderOffset = 0;
+      for (final oldChild in children) {
+        final newChild = oldIdToNewItemMap[oldChild.id];
+        if (newChild == null) continue;
+
+        // The order for root items starts from orderStart, for nested items it's relative to their siblings.
+        final order = (depth == 0) ? orderStart + orderOffset : orderOffset;
+
+        itemsToAdd.add(newChild.copyWith(
+          parentId: newParentId,
+          order: order,
+          setParentIdToNull: newParentId == null,
+        ));
+        orderOffset++;
+
+        // Recurse for grandchildren
+        buildHierarchy(oldChild.id, newChild.id, depth + 1);
       }
     }
-    // --- Optimization End ---
 
-    for (final itemToImport in itemsToImport) {
-      // --- Optimization Start ---
-      // Use the map for efficient lookup.
-      final existingItemIndex = existingItemIndexMap[itemToImport.text];
-      // --- Optimization End ---
+    // Start building from the root of the imported items (old parentId = null)
+    buildHierarchy(null, targetParentId, 0);
 
-      if (existingItemIndex != null) {
-        final existingItem = updatedItems[existingItemIndex];
-        // Case 1 & 2: Text matches, item exists.
-        idMap[itemToImport.id] = existingItem.id;
+    debugPrint('[PromptService] Finished merging. Total items to add: ${itemsToAdd.length}');
 
-        final existingKeywords = existingItem.keyword
-            .split(',')
-            .map((k) => k.trim())
-            .where((k) => k.isNotEmpty)
-            .toSet();
-        final importKeywords = itemToImport.keyword
-            .split(',')
-            .map((k) => k.trim())
-            .where((k) => k.isNotEmpty)
-            .toSet();
-
-        if (const SetEquality().equals(existingKeywords, importKeywords)) {
-          // Case 1: Keywords also match -> Overwrite config
-          updatedItems[existingItemIndex] = existingItem.copyWith(
-            status: isGlobalTarget
-                ? itemToImport.status // Keep status for global items
-                : existingItem.status, // Preserve existing status for chat items
-            injectionRole: itemToImport.injectionRole,
-            injectionPosition: itemToImport.injectionPosition,
-            matchMessageCount: itemToImport.matchMessageCount,
-          );
-        } else {
-          // Case 2: Keywords differ -> Merge keywords
-          existingKeywords.addAll(importKeywords);
-          updatedItems[existingItemIndex] =
-              existingItem.copyWith(keyword: existingKeywords.join(', '));
-        }
-      } else {
-        // Case 3: New text -> Add as new item
-        final newItem = itemToImport.copyWith(
-          id: _uuid.v4(),
-          order: updatedItems.length,
-          // When importing a chat-item to global, its status becomes the default.
-          // When importing a global-item to chat, its status is carried over.
-          status: itemToImport.status,
-        );
-        idMap[itemToImport.id] = newItem.id;
-        updatedItems.add(newItem);
-        // --- Optimization Start ---
-        // Add the new item to the map to handle cases where the import list
-        // contains duplicate texts. This ensures we find the newly added item
-        // for subsequent duplicates in the import list.
-        if (!existingItemIndexMap.containsKey(newItem.text)) {
-          existingItemIndexMap[newItem.text] = updatedItems.length - 1;
-        }
-        // --- Optimization End ---
-      }
-    }
-    return _MergeResult(items: updatedItems, idMap: idMap);
+    updatedItems.addAll(itemsToAdd);
+    return updatedItems;
   }
 
   // --- Chat Duplication Logic ---
@@ -578,10 +860,19 @@ class PromptService extends StateNotifier<PromptState> {
     await _saveChatItems();
     await _saveStatuses();
   }
-}
 
-class _MergeResult {
-  final List<PromptItem> items;
-  final Map<String, String> idMap;
-  _MergeResult({required this.items, required this.idMap});
+  // --- Data Cleanup ---
+  Future<void> clearDataForChat(int chatId) async {
+    debugPrint('[PromptService] Clearing all prompt data for chatId: $chatId');
+    final newChatItems = Map<int, List<PromptItem>>.from(state.chatItems)..remove(chatId);
+    final newChatStatuses = Map<int, Map<String, PromptItemStatus>>.from(state.chatStatuses)..remove(chatId);
+
+    state = state.copyWith(
+      chatItems: newChatItems,
+      chatStatuses: newChatStatuses,
+    );
+
+    await _saveChatItems();
+    await _saveStatuses();
+  }
 }

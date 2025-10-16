@@ -78,7 +78,9 @@ class ChatRepository {
   Future<bool> deleteChat(int chatId) async {
     final success = await _chatDao.deleteChatAndMessages(chatId);
     if (success) {
-      // 删除成功后，执行一次清理，以防被删除的是一个文件夹
+      // Also clear associated prompt data
+      await _ref.read(promptServiceProvider.notifier).clearDataForChat(chatId);
+      // Perform sanity checks in case a folder was deleted
       await performSanityChecks();
     }
     return success;
@@ -88,7 +90,12 @@ class ChatRepository {
     if (chatIds.isEmpty) return 0;
     final deletedCount = await _chatDao.deleteMultipleChatsAndMessages(chatIds);
     if (deletedCount > 0) {
-      // 删除成功后，执行一次清理，以防被删除的包含文件夹
+      // Also clear associated prompt data for each deleted chat
+      final promptService = _ref.read(promptServiceProvider.notifier);
+      for (final chatId in chatIds) {
+        await promptService.clearDataForChat(chatId);
+      }
+      // Perform sanity checks in case folders were deleted
       await performSanityChecks();
     }
     return deletedCount;

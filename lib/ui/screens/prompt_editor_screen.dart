@@ -1,18 +1,20 @@
 import 'dart:convert';
-import 'dart:ui'; // For lerpDouble
+import 'dart:convert';
 
+import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/providers/chat_state_providers.dart';
 import '../../app/services/prompt_service.dart';
 import '../../domain/enums.dart';
 import '../../domain/models/prompt_item.dart';
-import '../widgets/widget_utils.dart';
 
+// Main Screen Widget
 class PromptEditorScreen extends ConsumerStatefulWidget {
   const PromptEditorScreen({super.key});
 
@@ -23,15 +25,16 @@ class PromptEditorScreen extends ConsumerStatefulWidget {
 class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  
+  final List<String?> _chatFolderPath = [null]; 
+  final List<String?> _globalFolderPath = [null];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
     });
   }
 
@@ -41,48 +44,107 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
     super.dispose();
   }
 
+  List<String?> get _currentFolderPath =>
+      _tabController.index == 0 ? _chatFolderPath : _globalFolderPath;
+
+  String? get _currentParentId => _currentFolderPath.last;
+
+  void _navigateToFolder(String folderId) {
+    setState(() {
+      _currentFolderPath.add(folderId);
+    });
+  }
+
+  void _navigateBack() {
+    if (_currentFolderPath.length > 1) {
+      setState(() {
+        _currentFolderPath.removeLast();
+      });
+    }
+  }
+
   Future<void> _exportPrompts(BuildContext context, int chatId) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final promptService = ref.read(promptServiceProvider.notifier);
     final isGlobal = _tabController.index == 1;
+    final parentId = _currentParentId;
 
     String jsonString;
     String fileName;
+    String exportScope = 'all'; // 'all' or 'folder'
 
-    if (isGlobal) {
-      final exportOption = await showDialog<String>(
+    // If inside a folder, ask the user what to export
+    if (parentId != null) {
+      final scope = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('选择导出选项'),
-          content: const Text('您想如何导出全局提示词？'),
+          title: const Text('选择导出范围'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop('items_only'),
-              child: const Text('仅导出条目'),
+              onPressed: () => Navigator.of(context).pop('folder'),
+              child: const Text('仅导出当前文件夹'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop('with_statuses'),
-              child: const Text('导出并包含所有开关状态'),
+              onPressed: () => Navigator.of(context).pop('all'),
+              child: const Text('导出整个列表'),
             ),
           ],
         ),
       );
-
-      if (exportOption == null) {
+      if (scope == null) {
         scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导出已取消')));
         return;
       }
+      exportScope = scope;
+    }
 
-      if (exportOption == 'with_statuses') {
-        jsonString = promptService.exportGlobalPromptsWithStatuses();
-        fileName = 'mengdie_prompts_global_with_statuses.json';
+    if (isGlobal) {
+      if (exportScope == 'all') {
+        // Only show status option when exporting the whole global list
+        final exportOption = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('选择导出选项'),
+            content: const Text('您想如何导出全局提示词？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('items_only'),
+                child: const Text('仅导出条目'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('with_statuses'),
+                child: const Text('导出并包含所有开关状态'),
+              ),
+            ],
+          ),
+        );
+
+        if (exportOption == null) {
+          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('导出已取消')));
+          return;
+        }
+
+        if (exportOption == 'with_statuses') {
+          jsonString = promptService.exportGlobalPromptsWithStatuses();
+          fileName = 'mengdie_prompts_global_with_statuses.json';
+        } else {
+          jsonString = promptService.exportPrompts(isGlobal: true, chatId: chatId);
+          fileName = 'mengdie_prompts_global.json';
+        }
       } else {
-        jsonString = promptService.exportGlobalPrompts();
-        fileName = 'mengdie_prompts_global.json';
+        // Exporting a specific folder from global
+        jsonString = promptService.exportPrompts(isGlobal: true, chatId: chatId, parentId: parentId);
+        fileName = 'mengdie_prompts_global_folder.json';
       }
     } else {
-      jsonString = promptService.exportChatPrompts(chatId);
-      fileName = 'mengdie_prompts_chat_$chatId.json';
+      // Exporting from chat
+      jsonString = promptService.exportPrompts(
+          isGlobal: false,
+          chatId: chatId,
+          parentId: exportScope == 'folder' ? parentId : null);
+      fileName = exportScope == 'folder'
+          ? 'mengdie_prompts_chat_${chatId}_folder.json'
+          : 'mengdie_prompts_chat_$chatId.json';
     }
 
     try {
@@ -130,9 +192,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
 
       if (decodedJson is Map<String, dynamic> &&
           decodedJson.containsKey('prompts')) {
-        // This is a global export with statuses structure
         if (!isGlobal) {
-          // On chat tab, ask to import prompts only
           final importPromptsOnly = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
@@ -151,17 +211,14 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
           );
           if (importPromptsOnly == true) {
             final promptsJson = jsonEncode(decodedJson['prompts']);
-            success =
-                await promptService.importChatPrompts(promptsJson, chatId);
+            success = await promptService.importChatPrompts(promptsJson, chatId, parentId: _currentParentId);
           } else {
             scaffoldMessenger
                 .showSnackBar(const SnackBar(content: Text('导入已取消')));
             return;
           }
         } else {
-          // On global tab, handle normally
           if (decodedJson.containsKey('statuses')) {
-            // with statuses
             final importStatuses = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
@@ -187,22 +244,19 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
             }
             success = await promptService.importGlobalPromptsWithStatuses(
                 jsonString,
-                importStatuses: importStatuses);
+                importStatuses: importStatuses, parentId: _currentParentId);
           } else {
-            // map with only 'prompts', no 'statuses'
             final promptsJson = jsonEncode(decodedJson['prompts']);
-            success = await promptService.importGlobalPrompts(promptsJson);
+            success = await promptService.importGlobalPrompts(promptsJson, parentId: _currentParentId);
           }
         }
       } else if (decodedJson is List) {
-        // Simple list format (from chat or global-items-only)
         if (isGlobal) {
-          success = await promptService.importGlobalPrompts(jsonString);
+          success = await promptService.importGlobalPrompts(jsonString, parentId: _currentParentId);
         } else {
-          success = await promptService.importChatPrompts(jsonString, chatId);
+          success = await promptService.importChatPrompts(jsonString, chatId, parentId: _currentParentId);
         }
       } else {
-        // Invalid format
         success = false;
       }
 
@@ -217,9 +271,49 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
     }
   }
 
+  void _showAddItemMenu(BuildContext context, int chatId) {
+    final promptService = ref.read(promptServiceProvider.notifier);
+    final isGlobal = _tabController.index == 1;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.description),
+                title: const Text('新建条目'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isGlobal) {
+                    promptService.addGlobalPromptItem(parentId: _currentParentId);
+                  } else {
+                    promptService.addChatPromptItem(chatId, parentId: _currentParentId);
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('新建文件夹'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (isGlobal) {
+                    promptService.addGlobalPromptFolder(parentId: _currentParentId);
+                  } else {
+                    promptService.addChatPromptFolder(chatId, parentId: _currentParentId);
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final promptService = ref.read(promptServiceProvider.notifier);
     final activeChatId = ref.watch(activeChatIdProvider);
 
     if (activeChatId == null) {
@@ -228,532 +322,467 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
         body: const Center(child: Text('没有活动的聊天。请先选择一个聊天。')),
       );
     }
+    
+    final promptState = ref.watch(promptServiceProvider);
+    final allItems = _tabController.index == 0
+        ? promptState.chatItems[activeChatId] ?? []
+        : promptState.globalItems;
 
-    ref.watch(promptServiceProvider);
-    final allPrompts = promptService.getItemsForChat(activeChatId);
-    final chatPrompts = allPrompts.where((p) => !p.isGlobal).toList();
-    final globalPrompts = allPrompts.where((p) => p.isGlobal).toList();
+    final currentFolderName = (_currentParentId != null)
+        ? allItems.firstWhereOrNull((i) => i.id == _currentParentId)?.keyword ?? '...'
+        : '根目录';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('提示词注入'),
+        leading: (_currentFolderPath.length > 1)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: _navigateBack,
+              )
+            : null,
+        title: Text('提示词注入 - $currentFolderName'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () {
-              if (_tabController.index == 0) {
-                promptService.addChatPromptItem(activeChatId);
-              } else {
-                promptService.addGlobalPromptItem();
-              }
-            },
+            onPressed: () => _showAddItemMenu(context, activeChatId),
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'import') {
-                _importPrompts(context, activeChatId);
-              } else if (value == 'export') {
-                _exportPrompts(context, activeChatId);
-              }
+              if (value == 'import') _importPrompts(context, activeChatId);
+              if (value == 'export') _exportPrompts(context, activeChatId);
             },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'import',
-                child: Text('导入 (当前标签页)'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'export',
-                child: Text('导出 (当前标签页)'),
-              ),
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'import', child: Text('导入 (当前标签页)')),
+              PopupMenuItem(value: 'export', child: Text('导出 (当前标签页)')),
             ],
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '聊天专属'),
-            Tab(text: '全局'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
+          child: Stack(
+            children: [
+              TabBar(
+                controller: _tabController,
+                tabs: const [Tab(text: '聊天专属'), Tab(text: '全局')],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTabDragTarget(
+                      context: context,
+                      isTargetGlobal: false, // This is the Chat tab
+                      chatId: activeChatId,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildTabDragTarget(
+                      context: context,
+                      isTargetGlobal: true, // This is the Global tab
+                      chatId: activeChatId,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
           _PromptListView(
-            key: const ValueKey('chat_prompts'),
-            items: chatPrompts,
+            key: ValueKey('chat_$_currentParentId'),
             chatId: activeChatId,
             isGlobalList: false,
+            currentParentId: _chatFolderPath.last,
+            onFolderTap: (folderId) => setState(() => _chatFolderPath.add(folderId)),
           ),
           _PromptListView(
-            key: const ValueKey('global_prompts'),
-            items: globalPrompts,
+            key: ValueKey('global_$_currentParentId'),
             chatId: activeChatId,
             isGlobalList: true,
+            currentParentId: _globalFolderPath.last,
+            onFolderTap: (folderId) => setState(() => _globalFolderPath.add(folderId)),
           ),
         ],
       ),
     );
   }
+
+  Widget _buildTabDragTarget({
+    required BuildContext context,
+    required bool isTargetGlobal,
+    required int chatId,
+  }) {
+    final promptService = ref.read(promptServiceProvider.notifier);
+    return DragTarget<Map<String, dynamic>>(
+      builder: (context, candidateData, rejectedData) {
+        bool isDragOver = false;
+        if (candidateData.isNotEmpty) {
+          final bool? dragSourceIsGlobal =
+              candidateData.first?['isGlobal'] as bool?;
+          if (dragSourceIsGlobal != null) {
+            isDragOver = dragSourceIsGlobal != isTargetGlobal;
+          }
+        }
+        return GestureDetector(
+          onTap: () {
+            _tabController.index = isTargetGlobal ? 1 : 0;
+          },
+          child: Container(
+            height: kTextTabBarHeight,
+            color: isDragOver
+                ? Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5)
+                : Colors.transparent,
+          ),
+        );
+      },
+      onWillAccept: (data) {
+        if (data == null) return false;
+        final bool isDragSourceGlobal = data['isGlobal'] as bool;
+        return isDragSourceGlobal != isTargetGlobal;
+      },
+      onAccept: (data) {
+        final String itemId = data['id'] as String;
+        final bool isSourceGlobal = data['isGlobal'] as bool;
+        promptService.convertPromptType(
+          chatId: chatId,
+          itemId: itemId,
+          isSourceGlobal: isSourceGlobal,
+        );
+      },
+    );
+  }
 }
 
+// ListView Widget
 class _PromptListView extends ConsumerWidget {
-  final List<PromptItem> items;
   final int chatId;
   final bool isGlobalList;
+  final String? currentParentId;
+  final ValueChanged<String> onFolderTap;
 
   const _PromptListView({
     super.key,
-    required this.items,
     required this.chatId,
     required this.isGlobalList,
+    required this.currentParentId,
+    required this.onFolderTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final promptService = ref.read(promptServiceProvider.notifier);
+    final promptState = ref.watch(promptServiceProvider);
+
+    final allItems = isGlobalList
+        ? promptState.globalItems
+        : promptState.chatItems[chatId] ?? [];
+    final chatStatusMap = promptState.chatStatuses[chatId] ?? {};
+
+    // Get the items for the current folder and apply chat-specific statuses if it's a global list.
+    final itemsToShow = allItems
+        .where((item) => item.parentId == currentParentId)
+        .map((item) {
+          if (isGlobalList && chatStatusMap.containsKey(item.id)) {
+            // This global item has a specific status for this chat, so override it.
+            return item.copyWith(status: chatStatusMap[item.id]);
+          }
+          return item;
+        })
+        .sortedBy<num>((item) => item.order)
+        .toList();
+
+    if (itemsToShow.isEmpty) {
+      return DragTarget<Map<String, dynamic>>(
+        builder: (context, candidateData, rejectedData) =>
+            const Center(child: Text('此文件夹为空')),
+        onAccept: (data) {
+          final isGlobal = data['isGlobal'] as bool;
+          if (isGlobal != isGlobalList) return; // Don't accept drops from other list type
+          
+          promptService.movePromptItem(
+            chatId: chatId,
+            isGlobal: isGlobalList,
+            itemId: data['id'] as String,
+            newParentId: currentParentId,
+            newIndex: 0,
+          );
+        },
+      );
+    }
+    
+    return ListView.builder(
+      itemCount: itemsToShow.length + 2,
+      itemBuilder: (context, index) {
+        // Top drop zone
+        if (index == 0) {
+          return DragTarget<Map<String, dynamic>>(
+            builder: (context, candidateData, rejectedData) {
+              final isForeign = candidateData.isNotEmpty && (candidateData.first?['isGlobal'] as bool? ?? isGlobalList) != isGlobalList;
+              return Container(
+                height: 40.0,
+                width: double.infinity,
+                alignment: Alignment.bottomCenter,
+                child: candidateData.isNotEmpty && !isForeign
+                    ? Container(
+                        height: 2,
+                        color: Theme.of(context).colorScheme.secondary,
+                      )
+                    : null,
+              );
+            },
+            onWillAccept: (data) {
+              if (data == null || (data['isGlobal'] as bool) != isGlobalList) return false;
+              if (itemsToShow.isEmpty) return true;
+              return itemsToShow.first.id != (data['id'] as String);
+            },
+            onAccept: (data) {
+              promptService.movePromptItem(
+                chatId: chatId,
+                isGlobal: isGlobalList,
+                itemId: data['id'] as String,
+                newParentId: currentParentId,
+                newIndex: 0,
+              );
+            },
+          );
+        }
+
+        // Bottom drop zone
+        if (index == itemsToShow.length + 1) {
+          return DragTarget<Map<String, dynamic>>(
+            builder: (context, candidateData, rejectedData) {
+              final isForeign = candidateData.isNotEmpty && (candidateData.first?['isGlobal'] as bool? ?? isGlobalList) != isGlobalList;
+              return Container(
+                height: 60.0,
+                width: double.infinity,
+                decoration: candidateData.isNotEmpty && !isForeign
+                    ? BoxDecoration(
+                        border: Border(
+                            top: BorderSide(
+                                color: Theme.of(context).colorScheme.secondary,
+                                width: 2)))
+                    : null,
+              );
+            },
+             onWillAccept: (data) => data != null && (data['isGlobal'] as bool) == isGlobalList,
+            onAccept: (data) {
+              promptService.movePromptItem(
+                chatId: chatId,
+                isGlobal: isGlobalList,
+                itemId: data['id'] as String,
+                newParentId: currentParentId,
+                newIndex: itemsToShow.length,
+              );
+            },
+          );
+        }
+
+        final item = itemsToShow[index - 1];
+
+        final child = item.type == PromptItemType.folder
+            ? _PromptFolderCard(
+                item: item, chatId: chatId, onTap: () => onFolderTap(item.id))
+            : _PromptItemCard(item: item, chatId: chatId);
+
+        return LongPressDraggable<Map<String, dynamic>>(
+          data: {'id': item.id, 'isGlobal': isGlobalList},
+          feedback: Opacity(
+            opacity: 0.7,
+            child: Material(
+              elevation: 4.0,
+              child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width - 32),
+                  child: child),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.4, child: child),
+          onDragStarted: () => FocusScope.of(context).unfocus(),
+          child: DragTarget<Map<String, dynamic>>(
+            builder: (context, candidateData, rejectedData) {
+              final isForeign = candidateData.isNotEmpty && (candidateData.first?['isGlobal'] as bool? ?? isGlobalList) != isGlobalList;
+              return Container(
+                decoration: candidateData.isNotEmpty && !isForeign
+                    ? BoxDecoration(
+                        border: Border(
+                            top: BorderSide(
+                                color: Theme.of(context).colorScheme.secondary,
+                                width: 2)))
+                    : null,
+                child: child,
+              );
+            },
+            onWillAccept: (data) {
+              if (data == null) return false;
+              final isGlobal = data['isGlobal'] as bool;
+              final draggedId = data['id'] as String;
+              return isGlobal == isGlobalList && draggedId != item.id;
+            },
+            onAccept: (data) {
+              promptService.movePromptItem(
+                chatId: chatId,
+                isGlobal: isGlobalList,
+                itemId: data['id'] as String,
+                newParentId: currentParentId,
+                newIndex: index - 1, // Adjusted index
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Folder Card Widget
+class _PromptFolderCard extends ConsumerWidget {
+  final PromptItem item;
+  final int chatId;
+  final VoidCallback onTap;
+
+  const _PromptFolderCard({
+    required this.item,
+    required this.chatId,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final promptService = ref.read(promptServiceProvider.notifier);
+    
+    return DragTarget<Map<String, dynamic>>(
+      builder: (context, candidateData, rejectedData) {
+        final isForeign = candidateData.isNotEmpty && (candidateData.first?['isGlobal'] as bool? ?? item.isGlobal) != item.isGlobal;
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: candidateData.isNotEmpty && !isForeign ? Theme.of(context).colorScheme.secondaryContainer : null,
+          child: ListTile(
+            leading: Icon(Icons.folder, color: Theme.of(context).colorScheme.secondary),
+            title: Text(item.keyword, style: const TextStyle(fontWeight: FontWeight.bold)),
+            onTap: onTap,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Switch(
+                  value: item.status != PromptItemStatus.off,
+                  onChanged: (value) {
+                    promptService.updateStatusForChat(chatId, item.id, value ? PromptItemStatus.on : PromptItemStatus.off);
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                     showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('确认删除'),
+                        content: const Text('您确定要删除此文件夹及其所有内容吗？'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+                          TextButton(
+                            onPressed: () {
+                              promptService.deletePromptItem(item.id, item.isGlobal, chatId);
+                              Navigator.of(context).pop();
+                            },
+                            child: const Text('删除'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      onWillAccept: (data) {
+        if (data == null) return false;
+        final isGlobal = data['isGlobal'] as bool;
+        final draggedId = data['id'] as String;
+
+        if (isGlobal != item.isGlobal) return false; // Must be from the same list type
+        if (draggedId == item.id) return false;
+
+        final allItems = item.isGlobal ? ref.read(promptServiceProvider).globalItems : (ref.read(promptServiceProvider).chatItems[chatId] ?? []);
+        String? currentParentId = item.id;
+        while(currentParentId != null) {
+          if (currentParentId == draggedId) return false; // Prevent nesting folder in itself
+          currentParentId = allItems.firstWhereOrNull((i) => i.id == currentParentId)?.parentId;
+        }
+        return true;
+      },
+      onAccept: (data) {
+        promptService.movePromptItem(
+          chatId: chatId,
+          isGlobal: item.isGlobal,
+          itemId: data['id'] as String,
+          newParentId: item.id,
+          newIndex: 9999,
+        );
+      },
+    );
+  }
+}
+
+// Item Card Widget (Simplified)
+class _PromptItemCard extends ConsumerWidget {
+  final PromptItem item;
+  final int chatId;
+
+  const _PromptItemCard({
+    required this.item,
+    required this.chatId,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final promptService = ref.read(promptServiceProvider.notifier);
 
-    if (items.isEmpty) {
-      return Center(
-        child: Text('没有${isGlobalList ? "全局" : "聊天专属"}条目.'),
-      );
-    }
-
-    return ReorderableListView.builder(
-      buildDefaultDragHandles: false,
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        return _PromptItemCard(
-          key: ValueKey(items[index].id),
-          item: items[index],
-          chatId: chatId,
-          index: index,
-        );
-      },
-      onReorder: (oldIndex, newIndex) {
-        if (isGlobalList) {
-          promptService.reorderGlobalPromptItem(oldIndex, newIndex);
-        } else {
-          promptService.reorderChatPromptItem(chatId, oldIndex, newIndex);
-        }
-      },
-      onReorderStart: (_) {
-        FocusScope.of(context).unfocus();
-      },
-      proxyDecorator: (Widget child, int index, Animation<double> animation) {
-        return AnimatedBuilder(
-          animation: animation,
-          builder: (BuildContext context, Widget? child) {
-            final double animValue =
-                Curves.easeInOut.transform(animation.value);
-            const double elevation = 0;
-            final double scale = lerpDouble(1, 1.02, animValue)!;
-            return Transform.scale(
-              scale: scale,
-              child: Material(
-                elevation: elevation,
-                color: Colors.transparent,
-                child: child,
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ListTile(
+        leading: const Icon(Icons.description_outlined),
+        title: Text(
+          item.keyword.isNotEmpty ? item.keyword : '(无关键词)',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(
+          '状态: ${item.status.name} | ${item.text}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () {
+          context.go(
+            '/chat/prompt-editor/item/${item.id}?chatId=$chatId&isGlobal=${item.isGlobal}',
+          );
+        },
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.red),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('确认删除'),
+                content: const Text('您确定要删除此提示词吗？'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+                  TextButton(
+                    onPressed: () {
+                      promptService.deletePromptItem(item.id, item.isGlobal, chatId);
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('删除'),
+                  ),
+                ],
               ),
             );
           },
-          child: child,
-        );
-      },
-    );
-  }
-}
-
-class _PromptItemCard extends ConsumerStatefulWidget {
-  final PromptItem item;
-  final int chatId;
-  final int index;
-
-  const _PromptItemCard({
-    super.key,
-    required this.item,
-    required this.chatId,
-    required this.index,
-  });
-
-  @override
-  ConsumerState<_PromptItemCard> createState() => _PromptItemCardState();
-}
-
-class _PromptItemCardState extends ConsumerState<_PromptItemCard> {
-  late final TextEditingController _keywordController;
-  late final TextEditingController _textController;
-  late final TextEditingController _positionController;
-  late final TextEditingController _matchCountController;
-  late final TextEditingController _injectionTagController;
-
-  @override
-  void initState() {
-    super.initState();
-    _keywordController = TextEditingController(text: widget.item.keyword);
-    _textController = TextEditingController(text: widget.item.text);
-    _positionController = TextEditingController(
-      text: widget.item.injectionPosition.toString(),
-    );
-    _matchCountController = TextEditingController(
-      text: widget.item.matchMessageCount.toString(),
-    );
-    _injectionTagController =
-        TextEditingController(text: widget.item.injectionTag);
-  }
-
-  @override
-  void dispose() {
-    _keywordController.dispose();
-    _textController.dispose();
-    _positionController.dispose();
-    _matchCountController.dispose();
-    _injectionTagController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant _PromptItemCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.item.keyword != oldWidget.item.keyword &&
-        _keywordController.text != widget.item.keyword) {
-      _keywordController.text = widget.item.keyword;
-    }
-    if (widget.item.text != oldWidget.item.text &&
-        _textController.text != widget.item.text) {
-      _textController.text = widget.item.text;
-    }
-    final newPosition = widget.item.injectionPosition.toString();
-    if (widget.item.injectionPosition != oldWidget.item.injectionPosition &&
-        _positionController.text != newPosition) {
-      _positionController.text = newPosition;
-    }
-    final newMatchCount = widget.item.matchMessageCount.toString();
-    if (widget.item.matchMessageCount != oldWidget.item.matchMessageCount &&
-        _matchCountController.text != newMatchCount) {
-      _matchCountController.text = newMatchCount;
-    }
-    if (widget.item.injectionTag != oldWidget.item.injectionTag &&
-        _injectionTagController.text != widget.item.injectionTag) {
-      _injectionTagController.text = widget.item.injectionTag;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final promptService = ref.read(promptServiceProvider.notifier);
-    final item = widget.item;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    IntrinsicWidth(
-                      child: DropdownButtonFormField<PromptItemStatus>(
-                        value: item.status,
-                        decoration: const InputDecoration(
-                          labelText: '状态',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        icon: const SizedBox.shrink(),
-                        onChanged: (PromptItemStatus? newValue) {
-                          if (newValue != null) {
-                            promptService.updateStatusForChat(
-                              widget.chatId,
-                              item.id,
-                              newValue,
-                            );
-                          }
-                        },
-                        items: PromptItemStatus.values
-                            .map((value) => DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value.toString().split('.').last),
-                                ))
-                            .toList(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 1,
-                      child: TextFormField(
-                        controller: _positionController,
-                        decoration: const InputDecoration(
-                          labelText: '注入位置',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        onChanged: (value) {
-                          final newPosition = int.tryParse(value) ?? 2;
-                          promptService.updatePromptItem(
-                            item.copyWith(injectionPosition: newPosition),
-                            widget.chatId,
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 1,
-                      child: TextFormField(
-                        controller: _matchCountController,
-                        decoration: const InputDecoration(
-                          labelText: '匹配数',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly
-                        ],
-                        onChanged: (value) {
-                          final newCount = int.tryParse(value) ?? 6;
-                          promptService.updatePromptItem(
-                            item.copyWith(matchMessageCount: newCount),
-                            widget.chatId,
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title: const Text('确认删除'),
-                              content: const Text('您确定要删除此提示词吗？'),
-                              actions: <Widget>[
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                  },
-                                  child: const Text('取消'),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    promptService.deletePromptItem(
-                                        item.id, item.isGlobal, widget.chatId);
-                                    Navigator.of(context).pop();
-                                  },
-                                  child: const Text('删除'),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    IntrinsicWidth(
-                      child: DropdownButtonFormField<MessageRole>(
-                        value: item.injectionRole,
-                        decoration: const InputDecoration(
-                          labelText: '注入角色',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        icon: const SizedBox.shrink(),
-                        items: MessageRole.values
-                            .map((role) => DropdownMenuItem(
-                                  value: role,
-                                  child: Text(role.toString().split('.').last),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            promptService.updatePromptItem(
-                              item.copyWith(injectionRole: value),
-                              widget.chatId,
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 1,
-                      child: TextFormField(
-                        controller: _injectionTagController,
-                        decoration: const InputDecoration(
-                          labelText: 'XML标签',
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        onChanged: (value) {
-                          promptService.updatePromptItem(
-                            item.copyWith(injectionTag: value),
-                            widget.chatId,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (item.status == PromptItemStatus.match) ...[
-                      Tooltip(
-                        message:
-                            '如果勾选，则“关键词”中所有由逗号分隔的词\n都必须在上下文中出现才会触发注入。',
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Checkbox(
-                              value: item.critical,
-                              onChanged: (bool? newValue) {
-                                if (newValue != null) {
-                                  promptService.updatePromptItem(
-                                    item.copyWith(critical: newValue),
-                                    widget.chatId,
-                                  );
-                                }
-                              },
-                            ),
-                            const Text('全部匹配'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: TextFormField(
-                          controller: _keywordController,
-                          decoration: InputDecoration(
-                            labelText: '关键词',
-                            border: const OutlineInputBorder(),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 14),
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.fullscreen),
-                              tooltip: '全屏编辑',
-                              onPressed: () async {
-                                final newText =
-                                    await showFullScreenTextEditor(
-                                  context,
-                                  initialText: item.keyword,
-                                  chatId: widget.chatId,
-                                  title: '编辑关键词',
-                                  initialLanguage: 'text',
-                                );
-                                if (newText != null &&
-                                    newText != item.keyword) {
-                                  promptService.updatePromptItem(
-                                    item.copyWith(keyword: newText),
-                                    widget.chatId,
-                                  );
-                                }
-                              },
-                            ),
-                          ),
-                          onChanged: (value) {
-                            promptService.updatePromptItem(
-                              item.copyWith(keyword: value),
-                              widget.chatId,
-                            );
-                          }),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _textController,
-                  decoration: InputDecoration(
-                    labelText: '注入文本',
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.fullscreen),
-                      tooltip: '全屏编辑',
-                      onPressed: () async {
-                        final newText = await showFullScreenTextEditor(
-                          context,
-                          initialText: item.text,
-                          chatId: widget.chatId,
-                          title: '编辑注入文本',
-                          initialLanguage: 'markdown',
-                        );
-                        if (newText != null && newText != item.text) {
-                          promptService.updatePromptItem(
-                            item.copyWith(text: newText),
-                            widget.chatId,
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                  onChanged: (value) {
-                    promptService.updatePromptItem(
-                        item.copyWith(text: value), widget.chatId);
-                  },
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 0,
-            right: 0,
-            child: ReorderableDragStartListener(
-              index: widget.index,
-              child: ClipPath(
-                clipper: TriangleClipper(),
-                child: Material(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary, // 使用主题主色作为拖动手柄颜色
-                  child: InkWell(
-                    onTap: () {}, // Required for InkWell
-                    child: const SizedBox(
-                      width: 24, // 调整大小以适应三角形
-                      height: 24,
-                      child: Center(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
-}
-
-class TriangleClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.lineTo(size.width, 0);
-    path.lineTo(size.width, size.height);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

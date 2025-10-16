@@ -19,6 +19,7 @@ import 'screens/chat_screen.dart';
 import 'screens/chat_settings_screen.dart';
 import 'screens/chat_debug_screen.dart';
 import 'screens/prompt_editor_screen.dart';
+import 'screens/prompt_item_editor_screen.dart';
 
 // 本文件包含应用的路由配置。
 
@@ -129,6 +130,22 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'prompt-editor',
                 parentNavigatorKey: _rootNavigatorKey,
                 builder: (context, state) => const PromptEditorScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'item/:itemId',
+                    parentNavigatorKey: _rootNavigatorKey,
+                    builder: (context, state) {
+                      final itemId = state.pathParameters['itemId']!;
+                      final chatId = int.parse(state.uri.queryParameters['chatId']!);
+                      final isGlobal = state.uri.queryParameters['isGlobal'] == 'true';
+                      return PromptItemEditorScreen(
+                        itemId: itemId,
+                        chatId: chatId,
+                        isGlobal: isGlobal,
+                      );
+                    },
+                  ),
+                ],
               ),
             ],
           ),

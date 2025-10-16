@@ -6,10 +6,14 @@ part 'prompt_item.g.dart';
 
 enum PromptItemStatus { off, on, match, insert }
 
+enum PromptItemType { item, folder }
+
 @JsonSerializable()
 @immutable
 class PromptItem {
   final String id;
+  final PromptItemType type;
+  final String? parentId;
   final PromptItemStatus status;
   final String keyword;
   final String text;
@@ -24,6 +28,8 @@ class PromptItem {
 
   const PromptItem({
     required this.id,
+    this.type = PromptItemType.item,
+    this.parentId,
     this.status = PromptItemStatus.off,
     this.keyword = '',
     this.text = '',
@@ -43,6 +49,9 @@ class PromptItem {
 
   PromptItem copyWith({
     String? id,
+    PromptItemType? type,
+    String? parentId,
+    bool? setParentIdToNull,
     PromptItemStatus? status,
     String? keyword,
     String? text,
@@ -56,6 +65,8 @@ class PromptItem {
   }) {
     return PromptItem(
       id: id ?? this.id,
+      type: type ?? this.type,
+      parentId: setParentIdToNull == true ? null : parentId ?? this.parentId,
       status: status ?? this.status,
       keyword: keyword ?? this.keyword,
       text: text ?? this.text,

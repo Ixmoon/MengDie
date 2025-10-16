@@ -631,6 +631,15 @@ class MockChatRepository extends _i1.Mock implements _i11.ChatRepository {
             returnValue: _i10.Future<int>.value(0),
           )
           as _i10.Future<int>);
+
+  @override
+  _i10.Future<void> performSanityChecks() =>
+      (super.noSuchMethod(
+            Invocation.method(#performSanityChecks, []),
+            returnValue: _i10.Future<void>.value(),
+            returnValueForMissingStub: _i10.Future<void>.value(),
+          )
+          as _i10.Future<void>);
 }
 
 /// A class which mocks [ContextXmlService].

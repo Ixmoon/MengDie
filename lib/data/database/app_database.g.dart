@@ -2122,1344 +2122,6 @@ class MessagesCompanion extends UpdateCompanion<MessageData> {
   }
 }
 
-class $ApiConfigsTable extends ApiConfigs
-    with TableInfo<$ApiConfigsTable, ApiConfig> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $ApiConfigsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
-  @override
-  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
-    'user_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    clientDefault: () => 'temp_id',
-  );
-  static const VerificationMeta _nameMeta = const VerificationMeta('name');
-  @override
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  @override
-  late final GeneratedColumnWithTypeConverter<LlmType, String> apiType =
-      GeneratedColumn<String>(
-        'api_type',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: true,
-      ).withConverter<LlmType>($ApiConfigsTable.$converterapiType);
-  static const VerificationMeta _modelMeta = const VerificationMeta('model');
-  @override
-  late final GeneratedColumn<String> model = GeneratedColumn<String>(
-    'model',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _apiKeyMeta = const VerificationMeta('apiKey');
-  @override
-  late final GeneratedColumn<String> apiKey = GeneratedColumn<String>(
-    'api_key',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _baseUrlMeta = const VerificationMeta(
-    'baseUrl',
-  );
-  @override
-  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
-    'base_url',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _useCustomTemperatureMeta =
-      const VerificationMeta('useCustomTemperature');
-  @override
-  late final GeneratedColumn<bool> useCustomTemperature = GeneratedColumn<bool>(
-    'use_custom_temperature',
-    aliasedName,
-    true,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("use_custom_temperature" IN (0, 1))',
-    ),
-  );
-  static const VerificationMeta _temperatureMeta = const VerificationMeta(
-    'temperature',
-  );
-  @override
-  late final GeneratedColumn<double> temperature = GeneratedColumn<double>(
-    'temperature',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _useCustomTopPMeta = const VerificationMeta(
-    'useCustomTopP',
-  );
-  @override
-  late final GeneratedColumn<bool> useCustomTopP = GeneratedColumn<bool>(
-    'use_custom_top_p',
-    aliasedName,
-    true,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("use_custom_top_p" IN (0, 1))',
-    ),
-  );
-  static const VerificationMeta _topPMeta = const VerificationMeta('topP');
-  @override
-  late final GeneratedColumn<double> topP = GeneratedColumn<double>(
-    'top_p',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _useCustomTopKMeta = const VerificationMeta(
-    'useCustomTopK',
-  );
-  @override
-  late final GeneratedColumn<bool> useCustomTopK = GeneratedColumn<bool>(
-    'use_custom_top_k',
-    aliasedName,
-    true,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("use_custom_top_k" IN (0, 1))',
-    ),
-  );
-  static const VerificationMeta _topKMeta = const VerificationMeta('topK');
-  @override
-  late final GeneratedColumn<int> topK = GeneratedColumn<int>(
-    'top_k',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _maxOutputTokensMeta = const VerificationMeta(
-    'maxOutputTokens',
-  );
-  @override
-  late final GeneratedColumn<int> maxOutputTokens = GeneratedColumn<int>(
-    'max_output_tokens',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  @override
-  late final GeneratedColumnWithTypeConverter<List<String>?, String>
-  stopSequences = GeneratedColumn<String>(
-    'stop_sequences',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  ).withConverter<List<String>?>($ApiConfigsTable.$converterstopSequencesn);
-  static const VerificationMeta _enableReasoningEffortMeta =
-      const VerificationMeta('enableReasoningEffort');
-  @override
-  late final GeneratedColumn<bool> enableReasoningEffort =
-      GeneratedColumn<bool>(
-        'enable_reasoning_effort',
-        aliasedName,
-        true,
-        type: DriftSqlType.bool,
-        requiredDuringInsert: false,
-        defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("enable_reasoning_effort" IN (0, 1))',
-        ),
-      );
-  @override
-  late final GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
-  reasoningEffort =
-      GeneratedColumn<String>(
-        'reasoning_effort',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      ).withConverter<OpenAIReasoningEffort?>(
-        $ApiConfigsTable.$converterreasoningEffort,
-      );
-  static const VerificationMeta _toolChoiceMeta = const VerificationMeta(
-    'toolChoice',
-  );
-  @override
-  late final GeneratedColumn<String> toolChoice = GeneratedColumn<String>(
-    'tool_choice',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _thinkingBudgetMeta = const VerificationMeta(
-    'thinkingBudget',
-  );
-  @override
-  late final GeneratedColumn<int> thinkingBudget = GeneratedColumn<int>(
-    'thinking_budget',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _toolConfigMeta = const VerificationMeta(
-    'toolConfig',
-  );
-  @override
-  late final GeneratedColumn<String> toolConfig = GeneratedColumn<String>(
-    'tool_config',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _useDefaultSafetySettingsMeta =
-      const VerificationMeta('useDefaultSafetySettings');
-  @override
-  late final GeneratedColumn<bool> useDefaultSafetySettings =
-      GeneratedColumn<bool>(
-        'use_default_safety_settings',
-        aliasedName,
-        false,
-        type: DriftSqlType.bool,
-        requiredDuringInsert: false,
-        defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'CHECK ("use_default_safety_settings" IN (0, 1))',
-        ),
-        defaultValue: const Constant(true),
-      );
-  @override
-  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
-      GeneratedColumn<int>(
-        'created_at',
-        aliasedName,
-        false,
-        type: DriftSqlType.int,
-        requiredDuringInsert: false,
-        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
-      ).withConverter<DateTime>($ApiConfigsTable.$convertercreatedAt);
-  @override
-  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
-      GeneratedColumn<int>(
-        'updated_at',
-        aliasedName,
-        false,
-        type: DriftSqlType.int,
-        requiredDuringInsert: false,
-        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
-      ).withConverter<DateTime>($ApiConfigsTable.$converterupdatedAt);
-  @override
-  List<GeneratedColumn> get $columns => [
-    userId,
-    id,
-    name,
-    apiType,
-    model,
-    apiKey,
-    baseUrl,
-    useCustomTemperature,
-    temperature,
-    useCustomTopP,
-    topP,
-    useCustomTopK,
-    topK,
-    maxOutputTokens,
-    stopSequences,
-    enableReasoningEffort,
-    reasoningEffort,
-    toolChoice,
-    thinkingBudget,
-    toolConfig,
-    useDefaultSafetySettings,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'api_configs';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<ApiConfig> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('user_id')) {
-      context.handle(
-        _userIdMeta,
-        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
-      );
-    }
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('name')) {
-      context.handle(
-        _nameMeta,
-        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_nameMeta);
-    }
-    if (data.containsKey('model')) {
-      context.handle(
-        _modelMeta,
-        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_modelMeta);
-    }
-    if (data.containsKey('api_key')) {
-      context.handle(
-        _apiKeyMeta,
-        apiKey.isAcceptableOrUnknown(data['api_key']!, _apiKeyMeta),
-      );
-    }
-    if (data.containsKey('base_url')) {
-      context.handle(
-        _baseUrlMeta,
-        baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta),
-      );
-    }
-    if (data.containsKey('use_custom_temperature')) {
-      context.handle(
-        _useCustomTemperatureMeta,
-        useCustomTemperature.isAcceptableOrUnknown(
-          data['use_custom_temperature']!,
-          _useCustomTemperatureMeta,
-        ),
-      );
-    }
-    if (data.containsKey('temperature')) {
-      context.handle(
-        _temperatureMeta,
-        temperature.isAcceptableOrUnknown(
-          data['temperature']!,
-          _temperatureMeta,
-        ),
-      );
-    }
-    if (data.containsKey('use_custom_top_p')) {
-      context.handle(
-        _useCustomTopPMeta,
-        useCustomTopP.isAcceptableOrUnknown(
-          data['use_custom_top_p']!,
-          _useCustomTopPMeta,
-        ),
-      );
-    }
-    if (data.containsKey('top_p')) {
-      context.handle(
-        _topPMeta,
-        topP.isAcceptableOrUnknown(data['top_p']!, _topPMeta),
-      );
-    }
-    if (data.containsKey('use_custom_top_k')) {
-      context.handle(
-        _useCustomTopKMeta,
-        useCustomTopK.isAcceptableOrUnknown(
-          data['use_custom_top_k']!,
-          _useCustomTopKMeta,
-        ),
-      );
-    }
-    if (data.containsKey('top_k')) {
-      context.handle(
-        _topKMeta,
-        topK.isAcceptableOrUnknown(data['top_k']!, _topKMeta),
-      );
-    }
-    if (data.containsKey('max_output_tokens')) {
-      context.handle(
-        _maxOutputTokensMeta,
-        maxOutputTokens.isAcceptableOrUnknown(
-          data['max_output_tokens']!,
-          _maxOutputTokensMeta,
-        ),
-      );
-    }
-    if (data.containsKey('enable_reasoning_effort')) {
-      context.handle(
-        _enableReasoningEffortMeta,
-        enableReasoningEffort.isAcceptableOrUnknown(
-          data['enable_reasoning_effort']!,
-          _enableReasoningEffortMeta,
-        ),
-      );
-    }
-    if (data.containsKey('tool_choice')) {
-      context.handle(
-        _toolChoiceMeta,
-        toolChoice.isAcceptableOrUnknown(data['tool_choice']!, _toolChoiceMeta),
-      );
-    }
-    if (data.containsKey('thinking_budget')) {
-      context.handle(
-        _thinkingBudgetMeta,
-        thinkingBudget.isAcceptableOrUnknown(
-          data['thinking_budget']!,
-          _thinkingBudgetMeta,
-        ),
-      );
-    }
-    if (data.containsKey('tool_config')) {
-      context.handle(
-        _toolConfigMeta,
-        toolConfig.isAcceptableOrUnknown(data['tool_config']!, _toolConfigMeta),
-      );
-    }
-    if (data.containsKey('use_default_safety_settings')) {
-      context.handle(
-        _useDefaultSafetySettingsMeta,
-        useDefaultSafetySettings.isAcceptableOrUnknown(
-          data['use_default_safety_settings']!,
-          _useDefaultSafetySettingsMeta,
-        ),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ApiConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ApiConfig(
-      userId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}user_id'],
-      ),
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      apiType: $ApiConfigsTable.$converterapiType.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}api_type'],
-        )!,
-      ),
-      model: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}model'],
-      )!,
-      apiKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}api_key'],
-      ),
-      baseUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}base_url'],
-      ),
-      useCustomTemperature: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}use_custom_temperature'],
-      ),
-      temperature: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}temperature'],
-      ),
-      useCustomTopP: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}use_custom_top_p'],
-      ),
-      topP: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}top_p'],
-      ),
-      useCustomTopK: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}use_custom_top_k'],
-      ),
-      topK: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}top_k'],
-      ),
-      maxOutputTokens: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}max_output_tokens'],
-      ),
-      stopSequences: $ApiConfigsTable.$converterstopSequencesn.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}stop_sequences'],
-        ),
-      ),
-      enableReasoningEffort: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}enable_reasoning_effort'],
-      ),
-      reasoningEffort: $ApiConfigsTable.$converterreasoningEffort.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.string,
-          data['${effectivePrefix}reasoning_effort'],
-        ),
-      ),
-      toolChoice: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tool_choice'],
-      ),
-      thinkingBudget: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}thinking_budget'],
-      ),
-      toolConfig: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tool_config'],
-      ),
-      useDefaultSafetySettings: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}use_default_safety_settings'],
-      )!,
-      createdAt: $ApiConfigsTable.$convertercreatedAt.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.int,
-          data['${effectivePrefix}created_at'],
-        )!,
-      ),
-      updatedAt: $ApiConfigsTable.$converterupdatedAt.fromSql(
-        attachedDatabase.typeMapping.read(
-          DriftSqlType.int,
-          data['${effectivePrefix}updated_at'],
-        )!,
-      ),
-    );
-  }
-
-  @override
-  $ApiConfigsTable createAlias(String alias) {
-    return $ApiConfigsTable(attachedDatabase, alias);
-  }
-
-  static TypeConverter<LlmType, String> $converterapiType =
-      const LlmTypeConverter();
-  static TypeConverter<List<String>, String> $converterstopSequences =
-      const StringListConverter();
-  static TypeConverter<List<String>?, String?> $converterstopSequencesn =
-      NullAwareTypeConverter.wrap($converterstopSequences);
-  static TypeConverter<OpenAIReasoningEffort?, String?>
-  $converterreasoningEffort = const OpenAIReasoningEffortConverter();
-  static TypeConverter<DateTime, int> $convertercreatedAt =
-      const MicrosecondDateTimeConverter();
-  static TypeConverter<DateTime, int> $converterupdatedAt =
-      const MicrosecondDateTimeConverter();
-}
-
-class ApiConfig extends DataClass implements Insertable<ApiConfig> {
-  final int? userId;
-  final String id;
-  final String name;
-  final LlmType apiType;
-  final String model;
-  final String? apiKey;
-  final String? baseUrl;
-  final bool? useCustomTemperature;
-  final double? temperature;
-  final bool? useCustomTopP;
-  final double? topP;
-  final bool? useCustomTopK;
-  final int? topK;
-  final int? maxOutputTokens;
-  final List<String>? stopSequences;
-  final bool? enableReasoningEffort;
-  final OpenAIReasoningEffort? reasoningEffort;
-  final String? toolChoice;
-  final int? thinkingBudget;
-  final String? toolConfig;
-  final bool useDefaultSafetySettings;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  const ApiConfig({
-    this.userId,
-    required this.id,
-    required this.name,
-    required this.apiType,
-    required this.model,
-    this.apiKey,
-    this.baseUrl,
-    this.useCustomTemperature,
-    this.temperature,
-    this.useCustomTopP,
-    this.topP,
-    this.useCustomTopK,
-    this.topK,
-    this.maxOutputTokens,
-    this.stopSequences,
-    this.enableReasoningEffort,
-    this.reasoningEffort,
-    this.toolChoice,
-    this.thinkingBudget,
-    this.toolConfig,
-    required this.useDefaultSafetySettings,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (!nullToAbsent || userId != null) {
-      map['user_id'] = Variable<int>(userId);
-    }
-    map['id'] = Variable<String>(id);
-    map['name'] = Variable<String>(name);
-    {
-      map['api_type'] = Variable<String>(
-        $ApiConfigsTable.$converterapiType.toSql(apiType),
-      );
-    }
-    map['model'] = Variable<String>(model);
-    if (!nullToAbsent || apiKey != null) {
-      map['api_key'] = Variable<String>(apiKey);
-    }
-    if (!nullToAbsent || baseUrl != null) {
-      map['base_url'] = Variable<String>(baseUrl);
-    }
-    if (!nullToAbsent || useCustomTemperature != null) {
-      map['use_custom_temperature'] = Variable<bool>(useCustomTemperature);
-    }
-    if (!nullToAbsent || temperature != null) {
-      map['temperature'] = Variable<double>(temperature);
-    }
-    if (!nullToAbsent || useCustomTopP != null) {
-      map['use_custom_top_p'] = Variable<bool>(useCustomTopP);
-    }
-    if (!nullToAbsent || topP != null) {
-      map['top_p'] = Variable<double>(topP);
-    }
-    if (!nullToAbsent || useCustomTopK != null) {
-      map['use_custom_top_k'] = Variable<bool>(useCustomTopK);
-    }
-    if (!nullToAbsent || topK != null) {
-      map['top_k'] = Variable<int>(topK);
-    }
-    if (!nullToAbsent || maxOutputTokens != null) {
-      map['max_output_tokens'] = Variable<int>(maxOutputTokens);
-    }
-    if (!nullToAbsent || stopSequences != null) {
-      map['stop_sequences'] = Variable<String>(
-        $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences),
-      );
-    }
-    if (!nullToAbsent || enableReasoningEffort != null) {
-      map['enable_reasoning_effort'] = Variable<bool>(enableReasoningEffort);
-    }
-    if (!nullToAbsent || reasoningEffort != null) {
-      map['reasoning_effort'] = Variable<String>(
-        $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort),
-      );
-    }
-    if (!nullToAbsent || toolChoice != null) {
-      map['tool_choice'] = Variable<String>(toolChoice);
-    }
-    if (!nullToAbsent || thinkingBudget != null) {
-      map['thinking_budget'] = Variable<int>(thinkingBudget);
-    }
-    if (!nullToAbsent || toolConfig != null) {
-      map['tool_config'] = Variable<String>(toolConfig);
-    }
-    map['use_default_safety_settings'] = Variable<bool>(
-      useDefaultSafetySettings,
-    );
-    {
-      map['created_at'] = Variable<int>(
-        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt),
-      );
-    }
-    {
-      map['updated_at'] = Variable<int>(
-        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt),
-      );
-    }
-    return map;
-  }
-
-  ApiConfigsCompanion toCompanion(bool nullToAbsent) {
-    return ApiConfigsCompanion(
-      userId: userId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(userId),
-      id: Value(id),
-      name: Value(name),
-      apiType: Value(apiType),
-      model: Value(model),
-      apiKey: apiKey == null && nullToAbsent
-          ? const Value.absent()
-          : Value(apiKey),
-      baseUrl: baseUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(baseUrl),
-      useCustomTemperature: useCustomTemperature == null && nullToAbsent
-          ? const Value.absent()
-          : Value(useCustomTemperature),
-      temperature: temperature == null && nullToAbsent
-          ? const Value.absent()
-          : Value(temperature),
-      useCustomTopP: useCustomTopP == null && nullToAbsent
-          ? const Value.absent()
-          : Value(useCustomTopP),
-      topP: topP == null && nullToAbsent ? const Value.absent() : Value(topP),
-      useCustomTopK: useCustomTopK == null && nullToAbsent
-          ? const Value.absent()
-          : Value(useCustomTopK),
-      topK: topK == null && nullToAbsent ? const Value.absent() : Value(topK),
-      maxOutputTokens: maxOutputTokens == null && nullToAbsent
-          ? const Value.absent()
-          : Value(maxOutputTokens),
-      stopSequences: stopSequences == null && nullToAbsent
-          ? const Value.absent()
-          : Value(stopSequences),
-      enableReasoningEffort: enableReasoningEffort == null && nullToAbsent
-          ? const Value.absent()
-          : Value(enableReasoningEffort),
-      reasoningEffort: reasoningEffort == null && nullToAbsent
-          ? const Value.absent()
-          : Value(reasoningEffort),
-      toolChoice: toolChoice == null && nullToAbsent
-          ? const Value.absent()
-          : Value(toolChoice),
-      thinkingBudget: thinkingBudget == null && nullToAbsent
-          ? const Value.absent()
-          : Value(thinkingBudget),
-      toolConfig: toolConfig == null && nullToAbsent
-          ? const Value.absent()
-          : Value(toolConfig),
-      useDefaultSafetySettings: Value(useDefaultSafetySettings),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
-  factory ApiConfig.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ApiConfig(
-      userId: serializer.fromJson<int?>(json['userId']),
-      id: serializer.fromJson<String>(json['id']),
-      name: serializer.fromJson<String>(json['name']),
-      apiType: serializer.fromJson<LlmType>(json['apiType']),
-      model: serializer.fromJson<String>(json['model']),
-      apiKey: serializer.fromJson<String?>(json['apiKey']),
-      baseUrl: serializer.fromJson<String?>(json['baseUrl']),
-      useCustomTemperature: serializer.fromJson<bool?>(
-        json['useCustomTemperature'],
-      ),
-      temperature: serializer.fromJson<double?>(json['temperature']),
-      useCustomTopP: serializer.fromJson<bool?>(json['useCustomTopP']),
-      topP: serializer.fromJson<double?>(json['topP']),
-      useCustomTopK: serializer.fromJson<bool?>(json['useCustomTopK']),
-      topK: serializer.fromJson<int?>(json['topK']),
-      maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
-      stopSequences: serializer.fromJson<List<String>?>(json['stopSequences']),
-      enableReasoningEffort: serializer.fromJson<bool?>(
-        json['enableReasoningEffort'],
-      ),
-      reasoningEffort: serializer.fromJson<OpenAIReasoningEffort?>(
-        json['reasoningEffort'],
-      ),
-      toolChoice: serializer.fromJson<String?>(json['toolChoice']),
-      thinkingBudget: serializer.fromJson<int?>(json['thinkingBudget']),
-      toolConfig: serializer.fromJson<String?>(json['toolConfig']),
-      useDefaultSafetySettings: serializer.fromJson<bool>(
-        json['useDefaultSafetySettings'],
-      ),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'userId': serializer.toJson<int?>(userId),
-      'id': serializer.toJson<String>(id),
-      'name': serializer.toJson<String>(name),
-      'apiType': serializer.toJson<LlmType>(apiType),
-      'model': serializer.toJson<String>(model),
-      'apiKey': serializer.toJson<String?>(apiKey),
-      'baseUrl': serializer.toJson<String?>(baseUrl),
-      'useCustomTemperature': serializer.toJson<bool?>(useCustomTemperature),
-      'temperature': serializer.toJson<double?>(temperature),
-      'useCustomTopP': serializer.toJson<bool?>(useCustomTopP),
-      'topP': serializer.toJson<double?>(topP),
-      'useCustomTopK': serializer.toJson<bool?>(useCustomTopK),
-      'topK': serializer.toJson<int?>(topK),
-      'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
-      'stopSequences': serializer.toJson<List<String>?>(stopSequences),
-      'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
-      'reasoningEffort': serializer.toJson<OpenAIReasoningEffort?>(
-        reasoningEffort,
-      ),
-      'toolChoice': serializer.toJson<String?>(toolChoice),
-      'thinkingBudget': serializer.toJson<int?>(thinkingBudget),
-      'toolConfig': serializer.toJson<String?>(toolConfig),
-      'useDefaultSafetySettings': serializer.toJson<bool>(
-        useDefaultSafetySettings,
-      ),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime>(updatedAt),
-    };
-  }
-
-  ApiConfig copyWith({
-    Value<int?> userId = const Value.absent(),
-    String? id,
-    String? name,
-    LlmType? apiType,
-    String? model,
-    Value<String?> apiKey = const Value.absent(),
-    Value<String?> baseUrl = const Value.absent(),
-    Value<bool?> useCustomTemperature = const Value.absent(),
-    Value<double?> temperature = const Value.absent(),
-    Value<bool?> useCustomTopP = const Value.absent(),
-    Value<double?> topP = const Value.absent(),
-    Value<bool?> useCustomTopK = const Value.absent(),
-    Value<int?> topK = const Value.absent(),
-    Value<int?> maxOutputTokens = const Value.absent(),
-    Value<List<String>?> stopSequences = const Value.absent(),
-    Value<bool?> enableReasoningEffort = const Value.absent(),
-    Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
-    Value<String?> toolChoice = const Value.absent(),
-    Value<int?> thinkingBudget = const Value.absent(),
-    Value<String?> toolConfig = const Value.absent(),
-    bool? useDefaultSafetySettings,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) => ApiConfig(
-    userId: userId.present ? userId.value : this.userId,
-    id: id ?? this.id,
-    name: name ?? this.name,
-    apiType: apiType ?? this.apiType,
-    model: model ?? this.model,
-    apiKey: apiKey.present ? apiKey.value : this.apiKey,
-    baseUrl: baseUrl.present ? baseUrl.value : this.baseUrl,
-    useCustomTemperature: useCustomTemperature.present
-        ? useCustomTemperature.value
-        : this.useCustomTemperature,
-    temperature: temperature.present ? temperature.value : this.temperature,
-    useCustomTopP: useCustomTopP.present
-        ? useCustomTopP.value
-        : this.useCustomTopP,
-    topP: topP.present ? topP.value : this.topP,
-    useCustomTopK: useCustomTopK.present
-        ? useCustomTopK.value
-        : this.useCustomTopK,
-    topK: topK.present ? topK.value : this.topK,
-    maxOutputTokens: maxOutputTokens.present
-        ? maxOutputTokens.value
-        : this.maxOutputTokens,
-    stopSequences: stopSequences.present
-        ? stopSequences.value
-        : this.stopSequences,
-    enableReasoningEffort: enableReasoningEffort.present
-        ? enableReasoningEffort.value
-        : this.enableReasoningEffort,
-    reasoningEffort: reasoningEffort.present
-        ? reasoningEffort.value
-        : this.reasoningEffort,
-    toolChoice: toolChoice.present ? toolChoice.value : this.toolChoice,
-    thinkingBudget: thinkingBudget.present
-        ? thinkingBudget.value
-        : this.thinkingBudget,
-    toolConfig: toolConfig.present ? toolConfig.value : this.toolConfig,
-    useDefaultSafetySettings:
-        useDefaultSafetySettings ?? this.useDefaultSafetySettings,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  ApiConfig copyWithCompanion(ApiConfigsCompanion data) {
-    return ApiConfig(
-      userId: data.userId.present ? data.userId.value : this.userId,
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      apiType: data.apiType.present ? data.apiType.value : this.apiType,
-      model: data.model.present ? data.model.value : this.model,
-      apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
-      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
-      useCustomTemperature: data.useCustomTemperature.present
-          ? data.useCustomTemperature.value
-          : this.useCustomTemperature,
-      temperature: data.temperature.present
-          ? data.temperature.value
-          : this.temperature,
-      useCustomTopP: data.useCustomTopP.present
-          ? data.useCustomTopP.value
-          : this.useCustomTopP,
-      topP: data.topP.present ? data.topP.value : this.topP,
-      useCustomTopK: data.useCustomTopK.present
-          ? data.useCustomTopK.value
-          : this.useCustomTopK,
-      topK: data.topK.present ? data.topK.value : this.topK,
-      maxOutputTokens: data.maxOutputTokens.present
-          ? data.maxOutputTokens.value
-          : this.maxOutputTokens,
-      stopSequences: data.stopSequences.present
-          ? data.stopSequences.value
-          : this.stopSequences,
-      enableReasoningEffort: data.enableReasoningEffort.present
-          ? data.enableReasoningEffort.value
-          : this.enableReasoningEffort,
-      reasoningEffort: data.reasoningEffort.present
-          ? data.reasoningEffort.value
-          : this.reasoningEffort,
-      toolChoice: data.toolChoice.present
-          ? data.toolChoice.value
-          : this.toolChoice,
-      thinkingBudget: data.thinkingBudget.present
-          ? data.thinkingBudget.value
-          : this.thinkingBudget,
-      toolConfig: data.toolConfig.present
-          ? data.toolConfig.value
-          : this.toolConfig,
-      useDefaultSafetySettings: data.useDefaultSafetySettings.present
-          ? data.useDefaultSafetySettings.value
-          : this.useDefaultSafetySettings,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ApiConfig(')
-          ..write('userId: $userId, ')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('apiType: $apiType, ')
-          ..write('model: $model, ')
-          ..write('apiKey: $apiKey, ')
-          ..write('baseUrl: $baseUrl, ')
-          ..write('useCustomTemperature: $useCustomTemperature, ')
-          ..write('temperature: $temperature, ')
-          ..write('useCustomTopP: $useCustomTopP, ')
-          ..write('topP: $topP, ')
-          ..write('useCustomTopK: $useCustomTopK, ')
-          ..write('topK: $topK, ')
-          ..write('maxOutputTokens: $maxOutputTokens, ')
-          ..write('stopSequences: $stopSequences, ')
-          ..write('enableReasoningEffort: $enableReasoningEffort, ')
-          ..write('reasoningEffort: $reasoningEffort, ')
-          ..write('toolChoice: $toolChoice, ')
-          ..write('thinkingBudget: $thinkingBudget, ')
-          ..write('toolConfig: $toolConfig, ')
-          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hashAll([
-    userId,
-    id,
-    name,
-    apiType,
-    model,
-    apiKey,
-    baseUrl,
-    useCustomTemperature,
-    temperature,
-    useCustomTopP,
-    topP,
-    useCustomTopK,
-    topK,
-    maxOutputTokens,
-    stopSequences,
-    enableReasoningEffort,
-    reasoningEffort,
-    toolChoice,
-    thinkingBudget,
-    toolConfig,
-    useDefaultSafetySettings,
-    createdAt,
-    updatedAt,
-  ]);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ApiConfig &&
-          other.userId == this.userId &&
-          other.id == this.id &&
-          other.name == this.name &&
-          other.apiType == this.apiType &&
-          other.model == this.model &&
-          other.apiKey == this.apiKey &&
-          other.baseUrl == this.baseUrl &&
-          other.useCustomTemperature == this.useCustomTemperature &&
-          other.temperature == this.temperature &&
-          other.useCustomTopP == this.useCustomTopP &&
-          other.topP == this.topP &&
-          other.useCustomTopK == this.useCustomTopK &&
-          other.topK == this.topK &&
-          other.maxOutputTokens == this.maxOutputTokens &&
-          other.stopSequences == this.stopSequences &&
-          other.enableReasoningEffort == this.enableReasoningEffort &&
-          other.reasoningEffort == this.reasoningEffort &&
-          other.toolChoice == this.toolChoice &&
-          other.thinkingBudget == this.thinkingBudget &&
-          other.toolConfig == this.toolConfig &&
-          other.useDefaultSafetySettings == this.useDefaultSafetySettings &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
-  final Value<int?> userId;
-  final Value<String> id;
-  final Value<String> name;
-  final Value<LlmType> apiType;
-  final Value<String> model;
-  final Value<String?> apiKey;
-  final Value<String?> baseUrl;
-  final Value<bool?> useCustomTemperature;
-  final Value<double?> temperature;
-  final Value<bool?> useCustomTopP;
-  final Value<double?> topP;
-  final Value<bool?> useCustomTopK;
-  final Value<int?> topK;
-  final Value<int?> maxOutputTokens;
-  final Value<List<String>?> stopSequences;
-  final Value<bool?> enableReasoningEffort;
-  final Value<OpenAIReasoningEffort?> reasoningEffort;
-  final Value<String?> toolChoice;
-  final Value<int?> thinkingBudget;
-  final Value<String?> toolConfig;
-  final Value<bool> useDefaultSafetySettings;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> updatedAt;
-  final Value<int> rowid;
-  const ApiConfigsCompanion({
-    this.userId = const Value.absent(),
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.apiType = const Value.absent(),
-    this.model = const Value.absent(),
-    this.apiKey = const Value.absent(),
-    this.baseUrl = const Value.absent(),
-    this.useCustomTemperature = const Value.absent(),
-    this.temperature = const Value.absent(),
-    this.useCustomTopP = const Value.absent(),
-    this.topP = const Value.absent(),
-    this.useCustomTopK = const Value.absent(),
-    this.topK = const Value.absent(),
-    this.maxOutputTokens = const Value.absent(),
-    this.stopSequences = const Value.absent(),
-    this.enableReasoningEffort = const Value.absent(),
-    this.reasoningEffort = const Value.absent(),
-    this.toolChoice = const Value.absent(),
-    this.thinkingBudget = const Value.absent(),
-    this.toolConfig = const Value.absent(),
-    this.useDefaultSafetySettings = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  ApiConfigsCompanion.insert({
-    this.userId = const Value.absent(),
-    this.id = const Value.absent(),
-    required String name,
-    required LlmType apiType,
-    required String model,
-    this.apiKey = const Value.absent(),
-    this.baseUrl = const Value.absent(),
-    this.useCustomTemperature = const Value.absent(),
-    this.temperature = const Value.absent(),
-    this.useCustomTopP = const Value.absent(),
-    this.topP = const Value.absent(),
-    this.useCustomTopK = const Value.absent(),
-    this.topK = const Value.absent(),
-    this.maxOutputTokens = const Value.absent(),
-    this.stopSequences = const Value.absent(),
-    this.enableReasoningEffort = const Value.absent(),
-    this.reasoningEffort = const Value.absent(),
-    this.toolChoice = const Value.absent(),
-    this.thinkingBudget = const Value.absent(),
-    this.toolConfig = const Value.absent(),
-    this.useDefaultSafetySettings = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : name = Value(name),
-       apiType = Value(apiType),
-       model = Value(model);
-  static Insertable<ApiConfig> custom({
-    Expression<int>? userId,
-    Expression<String>? id,
-    Expression<String>? name,
-    Expression<String>? apiType,
-    Expression<String>? model,
-    Expression<String>? apiKey,
-    Expression<String>? baseUrl,
-    Expression<bool>? useCustomTemperature,
-    Expression<double>? temperature,
-    Expression<bool>? useCustomTopP,
-    Expression<double>? topP,
-    Expression<bool>? useCustomTopK,
-    Expression<int>? topK,
-    Expression<int>? maxOutputTokens,
-    Expression<String>? stopSequences,
-    Expression<bool>? enableReasoningEffort,
-    Expression<String>? reasoningEffort,
-    Expression<String>? toolChoice,
-    Expression<int>? thinkingBudget,
-    Expression<String>? toolConfig,
-    Expression<bool>? useDefaultSafetySettings,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (userId != null) 'user_id': userId,
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (apiType != null) 'api_type': apiType,
-      if (model != null) 'model': model,
-      if (apiKey != null) 'api_key': apiKey,
-      if (baseUrl != null) 'base_url': baseUrl,
-      if (useCustomTemperature != null)
-        'use_custom_temperature': useCustomTemperature,
-      if (temperature != null) 'temperature': temperature,
-      if (useCustomTopP != null) 'use_custom_top_p': useCustomTopP,
-      if (topP != null) 'top_p': topP,
-      if (useCustomTopK != null) 'use_custom_top_k': useCustomTopK,
-      if (topK != null) 'top_k': topK,
-      if (maxOutputTokens != null) 'max_output_tokens': maxOutputTokens,
-      if (stopSequences != null) 'stop_sequences': stopSequences,
-      if (enableReasoningEffort != null)
-        'enable_reasoning_effort': enableReasoningEffort,
-      if (reasoningEffort != null) 'reasoning_effort': reasoningEffort,
-      if (toolChoice != null) 'tool_choice': toolChoice,
-      if (thinkingBudget != null) 'thinking_budget': thinkingBudget,
-      if (toolConfig != null) 'tool_config': toolConfig,
-      if (useDefaultSafetySettings != null)
-        'use_default_safety_settings': useDefaultSafetySettings,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  ApiConfigsCompanion copyWith({
-    Value<int?>? userId,
-    Value<String>? id,
-    Value<String>? name,
-    Value<LlmType>? apiType,
-    Value<String>? model,
-    Value<String?>? apiKey,
-    Value<String?>? baseUrl,
-    Value<bool?>? useCustomTemperature,
-    Value<double?>? temperature,
-    Value<bool?>? useCustomTopP,
-    Value<double?>? topP,
-    Value<bool?>? useCustomTopK,
-    Value<int?>? topK,
-    Value<int?>? maxOutputTokens,
-    Value<List<String>?>? stopSequences,
-    Value<bool?>? enableReasoningEffort,
-    Value<OpenAIReasoningEffort?>? reasoningEffort,
-    Value<String?>? toolChoice,
-    Value<int?>? thinkingBudget,
-    Value<String?>? toolConfig,
-    Value<bool>? useDefaultSafetySettings,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? updatedAt,
-    Value<int>? rowid,
-  }) {
-    return ApiConfigsCompanion(
-      userId: userId ?? this.userId,
-      id: id ?? this.id,
-      name: name ?? this.name,
-      apiType: apiType ?? this.apiType,
-      model: model ?? this.model,
-      apiKey: apiKey ?? this.apiKey,
-      baseUrl: baseUrl ?? this.baseUrl,
-      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
-      temperature: temperature ?? this.temperature,
-      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
-      topP: topP ?? this.topP,
-      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
-      topK: topK ?? this.topK,
-      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
-      stopSequences: stopSequences ?? this.stopSequences,
-      enableReasoningEffort:
-          enableReasoningEffort ?? this.enableReasoningEffort,
-      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
-      toolChoice: toolChoice ?? this.toolChoice,
-      thinkingBudget: thinkingBudget ?? this.thinkingBudget,
-      toolConfig: toolConfig ?? this.toolConfig,
-      useDefaultSafetySettings:
-          useDefaultSafetySettings ?? this.useDefaultSafetySettings,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (userId.present) {
-      map['user_id'] = Variable<int>(userId.value);
-    }
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (apiType.present) {
-      map['api_type'] = Variable<String>(
-        $ApiConfigsTable.$converterapiType.toSql(apiType.value),
-      );
-    }
-    if (model.present) {
-      map['model'] = Variable<String>(model.value);
-    }
-    if (apiKey.present) {
-      map['api_key'] = Variable<String>(apiKey.value);
-    }
-    if (baseUrl.present) {
-      map['base_url'] = Variable<String>(baseUrl.value);
-    }
-    if (useCustomTemperature.present) {
-      map['use_custom_temperature'] = Variable<bool>(
-        useCustomTemperature.value,
-      );
-    }
-    if (temperature.present) {
-      map['temperature'] = Variable<double>(temperature.value);
-    }
-    if (useCustomTopP.present) {
-      map['use_custom_top_p'] = Variable<bool>(useCustomTopP.value);
-    }
-    if (topP.present) {
-      map['top_p'] = Variable<double>(topP.value);
-    }
-    if (useCustomTopK.present) {
-      map['use_custom_top_k'] = Variable<bool>(useCustomTopK.value);
-    }
-    if (topK.present) {
-      map['top_k'] = Variable<int>(topK.value);
-    }
-    if (maxOutputTokens.present) {
-      map['max_output_tokens'] = Variable<int>(maxOutputTokens.value);
-    }
-    if (stopSequences.present) {
-      map['stop_sequences'] = Variable<String>(
-        $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences.value),
-      );
-    }
-    if (enableReasoningEffort.present) {
-      map['enable_reasoning_effort'] = Variable<bool>(
-        enableReasoningEffort.value,
-      );
-    }
-    if (reasoningEffort.present) {
-      map['reasoning_effort'] = Variable<String>(
-        $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort.value),
-      );
-    }
-    if (toolChoice.present) {
-      map['tool_choice'] = Variable<String>(toolChoice.value);
-    }
-    if (thinkingBudget.present) {
-      map['thinking_budget'] = Variable<int>(thinkingBudget.value);
-    }
-    if (toolConfig.present) {
-      map['tool_config'] = Variable<String>(toolConfig.value);
-    }
-    if (useDefaultSafetySettings.present) {
-      map['use_default_safety_settings'] = Variable<bool>(
-        useDefaultSafetySettings.value,
-      );
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(
-        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt.value),
-      );
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(
-        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt.value),
-      );
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ApiConfigsCompanion(')
-          ..write('userId: $userId, ')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('apiType: $apiType, ')
-          ..write('model: $model, ')
-          ..write('apiKey: $apiKey, ')
-          ..write('baseUrl: $baseUrl, ')
-          ..write('useCustomTemperature: $useCustomTemperature, ')
-          ..write('temperature: $temperature, ')
-          ..write('useCustomTopP: $useCustomTopP, ')
-          ..write('topP: $topP, ')
-          ..write('useCustomTopK: $useCustomTopK, ')
-          ..write('topK: $topK, ')
-          ..write('maxOutputTokens: $maxOutputTokens, ')
-          ..write('stopSequences: $stopSequences, ')
-          ..write('enableReasoningEffort: $enableReasoningEffort, ')
-          ..write('reasoningEffort: $reasoningEffort, ')
-          ..write('toolChoice: $toolChoice, ')
-          ..write('thinkingBudget: $thinkingBudget, ')
-          ..write('toolConfig: $toolConfig, ')
-          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $UsersTable extends Users with TableInfo<$UsersTable, DriftUser> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -4373,13 +3035,1357 @@ class UsersCompanion extends UpdateCompanion<DriftUser> {
   }
 }
 
+class $ApiConfigsTable extends ApiConfigs
+    with TableInfo<$ApiConfigsTable, ApiConfig> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ApiConfigsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => 'temp_id',
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<LlmType, String> apiType =
+      GeneratedColumn<String>(
+        'api_type',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      ).withConverter<LlmType>($ApiConfigsTable.$converterapiType);
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+    'model',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _apiKeyMeta = const VerificationMeta('apiKey');
+  @override
+  late final GeneratedColumn<String> apiKey = GeneratedColumn<String>(
+    'api_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _baseUrlMeta = const VerificationMeta(
+    'baseUrl',
+  );
+  @override
+  late final GeneratedColumn<String> baseUrl = GeneratedColumn<String>(
+    'base_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _useCustomTemperatureMeta =
+      const VerificationMeta('useCustomTemperature');
+  @override
+  late final GeneratedColumn<bool> useCustomTemperature = GeneratedColumn<bool>(
+    'use_custom_temperature',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_custom_temperature" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _temperatureMeta = const VerificationMeta(
+    'temperature',
+  );
+  @override
+  late final GeneratedColumn<double> temperature = GeneratedColumn<double>(
+    'temperature',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _useCustomTopPMeta = const VerificationMeta(
+    'useCustomTopP',
+  );
+  @override
+  late final GeneratedColumn<bool> useCustomTopP = GeneratedColumn<bool>(
+    'use_custom_top_p',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_custom_top_p" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _topPMeta = const VerificationMeta('topP');
+  @override
+  late final GeneratedColumn<double> topP = GeneratedColumn<double>(
+    'top_p',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _useCustomTopKMeta = const VerificationMeta(
+    'useCustomTopK',
+  );
+  @override
+  late final GeneratedColumn<bool> useCustomTopK = GeneratedColumn<bool>(
+    'use_custom_top_k',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_custom_top_k" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _topKMeta = const VerificationMeta('topK');
+  @override
+  late final GeneratedColumn<int> topK = GeneratedColumn<int>(
+    'top_k',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _maxOutputTokensMeta = const VerificationMeta(
+    'maxOutputTokens',
+  );
+  @override
+  late final GeneratedColumn<int> maxOutputTokens = GeneratedColumn<int>(
+    'max_output_tokens',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<List<String>?, String>
+  stopSequences = GeneratedColumn<String>(
+    'stop_sequences',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  ).withConverter<List<String>?>($ApiConfigsTable.$converterstopSequencesn);
+  static const VerificationMeta _enableReasoningEffortMeta =
+      const VerificationMeta('enableReasoningEffort');
+  @override
+  late final GeneratedColumn<bool> enableReasoningEffort =
+      GeneratedColumn<bool>(
+        'enable_reasoning_effort',
+        aliasedName,
+        true,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("enable_reasoning_effort" IN (0, 1))',
+        ),
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
+  reasoningEffort =
+      GeneratedColumn<String>(
+        'reasoning_effort',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      ).withConverter<OpenAIReasoningEffort?>(
+        $ApiConfigsTable.$converterreasoningEffort,
+      );
+  static const VerificationMeta _toolChoiceMeta = const VerificationMeta(
+    'toolChoice',
+  );
+  @override
+  late final GeneratedColumn<String> toolChoice = GeneratedColumn<String>(
+    'tool_choice',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _thinkingBudgetMeta = const VerificationMeta(
+    'thinkingBudget',
+  );
+  @override
+  late final GeneratedColumn<int> thinkingBudget = GeneratedColumn<int>(
+    'thinking_budget',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _toolConfigMeta = const VerificationMeta(
+    'toolConfig',
+  );
+  @override
+  late final GeneratedColumn<String> toolConfig = GeneratedColumn<String>(
+    'tool_config',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _useDefaultSafetySettingsMeta =
+      const VerificationMeta('useDefaultSafetySettings');
+  @override
+  late final GeneratedColumn<bool> useDefaultSafetySettings =
+      GeneratedColumn<bool>(
+        'use_default_safety_settings',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("use_default_safety_settings" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<DateTime, int> createdAt =
+      GeneratedColumn<int>(
+        'created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ApiConfigsTable.$convertercreatedAt);
+  @override
+  late final GeneratedColumnWithTypeConverter<DateTime, int> updatedAt =
+      GeneratedColumn<int>(
+        'updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        clientDefault: () => DateTime.now().toUtc().microsecondsSinceEpoch,
+      ).withConverter<DateTime>($ApiConfigsTable.$converterupdatedAt);
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    id,
+    name,
+    apiType,
+    model,
+    apiKey,
+    baseUrl,
+    useCustomTemperature,
+    temperature,
+    useCustomTopP,
+    topP,
+    useCustomTopK,
+    topK,
+    maxOutputTokens,
+    stopSequences,
+    enableReasoningEffort,
+    reasoningEffort,
+    toolChoice,
+    thinkingBudget,
+    toolConfig,
+    useDefaultSafetySettings,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'api_configs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ApiConfig> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+        _modelMeta,
+        model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modelMeta);
+    }
+    if (data.containsKey('api_key')) {
+      context.handle(
+        _apiKeyMeta,
+        apiKey.isAcceptableOrUnknown(data['api_key']!, _apiKeyMeta),
+      );
+    }
+    if (data.containsKey('base_url')) {
+      context.handle(
+        _baseUrlMeta,
+        baseUrl.isAcceptableOrUnknown(data['base_url']!, _baseUrlMeta),
+      );
+    }
+    if (data.containsKey('use_custom_temperature')) {
+      context.handle(
+        _useCustomTemperatureMeta,
+        useCustomTemperature.isAcceptableOrUnknown(
+          data['use_custom_temperature']!,
+          _useCustomTemperatureMeta,
+        ),
+      );
+    }
+    if (data.containsKey('temperature')) {
+      context.handle(
+        _temperatureMeta,
+        temperature.isAcceptableOrUnknown(
+          data['temperature']!,
+          _temperatureMeta,
+        ),
+      );
+    }
+    if (data.containsKey('use_custom_top_p')) {
+      context.handle(
+        _useCustomTopPMeta,
+        useCustomTopP.isAcceptableOrUnknown(
+          data['use_custom_top_p']!,
+          _useCustomTopPMeta,
+        ),
+      );
+    }
+    if (data.containsKey('top_p')) {
+      context.handle(
+        _topPMeta,
+        topP.isAcceptableOrUnknown(data['top_p']!, _topPMeta),
+      );
+    }
+    if (data.containsKey('use_custom_top_k')) {
+      context.handle(
+        _useCustomTopKMeta,
+        useCustomTopK.isAcceptableOrUnknown(
+          data['use_custom_top_k']!,
+          _useCustomTopKMeta,
+        ),
+      );
+    }
+    if (data.containsKey('top_k')) {
+      context.handle(
+        _topKMeta,
+        topK.isAcceptableOrUnknown(data['top_k']!, _topKMeta),
+      );
+    }
+    if (data.containsKey('max_output_tokens')) {
+      context.handle(
+        _maxOutputTokensMeta,
+        maxOutputTokens.isAcceptableOrUnknown(
+          data['max_output_tokens']!,
+          _maxOutputTokensMeta,
+        ),
+      );
+    }
+    if (data.containsKey('enable_reasoning_effort')) {
+      context.handle(
+        _enableReasoningEffortMeta,
+        enableReasoningEffort.isAcceptableOrUnknown(
+          data['enable_reasoning_effort']!,
+          _enableReasoningEffortMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tool_choice')) {
+      context.handle(
+        _toolChoiceMeta,
+        toolChoice.isAcceptableOrUnknown(data['tool_choice']!, _toolChoiceMeta),
+      );
+    }
+    if (data.containsKey('thinking_budget')) {
+      context.handle(
+        _thinkingBudgetMeta,
+        thinkingBudget.isAcceptableOrUnknown(
+          data['thinking_budget']!,
+          _thinkingBudgetMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tool_config')) {
+      context.handle(
+        _toolConfigMeta,
+        toolConfig.isAcceptableOrUnknown(data['tool_config']!, _toolConfigMeta),
+      );
+    }
+    if (data.containsKey('use_default_safety_settings')) {
+      context.handle(
+        _useDefaultSafetySettingsMeta,
+        useDefaultSafetySettings.isAcceptableOrUnknown(
+          data['use_default_safety_settings']!,
+          _useDefaultSafetySettingsMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ApiConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ApiConfig(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      )!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      apiType: $ApiConfigsTable.$converterapiType.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}api_type'],
+        )!,
+      ),
+      model: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}model'],
+      )!,
+      apiKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}api_key'],
+      ),
+      baseUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}base_url'],
+      ),
+      useCustomTemperature: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_custom_temperature'],
+      ),
+      temperature: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}temperature'],
+      ),
+      useCustomTopP: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_custom_top_p'],
+      ),
+      topP: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}top_p'],
+      ),
+      useCustomTopK: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_custom_top_k'],
+      ),
+      topK: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}top_k'],
+      ),
+      maxOutputTokens: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_output_tokens'],
+      ),
+      stopSequences: $ApiConfigsTable.$converterstopSequencesn.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}stop_sequences'],
+        ),
+      ),
+      enableReasoningEffort: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enable_reasoning_effort'],
+      ),
+      reasoningEffort: $ApiConfigsTable.$converterreasoningEffort.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}reasoning_effort'],
+        ),
+      ),
+      toolChoice: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tool_choice'],
+      ),
+      thinkingBudget: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}thinking_budget'],
+      ),
+      toolConfig: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tool_config'],
+      ),
+      useDefaultSafetySettings: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_default_safety_settings'],
+      )!,
+      createdAt: $ApiConfigsTable.$convertercreatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}created_at'],
+        )!,
+      ),
+      updatedAt: $ApiConfigsTable.$converterupdatedAt.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}updated_at'],
+        )!,
+      ),
+    );
+  }
+
+  @override
+  $ApiConfigsTable createAlias(String alias) {
+    return $ApiConfigsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<LlmType, String> $converterapiType =
+      const LlmTypeConverter();
+  static TypeConverter<List<String>, String> $converterstopSequences =
+      const StringListConverter();
+  static TypeConverter<List<String>?, String?> $converterstopSequencesn =
+      NullAwareTypeConverter.wrap($converterstopSequences);
+  static TypeConverter<OpenAIReasoningEffort?, String?>
+  $converterreasoningEffort = const OpenAIReasoningEffortConverter();
+  static TypeConverter<DateTime, int> $convertercreatedAt =
+      const MicrosecondDateTimeConverter();
+  static TypeConverter<DateTime, int> $converterupdatedAt =
+      const MicrosecondDateTimeConverter();
+}
+
+class ApiConfig extends DataClass implements Insertable<ApiConfig> {
+  final int userId;
+  final String id;
+  final String name;
+  final LlmType apiType;
+  final String model;
+  final String? apiKey;
+  final String? baseUrl;
+  final bool? useCustomTemperature;
+  final double? temperature;
+  final bool? useCustomTopP;
+  final double? topP;
+  final bool? useCustomTopK;
+  final int? topK;
+  final int? maxOutputTokens;
+  final List<String>? stopSequences;
+  final bool? enableReasoningEffort;
+  final OpenAIReasoningEffort? reasoningEffort;
+  final String? toolChoice;
+  final int? thinkingBudget;
+  final String? toolConfig;
+  final bool useDefaultSafetySettings;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ApiConfig({
+    required this.userId,
+    required this.id,
+    required this.name,
+    required this.apiType,
+    required this.model,
+    this.apiKey,
+    this.baseUrl,
+    this.useCustomTemperature,
+    this.temperature,
+    this.useCustomTopP,
+    this.topP,
+    this.useCustomTopK,
+    this.topK,
+    this.maxOutputTokens,
+    this.stopSequences,
+    this.enableReasoningEffort,
+    this.reasoningEffort,
+    this.toolChoice,
+    this.thinkingBudget,
+    this.toolConfig,
+    required this.useDefaultSafetySettings,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<int>(userId);
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    {
+      map['api_type'] = Variable<String>(
+        $ApiConfigsTable.$converterapiType.toSql(apiType),
+      );
+    }
+    map['model'] = Variable<String>(model);
+    if (!nullToAbsent || apiKey != null) {
+      map['api_key'] = Variable<String>(apiKey);
+    }
+    if (!nullToAbsent || baseUrl != null) {
+      map['base_url'] = Variable<String>(baseUrl);
+    }
+    if (!nullToAbsent || useCustomTemperature != null) {
+      map['use_custom_temperature'] = Variable<bool>(useCustomTemperature);
+    }
+    if (!nullToAbsent || temperature != null) {
+      map['temperature'] = Variable<double>(temperature);
+    }
+    if (!nullToAbsent || useCustomTopP != null) {
+      map['use_custom_top_p'] = Variable<bool>(useCustomTopP);
+    }
+    if (!nullToAbsent || topP != null) {
+      map['top_p'] = Variable<double>(topP);
+    }
+    if (!nullToAbsent || useCustomTopK != null) {
+      map['use_custom_top_k'] = Variable<bool>(useCustomTopK);
+    }
+    if (!nullToAbsent || topK != null) {
+      map['top_k'] = Variable<int>(topK);
+    }
+    if (!nullToAbsent || maxOutputTokens != null) {
+      map['max_output_tokens'] = Variable<int>(maxOutputTokens);
+    }
+    if (!nullToAbsent || stopSequences != null) {
+      map['stop_sequences'] = Variable<String>(
+        $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences),
+      );
+    }
+    if (!nullToAbsent || enableReasoningEffort != null) {
+      map['enable_reasoning_effort'] = Variable<bool>(enableReasoningEffort);
+    }
+    if (!nullToAbsent || reasoningEffort != null) {
+      map['reasoning_effort'] = Variable<String>(
+        $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort),
+      );
+    }
+    if (!nullToAbsent || toolChoice != null) {
+      map['tool_choice'] = Variable<String>(toolChoice);
+    }
+    if (!nullToAbsent || thinkingBudget != null) {
+      map['thinking_budget'] = Variable<int>(thinkingBudget);
+    }
+    if (!nullToAbsent || toolConfig != null) {
+      map['tool_config'] = Variable<String>(toolConfig);
+    }
+    map['use_default_safety_settings'] = Variable<bool>(
+      useDefaultSafetySettings,
+    );
+    {
+      map['created_at'] = Variable<int>(
+        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt),
+      );
+    }
+    {
+      map['updated_at'] = Variable<int>(
+        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt),
+      );
+    }
+    return map;
+  }
+
+  ApiConfigsCompanion toCompanion(bool nullToAbsent) {
+    return ApiConfigsCompanion(
+      userId: Value(userId),
+      id: Value(id),
+      name: Value(name),
+      apiType: Value(apiType),
+      model: Value(model),
+      apiKey: apiKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(apiKey),
+      baseUrl: baseUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseUrl),
+      useCustomTemperature: useCustomTemperature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTemperature),
+      temperature: temperature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(temperature),
+      useCustomTopP: useCustomTopP == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTopP),
+      topP: topP == null && nullToAbsent ? const Value.absent() : Value(topP),
+      useCustomTopK: useCustomTopK == null && nullToAbsent
+          ? const Value.absent()
+          : Value(useCustomTopK),
+      topK: topK == null && nullToAbsent ? const Value.absent() : Value(topK),
+      maxOutputTokens: maxOutputTokens == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxOutputTokens),
+      stopSequences: stopSequences == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stopSequences),
+      enableReasoningEffort: enableReasoningEffort == null && nullToAbsent
+          ? const Value.absent()
+          : Value(enableReasoningEffort),
+      reasoningEffort: reasoningEffort == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reasoningEffort),
+      toolChoice: toolChoice == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolChoice),
+      thinkingBudget: thinkingBudget == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thinkingBudget),
+      toolConfig: toolConfig == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toolConfig),
+      useDefaultSafetySettings: Value(useDefaultSafetySettings),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ApiConfig.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ApiConfig(
+      userId: serializer.fromJson<int>(json['userId']),
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      apiType: serializer.fromJson<LlmType>(json['apiType']),
+      model: serializer.fromJson<String>(json['model']),
+      apiKey: serializer.fromJson<String?>(json['apiKey']),
+      baseUrl: serializer.fromJson<String?>(json['baseUrl']),
+      useCustomTemperature: serializer.fromJson<bool?>(
+        json['useCustomTemperature'],
+      ),
+      temperature: serializer.fromJson<double?>(json['temperature']),
+      useCustomTopP: serializer.fromJson<bool?>(json['useCustomTopP']),
+      topP: serializer.fromJson<double?>(json['topP']),
+      useCustomTopK: serializer.fromJson<bool?>(json['useCustomTopK']),
+      topK: serializer.fromJson<int?>(json['topK']),
+      maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
+      stopSequences: serializer.fromJson<List<String>?>(json['stopSequences']),
+      enableReasoningEffort: serializer.fromJson<bool?>(
+        json['enableReasoningEffort'],
+      ),
+      reasoningEffort: serializer.fromJson<OpenAIReasoningEffort?>(
+        json['reasoningEffort'],
+      ),
+      toolChoice: serializer.fromJson<String?>(json['toolChoice']),
+      thinkingBudget: serializer.fromJson<int?>(json['thinkingBudget']),
+      toolConfig: serializer.fromJson<String?>(json['toolConfig']),
+      useDefaultSafetySettings: serializer.fromJson<bool>(
+        json['useDefaultSafetySettings'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<int>(userId),
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'apiType': serializer.toJson<LlmType>(apiType),
+      'model': serializer.toJson<String>(model),
+      'apiKey': serializer.toJson<String?>(apiKey),
+      'baseUrl': serializer.toJson<String?>(baseUrl),
+      'useCustomTemperature': serializer.toJson<bool?>(useCustomTemperature),
+      'temperature': serializer.toJson<double?>(temperature),
+      'useCustomTopP': serializer.toJson<bool?>(useCustomTopP),
+      'topP': serializer.toJson<double?>(topP),
+      'useCustomTopK': serializer.toJson<bool?>(useCustomTopK),
+      'topK': serializer.toJson<int?>(topK),
+      'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
+      'stopSequences': serializer.toJson<List<String>?>(stopSequences),
+      'enableReasoningEffort': serializer.toJson<bool?>(enableReasoningEffort),
+      'reasoningEffort': serializer.toJson<OpenAIReasoningEffort?>(
+        reasoningEffort,
+      ),
+      'toolChoice': serializer.toJson<String?>(toolChoice),
+      'thinkingBudget': serializer.toJson<int?>(thinkingBudget),
+      'toolConfig': serializer.toJson<String?>(toolConfig),
+      'useDefaultSafetySettings': serializer.toJson<bool>(
+        useDefaultSafetySettings,
+      ),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ApiConfig copyWith({
+    int? userId,
+    String? id,
+    String? name,
+    LlmType? apiType,
+    String? model,
+    Value<String?> apiKey = const Value.absent(),
+    Value<String?> baseUrl = const Value.absent(),
+    Value<bool?> useCustomTemperature = const Value.absent(),
+    Value<double?> temperature = const Value.absent(),
+    Value<bool?> useCustomTopP = const Value.absent(),
+    Value<double?> topP = const Value.absent(),
+    Value<bool?> useCustomTopK = const Value.absent(),
+    Value<int?> topK = const Value.absent(),
+    Value<int?> maxOutputTokens = const Value.absent(),
+    Value<List<String>?> stopSequences = const Value.absent(),
+    Value<bool?> enableReasoningEffort = const Value.absent(),
+    Value<OpenAIReasoningEffort?> reasoningEffort = const Value.absent(),
+    Value<String?> toolChoice = const Value.absent(),
+    Value<int?> thinkingBudget = const Value.absent(),
+    Value<String?> toolConfig = const Value.absent(),
+    bool? useDefaultSafetySettings,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => ApiConfig(
+    userId: userId ?? this.userId,
+    id: id ?? this.id,
+    name: name ?? this.name,
+    apiType: apiType ?? this.apiType,
+    model: model ?? this.model,
+    apiKey: apiKey.present ? apiKey.value : this.apiKey,
+    baseUrl: baseUrl.present ? baseUrl.value : this.baseUrl,
+    useCustomTemperature: useCustomTemperature.present
+        ? useCustomTemperature.value
+        : this.useCustomTemperature,
+    temperature: temperature.present ? temperature.value : this.temperature,
+    useCustomTopP: useCustomTopP.present
+        ? useCustomTopP.value
+        : this.useCustomTopP,
+    topP: topP.present ? topP.value : this.topP,
+    useCustomTopK: useCustomTopK.present
+        ? useCustomTopK.value
+        : this.useCustomTopK,
+    topK: topK.present ? topK.value : this.topK,
+    maxOutputTokens: maxOutputTokens.present
+        ? maxOutputTokens.value
+        : this.maxOutputTokens,
+    stopSequences: stopSequences.present
+        ? stopSequences.value
+        : this.stopSequences,
+    enableReasoningEffort: enableReasoningEffort.present
+        ? enableReasoningEffort.value
+        : this.enableReasoningEffort,
+    reasoningEffort: reasoningEffort.present
+        ? reasoningEffort.value
+        : this.reasoningEffort,
+    toolChoice: toolChoice.present ? toolChoice.value : this.toolChoice,
+    thinkingBudget: thinkingBudget.present
+        ? thinkingBudget.value
+        : this.thinkingBudget,
+    toolConfig: toolConfig.present ? toolConfig.value : this.toolConfig,
+    useDefaultSafetySettings:
+        useDefaultSafetySettings ?? this.useDefaultSafetySettings,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ApiConfig copyWithCompanion(ApiConfigsCompanion data) {
+    return ApiConfig(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      apiType: data.apiType.present ? data.apiType.value : this.apiType,
+      model: data.model.present ? data.model.value : this.model,
+      apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
+      baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
+      useCustomTemperature: data.useCustomTemperature.present
+          ? data.useCustomTemperature.value
+          : this.useCustomTemperature,
+      temperature: data.temperature.present
+          ? data.temperature.value
+          : this.temperature,
+      useCustomTopP: data.useCustomTopP.present
+          ? data.useCustomTopP.value
+          : this.useCustomTopP,
+      topP: data.topP.present ? data.topP.value : this.topP,
+      useCustomTopK: data.useCustomTopK.present
+          ? data.useCustomTopK.value
+          : this.useCustomTopK,
+      topK: data.topK.present ? data.topK.value : this.topK,
+      maxOutputTokens: data.maxOutputTokens.present
+          ? data.maxOutputTokens.value
+          : this.maxOutputTokens,
+      stopSequences: data.stopSequences.present
+          ? data.stopSequences.value
+          : this.stopSequences,
+      enableReasoningEffort: data.enableReasoningEffort.present
+          ? data.enableReasoningEffort.value
+          : this.enableReasoningEffort,
+      reasoningEffort: data.reasoningEffort.present
+          ? data.reasoningEffort.value
+          : this.reasoningEffort,
+      toolChoice: data.toolChoice.present
+          ? data.toolChoice.value
+          : this.toolChoice,
+      thinkingBudget: data.thinkingBudget.present
+          ? data.thinkingBudget.value
+          : this.thinkingBudget,
+      toolConfig: data.toolConfig.present
+          ? data.toolConfig.value
+          : this.toolConfig,
+      useDefaultSafetySettings: data.useDefaultSafetySettings.present
+          ? data.useDefaultSafetySettings.value
+          : this.useDefaultSafetySettings,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApiConfig(')
+          ..write('userId: $userId, ')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('apiType: $apiType, ')
+          ..write('model: $model, ')
+          ..write('apiKey: $apiKey, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('useCustomTemperature: $useCustomTemperature, ')
+          ..write('temperature: $temperature, ')
+          ..write('useCustomTopP: $useCustomTopP, ')
+          ..write('topP: $topP, ')
+          ..write('useCustomTopK: $useCustomTopK, ')
+          ..write('topK: $topK, ')
+          ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('stopSequences: $stopSequences, ')
+          ..write('enableReasoningEffort: $enableReasoningEffort, ')
+          ..write('reasoningEffort: $reasoningEffort, ')
+          ..write('toolChoice: $toolChoice, ')
+          ..write('thinkingBudget: $thinkingBudget, ')
+          ..write('toolConfig: $toolConfig, ')
+          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    userId,
+    id,
+    name,
+    apiType,
+    model,
+    apiKey,
+    baseUrl,
+    useCustomTemperature,
+    temperature,
+    useCustomTopP,
+    topP,
+    useCustomTopK,
+    topK,
+    maxOutputTokens,
+    stopSequences,
+    enableReasoningEffort,
+    reasoningEffort,
+    toolChoice,
+    thinkingBudget,
+    toolConfig,
+    useDefaultSafetySettings,
+    createdAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ApiConfig &&
+          other.userId == this.userId &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.apiType == this.apiType &&
+          other.model == this.model &&
+          other.apiKey == this.apiKey &&
+          other.baseUrl == this.baseUrl &&
+          other.useCustomTemperature == this.useCustomTemperature &&
+          other.temperature == this.temperature &&
+          other.useCustomTopP == this.useCustomTopP &&
+          other.topP == this.topP &&
+          other.useCustomTopK == this.useCustomTopK &&
+          other.topK == this.topK &&
+          other.maxOutputTokens == this.maxOutputTokens &&
+          other.stopSequences == this.stopSequences &&
+          other.enableReasoningEffort == this.enableReasoningEffort &&
+          other.reasoningEffort == this.reasoningEffort &&
+          other.toolChoice == this.toolChoice &&
+          other.thinkingBudget == this.thinkingBudget &&
+          other.toolConfig == this.toolConfig &&
+          other.useDefaultSafetySettings == this.useDefaultSafetySettings &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ApiConfigsCompanion extends UpdateCompanion<ApiConfig> {
+  final Value<int> userId;
+  final Value<String> id;
+  final Value<String> name;
+  final Value<LlmType> apiType;
+  final Value<String> model;
+  final Value<String?> apiKey;
+  final Value<String?> baseUrl;
+  final Value<bool?> useCustomTemperature;
+  final Value<double?> temperature;
+  final Value<bool?> useCustomTopP;
+  final Value<double?> topP;
+  final Value<bool?> useCustomTopK;
+  final Value<int?> topK;
+  final Value<int?> maxOutputTokens;
+  final Value<List<String>?> stopSequences;
+  final Value<bool?> enableReasoningEffort;
+  final Value<OpenAIReasoningEffort?> reasoningEffort;
+  final Value<String?> toolChoice;
+  final Value<int?> thinkingBudget;
+  final Value<String?> toolConfig;
+  final Value<bool> useDefaultSafetySettings;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ApiConfigsCompanion({
+    this.userId = const Value.absent(),
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.apiType = const Value.absent(),
+    this.model = const Value.absent(),
+    this.apiKey = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.useCustomTemperature = const Value.absent(),
+    this.temperature = const Value.absent(),
+    this.useCustomTopP = const Value.absent(),
+    this.topP = const Value.absent(),
+    this.useCustomTopK = const Value.absent(),
+    this.topK = const Value.absent(),
+    this.maxOutputTokens = const Value.absent(),
+    this.stopSequences = const Value.absent(),
+    this.enableReasoningEffort = const Value.absent(),
+    this.reasoningEffort = const Value.absent(),
+    this.toolChoice = const Value.absent(),
+    this.thinkingBudget = const Value.absent(),
+    this.toolConfig = const Value.absent(),
+    this.useDefaultSafetySettings = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ApiConfigsCompanion.insert({
+    required int userId,
+    this.id = const Value.absent(),
+    required String name,
+    required LlmType apiType,
+    required String model,
+    this.apiKey = const Value.absent(),
+    this.baseUrl = const Value.absent(),
+    this.useCustomTemperature = const Value.absent(),
+    this.temperature = const Value.absent(),
+    this.useCustomTopP = const Value.absent(),
+    this.topP = const Value.absent(),
+    this.useCustomTopK = const Value.absent(),
+    this.topK = const Value.absent(),
+    this.maxOutputTokens = const Value.absent(),
+    this.stopSequences = const Value.absent(),
+    this.enableReasoningEffort = const Value.absent(),
+    this.reasoningEffort = const Value.absent(),
+    this.toolChoice = const Value.absent(),
+    this.thinkingBudget = const Value.absent(),
+    this.toolConfig = const Value.absent(),
+    this.useDefaultSafetySettings = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       name = Value(name),
+       apiType = Value(apiType),
+       model = Value(model);
+  static Insertable<ApiConfig> custom({
+    Expression<int>? userId,
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? apiType,
+    Expression<String>? model,
+    Expression<String>? apiKey,
+    Expression<String>? baseUrl,
+    Expression<bool>? useCustomTemperature,
+    Expression<double>? temperature,
+    Expression<bool>? useCustomTopP,
+    Expression<double>? topP,
+    Expression<bool>? useCustomTopK,
+    Expression<int>? topK,
+    Expression<int>? maxOutputTokens,
+    Expression<String>? stopSequences,
+    Expression<bool>? enableReasoningEffort,
+    Expression<String>? reasoningEffort,
+    Expression<String>? toolChoice,
+    Expression<int>? thinkingBudget,
+    Expression<String>? toolConfig,
+    Expression<bool>? useDefaultSafetySettings,
+    Expression<int>? createdAt,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (apiType != null) 'api_type': apiType,
+      if (model != null) 'model': model,
+      if (apiKey != null) 'api_key': apiKey,
+      if (baseUrl != null) 'base_url': baseUrl,
+      if (useCustomTemperature != null)
+        'use_custom_temperature': useCustomTemperature,
+      if (temperature != null) 'temperature': temperature,
+      if (useCustomTopP != null) 'use_custom_top_p': useCustomTopP,
+      if (topP != null) 'top_p': topP,
+      if (useCustomTopK != null) 'use_custom_top_k': useCustomTopK,
+      if (topK != null) 'top_k': topK,
+      if (maxOutputTokens != null) 'max_output_tokens': maxOutputTokens,
+      if (stopSequences != null) 'stop_sequences': stopSequences,
+      if (enableReasoningEffort != null)
+        'enable_reasoning_effort': enableReasoningEffort,
+      if (reasoningEffort != null) 'reasoning_effort': reasoningEffort,
+      if (toolChoice != null) 'tool_choice': toolChoice,
+      if (thinkingBudget != null) 'thinking_budget': thinkingBudget,
+      if (toolConfig != null) 'tool_config': toolConfig,
+      if (useDefaultSafetySettings != null)
+        'use_default_safety_settings': useDefaultSafetySettings,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ApiConfigsCompanion copyWith({
+    Value<int>? userId,
+    Value<String>? id,
+    Value<String>? name,
+    Value<LlmType>? apiType,
+    Value<String>? model,
+    Value<String?>? apiKey,
+    Value<String?>? baseUrl,
+    Value<bool?>? useCustomTemperature,
+    Value<double?>? temperature,
+    Value<bool?>? useCustomTopP,
+    Value<double?>? topP,
+    Value<bool?>? useCustomTopK,
+    Value<int?>? topK,
+    Value<int?>? maxOutputTokens,
+    Value<List<String>?>? stopSequences,
+    Value<bool?>? enableReasoningEffort,
+    Value<OpenAIReasoningEffort?>? reasoningEffort,
+    Value<String?>? toolChoice,
+    Value<int?>? thinkingBudget,
+    Value<String?>? toolConfig,
+    Value<bool>? useDefaultSafetySettings,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ApiConfigsCompanion(
+      userId: userId ?? this.userId,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      apiType: apiType ?? this.apiType,
+      model: model ?? this.model,
+      apiKey: apiKey ?? this.apiKey,
+      baseUrl: baseUrl ?? this.baseUrl,
+      useCustomTemperature: useCustomTemperature ?? this.useCustomTemperature,
+      temperature: temperature ?? this.temperature,
+      useCustomTopP: useCustomTopP ?? this.useCustomTopP,
+      topP: topP ?? this.topP,
+      useCustomTopK: useCustomTopK ?? this.useCustomTopK,
+      topK: topK ?? this.topK,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      stopSequences: stopSequences ?? this.stopSequences,
+      enableReasoningEffort:
+          enableReasoningEffort ?? this.enableReasoningEffort,
+      reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      toolChoice: toolChoice ?? this.toolChoice,
+      thinkingBudget: thinkingBudget ?? this.thinkingBudget,
+      toolConfig: toolConfig ?? this.toolConfig,
+      useDefaultSafetySettings:
+          useDefaultSafetySettings ?? this.useDefaultSafetySettings,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<int>(userId.value);
+    }
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (apiType.present) {
+      map['api_type'] = Variable<String>(
+        $ApiConfigsTable.$converterapiType.toSql(apiType.value),
+      );
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (apiKey.present) {
+      map['api_key'] = Variable<String>(apiKey.value);
+    }
+    if (baseUrl.present) {
+      map['base_url'] = Variable<String>(baseUrl.value);
+    }
+    if (useCustomTemperature.present) {
+      map['use_custom_temperature'] = Variable<bool>(
+        useCustomTemperature.value,
+      );
+    }
+    if (temperature.present) {
+      map['temperature'] = Variable<double>(temperature.value);
+    }
+    if (useCustomTopP.present) {
+      map['use_custom_top_p'] = Variable<bool>(useCustomTopP.value);
+    }
+    if (topP.present) {
+      map['top_p'] = Variable<double>(topP.value);
+    }
+    if (useCustomTopK.present) {
+      map['use_custom_top_k'] = Variable<bool>(useCustomTopK.value);
+    }
+    if (topK.present) {
+      map['top_k'] = Variable<int>(topK.value);
+    }
+    if (maxOutputTokens.present) {
+      map['max_output_tokens'] = Variable<int>(maxOutputTokens.value);
+    }
+    if (stopSequences.present) {
+      map['stop_sequences'] = Variable<String>(
+        $ApiConfigsTable.$converterstopSequencesn.toSql(stopSequences.value),
+      );
+    }
+    if (enableReasoningEffort.present) {
+      map['enable_reasoning_effort'] = Variable<bool>(
+        enableReasoningEffort.value,
+      );
+    }
+    if (reasoningEffort.present) {
+      map['reasoning_effort'] = Variable<String>(
+        $ApiConfigsTable.$converterreasoningEffort.toSql(reasoningEffort.value),
+      );
+    }
+    if (toolChoice.present) {
+      map['tool_choice'] = Variable<String>(toolChoice.value);
+    }
+    if (thinkingBudget.present) {
+      map['thinking_budget'] = Variable<int>(thinkingBudget.value);
+    }
+    if (toolConfig.present) {
+      map['tool_config'] = Variable<String>(toolConfig.value);
+    }
+    if (useDefaultSafetySettings.present) {
+      map['use_default_safety_settings'] = Variable<bool>(
+        useDefaultSafetySettings.value,
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(
+        $ApiConfigsTable.$convertercreatedAt.toSql(createdAt.value),
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(
+        $ApiConfigsTable.$converterupdatedAt.toSql(updatedAt.value),
+      );
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ApiConfigsCompanion(')
+          ..write('userId: $userId, ')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('apiType: $apiType, ')
+          ..write('model: $model, ')
+          ..write('apiKey: $apiKey, ')
+          ..write('baseUrl: $baseUrl, ')
+          ..write('useCustomTemperature: $useCustomTemperature, ')
+          ..write('temperature: $temperature, ')
+          ..write('useCustomTopP: $useCustomTopP, ')
+          ..write('topP: $topP, ')
+          ..write('useCustomTopK: $useCustomTopK, ')
+          ..write('topK: $topK, ')
+          ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('stopSequences: $stopSequences, ')
+          ..write('enableReasoningEffort: $enableReasoningEffort, ')
+          ..write('reasoningEffort: $reasoningEffort, ')
+          ..write('toolChoice: $toolChoice, ')
+          ..write('thinkingBudget: $thinkingBudget, ')
+          ..write('toolConfig: $toolConfig, ')
+          ..write('useDefaultSafetySettings: $useDefaultSafetySettings, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ChatsTable chats = $ChatsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
-  late final $ApiConfigsTable apiConfigs = $ApiConfigsTable(this);
   late final $UsersTable users = $UsersTable(this);
+  late final $ApiConfigsTable apiConfigs = $ApiConfigsTable(this);
+  late final Index userNameIdx = Index(
+    'user_name_idx',
+    'CREATE UNIQUE INDEX user_name_idx ON api_configs (user_id, name)',
+  );
   late final ChatDao chatDao = ChatDao(this as AppDatabase);
   late final MessageDao messageDao = MessageDao(this as AppDatabase);
   late final ApiConfigDao apiConfigDao = ApiConfigDao(this as AppDatabase);
@@ -4391,8 +4397,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     chats,
     messages,
-    apiConfigs,
     users,
+    apiConfigs,
+    userNameIdx,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5522,582 +5529,6 @@ typedef $$MessagesTableProcessedTableManager =
       MessageData,
       PrefetchHooks Function({bool chatId})
     >;
-typedef $$ApiConfigsTableCreateCompanionBuilder =
-    ApiConfigsCompanion Function({
-      Value<int?> userId,
-      Value<String> id,
-      required String name,
-      required LlmType apiType,
-      required String model,
-      Value<String?> apiKey,
-      Value<String?> baseUrl,
-      Value<bool?> useCustomTemperature,
-      Value<double?> temperature,
-      Value<bool?> useCustomTopP,
-      Value<double?> topP,
-      Value<bool?> useCustomTopK,
-      Value<int?> topK,
-      Value<int?> maxOutputTokens,
-      Value<List<String>?> stopSequences,
-      Value<bool?> enableReasoningEffort,
-      Value<OpenAIReasoningEffort?> reasoningEffort,
-      Value<String?> toolChoice,
-      Value<int?> thinkingBudget,
-      Value<String?> toolConfig,
-      Value<bool> useDefaultSafetySettings,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-typedef $$ApiConfigsTableUpdateCompanionBuilder =
-    ApiConfigsCompanion Function({
-      Value<int?> userId,
-      Value<String> id,
-      Value<String> name,
-      Value<LlmType> apiType,
-      Value<String> model,
-      Value<String?> apiKey,
-      Value<String?> baseUrl,
-      Value<bool?> useCustomTemperature,
-      Value<double?> temperature,
-      Value<bool?> useCustomTopP,
-      Value<double?> topP,
-      Value<bool?> useCustomTopK,
-      Value<int?> topK,
-      Value<int?> maxOutputTokens,
-      Value<List<String>?> stopSequences,
-      Value<bool?> enableReasoningEffort,
-      Value<OpenAIReasoningEffort?> reasoningEffort,
-      Value<String?> toolChoice,
-      Value<int?> thinkingBudget,
-      Value<String?> toolConfig,
-      Value<bool> useDefaultSafetySettings,
-      Value<DateTime> createdAt,
-      Value<DateTime> updatedAt,
-      Value<int> rowid,
-    });
-
-class $$ApiConfigsTableFilterComposer
-    extends Composer<_$AppDatabase, $ApiConfigsTable> {
-  $$ApiConfigsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<int> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<LlmType, LlmType, String> get apiType =>
-      $composableBuilder(
-        column: $table.apiType,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-
-  ColumnFilters<String> get model => $composableBuilder(
-    column: $table.model,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get apiKey => $composableBuilder(
-    column: $table.apiKey,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get baseUrl => $composableBuilder(
-    column: $table.baseUrl,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get useCustomTemperature => $composableBuilder(
-    column: $table.useCustomTemperature,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get temperature => $composableBuilder(
-    column: $table.temperature,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get useCustomTopP => $composableBuilder(
-    column: $table.useCustomTopP,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get topP => $composableBuilder(
-    column: $table.topP,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get useCustomTopK => $composableBuilder(
-    column: $table.useCustomTopK,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get topK => $composableBuilder(
-    column: $table.topK,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get maxOutputTokens => $composableBuilder(
-    column: $table.maxOutputTokens,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
-  get stopSequences => $composableBuilder(
-    column: $table.stopSequences,
-    builder: (column) => ColumnWithTypeConverterFilters(column),
-  );
-
-  ColumnFilters<bool> get enableReasoningEffort => $composableBuilder(
-    column: $table.enableReasoningEffort,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<
-    OpenAIReasoningEffort?,
-    OpenAIReasoningEffort,
-    String
-  >
-  get reasoningEffort => $composableBuilder(
-    column: $table.reasoningEffort,
-    builder: (column) => ColumnWithTypeConverterFilters(column),
-  );
-
-  ColumnFilters<String> get toolChoice => $composableBuilder(
-    column: $table.toolChoice,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get thinkingBudget => $composableBuilder(
-    column: $table.thinkingBudget,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get toolConfig => $composableBuilder(
-    column: $table.toolConfig,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get useDefaultSafetySettings => $composableBuilder(
-    column: $table.useDefaultSafetySettings,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
-      $composableBuilder(
-        column: $table.createdAt,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-
-  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
-      $composableBuilder(
-        column: $table.updatedAt,
-        builder: (column) => ColumnWithTypeConverterFilters(column),
-      );
-}
-
-class $$ApiConfigsTableOrderingComposer
-    extends Composer<_$AppDatabase, $ApiConfigsTable> {
-  $$ApiConfigsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<int> get userId => $composableBuilder(
-    column: $table.userId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get apiType => $composableBuilder(
-    column: $table.apiType,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get model => $composableBuilder(
-    column: $table.model,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get apiKey => $composableBuilder(
-    column: $table.apiKey,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get baseUrl => $composableBuilder(
-    column: $table.baseUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get useCustomTemperature => $composableBuilder(
-    column: $table.useCustomTemperature,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get temperature => $composableBuilder(
-    column: $table.temperature,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get useCustomTopP => $composableBuilder(
-    column: $table.useCustomTopP,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<double> get topP => $composableBuilder(
-    column: $table.topP,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get useCustomTopK => $composableBuilder(
-    column: $table.useCustomTopK,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get topK => $composableBuilder(
-    column: $table.topK,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get maxOutputTokens => $composableBuilder(
-    column: $table.maxOutputTokens,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get stopSequences => $composableBuilder(
-    column: $table.stopSequences,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get enableReasoningEffort => $composableBuilder(
-    column: $table.enableReasoningEffort,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get reasoningEffort => $composableBuilder(
-    column: $table.reasoningEffort,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get toolChoice => $composableBuilder(
-    column: $table.toolChoice,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get thinkingBudget => $composableBuilder(
-    column: $table.thinkingBudget,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get toolConfig => $composableBuilder(
-    column: $table.toolConfig,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get useDefaultSafetySettings => $composableBuilder(
-    column: $table.useDefaultSafetySettings,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get updatedAt => $composableBuilder(
-    column: $table.updatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$ApiConfigsTableAnnotationComposer
-    extends Composer<_$AppDatabase, $ApiConfigsTable> {
-  $$ApiConfigsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<int> get userId =>
-      $composableBuilder(column: $table.userId, builder: (column) => column);
-
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumnWithTypeConverter<LlmType, String> get apiType =>
-      $composableBuilder(column: $table.apiType, builder: (column) => column);
-
-  GeneratedColumn<String> get model =>
-      $composableBuilder(column: $table.model, builder: (column) => column);
-
-  GeneratedColumn<String> get apiKey =>
-      $composableBuilder(column: $table.apiKey, builder: (column) => column);
-
-  GeneratedColumn<String> get baseUrl =>
-      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
-
-  GeneratedColumn<bool> get useCustomTemperature => $composableBuilder(
-    column: $table.useCustomTemperature,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get temperature => $composableBuilder(
-    column: $table.temperature,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get useCustomTopP => $composableBuilder(
-    column: $table.useCustomTopP,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<double> get topP =>
-      $composableBuilder(column: $table.topP, builder: (column) => column);
-
-  GeneratedColumn<bool> get useCustomTopK => $composableBuilder(
-    column: $table.useCustomTopK,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get topK =>
-      $composableBuilder(column: $table.topK, builder: (column) => column);
-
-  GeneratedColumn<int> get maxOutputTokens => $composableBuilder(
-    column: $table.maxOutputTokens,
-    builder: (column) => column,
-  );
-
-  GeneratedColumnWithTypeConverter<List<String>?, String> get stopSequences =>
-      $composableBuilder(
-        column: $table.stopSequences,
-        builder: (column) => column,
-      );
-
-  GeneratedColumn<bool> get enableReasoningEffort => $composableBuilder(
-    column: $table.enableReasoningEffort,
-    builder: (column) => column,
-  );
-
-  GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
-  get reasoningEffort => $composableBuilder(
-    column: $table.reasoningEffort,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get toolChoice => $composableBuilder(
-    column: $table.toolChoice,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<int> get thinkingBudget => $composableBuilder(
-    column: $table.thinkingBudget,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get toolConfig => $composableBuilder(
-    column: $table.toolConfig,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get useDefaultSafetySettings => $composableBuilder(
-    column: $table.useDefaultSafetySettings,
-    builder: (column) => column,
-  );
-
-  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
-      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
-}
-
-class $$ApiConfigsTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $ApiConfigsTable,
-          ApiConfig,
-          $$ApiConfigsTableFilterComposer,
-          $$ApiConfigsTableOrderingComposer,
-          $$ApiConfigsTableAnnotationComposer,
-          $$ApiConfigsTableCreateCompanionBuilder,
-          $$ApiConfigsTableUpdateCompanionBuilder,
-          (
-            ApiConfig,
-            BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig>,
-          ),
-          ApiConfig,
-          PrefetchHooks Function()
-        > {
-  $$ApiConfigsTableTableManager(_$AppDatabase db, $ApiConfigsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$ApiConfigsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$ApiConfigsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$ApiConfigsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<int?> userId = const Value.absent(),
-                Value<String> id = const Value.absent(),
-                Value<String> name = const Value.absent(),
-                Value<LlmType> apiType = const Value.absent(),
-                Value<String> model = const Value.absent(),
-                Value<String?> apiKey = const Value.absent(),
-                Value<String?> baseUrl = const Value.absent(),
-                Value<bool?> useCustomTemperature = const Value.absent(),
-                Value<double?> temperature = const Value.absent(),
-                Value<bool?> useCustomTopP = const Value.absent(),
-                Value<double?> topP = const Value.absent(),
-                Value<bool?> useCustomTopK = const Value.absent(),
-                Value<int?> topK = const Value.absent(),
-                Value<int?> maxOutputTokens = const Value.absent(),
-                Value<List<String>?> stopSequences = const Value.absent(),
-                Value<bool?> enableReasoningEffort = const Value.absent(),
-                Value<OpenAIReasoningEffort?> reasoningEffort =
-                    const Value.absent(),
-                Value<String?> toolChoice = const Value.absent(),
-                Value<int?> thinkingBudget = const Value.absent(),
-                Value<String?> toolConfig = const Value.absent(),
-                Value<bool> useDefaultSafetySettings = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => ApiConfigsCompanion(
-                userId: userId,
-                id: id,
-                name: name,
-                apiType: apiType,
-                model: model,
-                apiKey: apiKey,
-                baseUrl: baseUrl,
-                useCustomTemperature: useCustomTemperature,
-                temperature: temperature,
-                useCustomTopP: useCustomTopP,
-                topP: topP,
-                useCustomTopK: useCustomTopK,
-                topK: topK,
-                maxOutputTokens: maxOutputTokens,
-                stopSequences: stopSequences,
-                enableReasoningEffort: enableReasoningEffort,
-                reasoningEffort: reasoningEffort,
-                toolChoice: toolChoice,
-                thinkingBudget: thinkingBudget,
-                toolConfig: toolConfig,
-                useDefaultSafetySettings: useDefaultSafetySettings,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                Value<int?> userId = const Value.absent(),
-                Value<String> id = const Value.absent(),
-                required String name,
-                required LlmType apiType,
-                required String model,
-                Value<String?> apiKey = const Value.absent(),
-                Value<String?> baseUrl = const Value.absent(),
-                Value<bool?> useCustomTemperature = const Value.absent(),
-                Value<double?> temperature = const Value.absent(),
-                Value<bool?> useCustomTopP = const Value.absent(),
-                Value<double?> topP = const Value.absent(),
-                Value<bool?> useCustomTopK = const Value.absent(),
-                Value<int?> topK = const Value.absent(),
-                Value<int?> maxOutputTokens = const Value.absent(),
-                Value<List<String>?> stopSequences = const Value.absent(),
-                Value<bool?> enableReasoningEffort = const Value.absent(),
-                Value<OpenAIReasoningEffort?> reasoningEffort =
-                    const Value.absent(),
-                Value<String?> toolChoice = const Value.absent(),
-                Value<int?> thinkingBudget = const Value.absent(),
-                Value<String?> toolConfig = const Value.absent(),
-                Value<bool> useDefaultSafetySettings = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> updatedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => ApiConfigsCompanion.insert(
-                userId: userId,
-                id: id,
-                name: name,
-                apiType: apiType,
-                model: model,
-                apiKey: apiKey,
-                baseUrl: baseUrl,
-                useCustomTemperature: useCustomTemperature,
-                temperature: temperature,
-                useCustomTopP: useCustomTopP,
-                topP: topP,
-                useCustomTopK: useCustomTopK,
-                topK: topK,
-                maxOutputTokens: maxOutputTokens,
-                stopSequences: stopSequences,
-                enableReasoningEffort: enableReasoningEffort,
-                reasoningEffort: reasoningEffort,
-                toolChoice: toolChoice,
-                thinkingBudget: thinkingBudget,
-                toolConfig: toolConfig,
-                useDefaultSafetySettings: useDefaultSafetySettings,
-                createdAt: createdAt,
-                updatedAt: updatedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$ApiConfigsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $ApiConfigsTable,
-      ApiConfig,
-      $$ApiConfigsTableFilterComposer,
-      $$ApiConfigsTableOrderingComposer,
-      $$ApiConfigsTableAnnotationComposer,
-      $$ApiConfigsTableCreateCompanionBuilder,
-      $$ApiConfigsTableUpdateCompanionBuilder,
-      (ApiConfig, BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig>),
-      ApiConfig,
-      PrefetchHooks Function()
-    >;
 typedef $$UsersTableCreateCompanionBuilder =
     UsersCompanion Function({
       Value<int> id,
@@ -6132,6 +5563,29 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<String?> resumeApiConfigId,
       Value<List<String>?> geminiApiKeys,
     });
+
+final class $$UsersTableReferences
+    extends BaseReferences<_$AppDatabase, $UsersTable, DriftUser> {
+  $$UsersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$ApiConfigsTable, List<ApiConfig>>
+  _apiConfigsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.apiConfigs,
+    aliasName: $_aliasNameGenerator(db.users.id, db.apiConfigs.userId),
+  );
+
+  $$ApiConfigsTableProcessedTableManager get apiConfigsRefs {
+    final manager = $$ApiConfigsTableTableManager(
+      $_db,
+      $_db.apiConfigs,
+    ).filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_apiConfigsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
 
 class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
   $$UsersTableFilterComposer({
@@ -6214,6 +5668,31 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     column: $table.geminiApiKeys,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
+
+  Expression<bool> apiConfigsRefs(
+    Expression<bool> Function($$ApiConfigsTableFilterComposer f) f,
+  ) {
+    final $$ApiConfigsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.apiConfigs,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ApiConfigsTableFilterComposer(
+            $db: $db,
+            $table: $db.apiConfigs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$UsersTableOrderingComposer
@@ -6363,6 +5842,31 @@ class $$UsersTableAnnotationComposer
         column: $table.geminiApiKeys,
         builder: (column) => column,
       );
+
+  Expression<T> apiConfigsRefs<T extends Object>(
+    Expression<T> Function($$ApiConfigsTableAnnotationComposer a) f,
+  ) {
+    final $$ApiConfigsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.apiConfigs,
+      getReferencedColumn: (t) => t.userId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ApiConfigsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.apiConfigs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$UsersTableTableManager
@@ -6376,9 +5880,9 @@ class $$UsersTableTableManager
           $$UsersTableAnnotationComposer,
           $$UsersTableCreateCompanionBuilder,
           $$UsersTableUpdateCompanionBuilder,
-          (DriftUser, BaseReferences<_$AppDatabase, $UsersTable, DriftUser>),
+          (DriftUser, $$UsersTableReferences),
           DriftUser,
-          PrefetchHooks Function()
+          PrefetchHooks Function({bool apiConfigsRefs})
         > {
   $$UsersTableTableManager(_$AppDatabase db, $UsersTable table)
     : super(
@@ -6458,9 +5962,37 @@ class $$UsersTableTableManager
                 geminiApiKeys: geminiApiKeys,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) =>
+                    (e.readTable(table), $$UsersTableReferences(db, table, e)),
+              )
               .toList(),
-          prefetchHooksCallback: null,
+          prefetchHooksCallback: ({apiConfigsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (apiConfigsRefs) db.apiConfigs],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (apiConfigsRefs)
+                    await $_getPrefetchedData<
+                      DriftUser,
+                      $UsersTable,
+                      ApiConfig
+                    >(
+                      currentTable: table,
+                      referencedTable: $$UsersTableReferences
+                          ._apiConfigsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$UsersTableReferences(db, table, p0).apiConfigsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where((e) => e.userId == item.id),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
         ),
       );
 }
@@ -6475,9 +6007,706 @@ typedef $$UsersTableProcessedTableManager =
       $$UsersTableAnnotationComposer,
       $$UsersTableCreateCompanionBuilder,
       $$UsersTableUpdateCompanionBuilder,
-      (DriftUser, BaseReferences<_$AppDatabase, $UsersTable, DriftUser>),
+      (DriftUser, $$UsersTableReferences),
       DriftUser,
-      PrefetchHooks Function()
+      PrefetchHooks Function({bool apiConfigsRefs})
+    >;
+typedef $$ApiConfigsTableCreateCompanionBuilder =
+    ApiConfigsCompanion Function({
+      required int userId,
+      Value<String> id,
+      required String name,
+      required LlmType apiType,
+      required String model,
+      Value<String?> apiKey,
+      Value<String?> baseUrl,
+      Value<bool?> useCustomTemperature,
+      Value<double?> temperature,
+      Value<bool?> useCustomTopP,
+      Value<double?> topP,
+      Value<bool?> useCustomTopK,
+      Value<int?> topK,
+      Value<int?> maxOutputTokens,
+      Value<List<String>?> stopSequences,
+      Value<bool?> enableReasoningEffort,
+      Value<OpenAIReasoningEffort?> reasoningEffort,
+      Value<String?> toolChoice,
+      Value<int?> thinkingBudget,
+      Value<String?> toolConfig,
+      Value<bool> useDefaultSafetySettings,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ApiConfigsTableUpdateCompanionBuilder =
+    ApiConfigsCompanion Function({
+      Value<int> userId,
+      Value<String> id,
+      Value<String> name,
+      Value<LlmType> apiType,
+      Value<String> model,
+      Value<String?> apiKey,
+      Value<String?> baseUrl,
+      Value<bool?> useCustomTemperature,
+      Value<double?> temperature,
+      Value<bool?> useCustomTopP,
+      Value<double?> topP,
+      Value<bool?> useCustomTopK,
+      Value<int?> topK,
+      Value<int?> maxOutputTokens,
+      Value<List<String>?> stopSequences,
+      Value<bool?> enableReasoningEffort,
+      Value<OpenAIReasoningEffort?> reasoningEffort,
+      Value<String?> toolChoice,
+      Value<int?> thinkingBudget,
+      Value<String?> toolConfig,
+      Value<bool> useDefaultSafetySettings,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$ApiConfigsTableReferences
+    extends BaseReferences<_$AppDatabase, $ApiConfigsTable, ApiConfig> {
+  $$ApiConfigsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $UsersTable _userIdTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.apiConfigs.userId, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager get userId {
+    final $_column = $_itemColumn<int>('user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_userIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ApiConfigsTableFilterComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<LlmType, LlmType, String> get apiType =>
+      $composableBuilder(
+        column: $table.apiType,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get apiKey => $composableBuilder(
+    column: $table.apiKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useCustomTemperature => $composableBuilder(
+    column: $table.useCustomTemperature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get temperature => $composableBuilder(
+    column: $table.temperature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useCustomTopP => $composableBuilder(
+    column: $table.useCustomTopP,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get topP => $composableBuilder(
+    column: $table.topP,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useCustomTopK => $composableBuilder(
+    column: $table.useCustomTopK,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get topK => $composableBuilder(
+    column: $table.topK,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxOutputTokens => $composableBuilder(
+    column: $table.maxOutputTokens,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<List<String>?, List<String>, String>
+  get stopSequences => $composableBuilder(
+    column: $table.stopSequences,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<bool> get enableReasoningEffort => $composableBuilder(
+    column: $table.enableReasoningEffort,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<
+    OpenAIReasoningEffort?,
+    OpenAIReasoningEffort,
+    String
+  >
+  get reasoningEffort => $composableBuilder(
+    column: $table.reasoningEffort,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get toolChoice => $composableBuilder(
+    column: $table.toolChoice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get thinkingBudget => $composableBuilder(
+    column: $table.thinkingBudget,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toolConfig => $composableBuilder(
+    column: $table.toolConfig,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get useDefaultSafetySettings => $composableBuilder(
+    column: $table.useDefaultSafetySettings,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get createdAt =>
+      $composableBuilder(
+        column: $table.createdAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<DateTime, DateTime, int> get updatedAt =>
+      $composableBuilder(
+        column: $table.updatedAt,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  $$UsersTableFilterComposer get userId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ApiConfigsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get apiType => $composableBuilder(
+    column: $table.apiType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get model => $composableBuilder(
+    column: $table.model,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get apiKey => $composableBuilder(
+    column: $table.apiKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get baseUrl => $composableBuilder(
+    column: $table.baseUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get useCustomTemperature => $composableBuilder(
+    column: $table.useCustomTemperature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get temperature => $composableBuilder(
+    column: $table.temperature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get useCustomTopP => $composableBuilder(
+    column: $table.useCustomTopP,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get topP => $composableBuilder(
+    column: $table.topP,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get useCustomTopK => $composableBuilder(
+    column: $table.useCustomTopK,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get topK => $composableBuilder(
+    column: $table.topK,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxOutputTokens => $composableBuilder(
+    column: $table.maxOutputTokens,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stopSequences => $composableBuilder(
+    column: $table.stopSequences,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enableReasoningEffort => $composableBuilder(
+    column: $table.enableReasoningEffort,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reasoningEffort => $composableBuilder(
+    column: $table.reasoningEffort,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolChoice => $composableBuilder(
+    column: $table.toolChoice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get thinkingBudget => $composableBuilder(
+    column: $table.thinkingBudget,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolConfig => $composableBuilder(
+    column: $table.toolConfig,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get useDefaultSafetySettings => $composableBuilder(
+    column: $table.useDefaultSafetySettings,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$UsersTableOrderingComposer get userId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ApiConfigsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ApiConfigsTable> {
+  $$ApiConfigsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<LlmType, String> get apiType =>
+      $composableBuilder(column: $table.apiType, builder: (column) => column);
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get apiKey =>
+      $composableBuilder(column: $table.apiKey, builder: (column) => column);
+
+  GeneratedColumn<String> get baseUrl =>
+      $composableBuilder(column: $table.baseUrl, builder: (column) => column);
+
+  GeneratedColumn<bool> get useCustomTemperature => $composableBuilder(
+    column: $table.useCustomTemperature,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get temperature => $composableBuilder(
+    column: $table.temperature,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get useCustomTopP => $composableBuilder(
+    column: $table.useCustomTopP,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get topP =>
+      $composableBuilder(column: $table.topP, builder: (column) => column);
+
+  GeneratedColumn<bool> get useCustomTopK => $composableBuilder(
+    column: $table.useCustomTopK,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get topK =>
+      $composableBuilder(column: $table.topK, builder: (column) => column);
+
+  GeneratedColumn<int> get maxOutputTokens => $composableBuilder(
+    column: $table.maxOutputTokens,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<List<String>?, String> get stopSequences =>
+      $composableBuilder(
+        column: $table.stopSequences,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<bool> get enableReasoningEffort => $composableBuilder(
+    column: $table.enableReasoningEffort,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<OpenAIReasoningEffort?, String>
+  get reasoningEffort => $composableBuilder(
+    column: $table.reasoningEffort,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toolChoice => $composableBuilder(
+    column: $table.toolChoice,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get thinkingBudget => $composableBuilder(
+    column: $table.thinkingBudget,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toolConfig => $composableBuilder(
+    column: $table.toolConfig,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get useDefaultSafetySettings => $composableBuilder(
+    column: $table.useDefaultSafetySettings,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<DateTime, int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<DateTime, int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get userId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.userId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ApiConfigsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ApiConfigsTable,
+          ApiConfig,
+          $$ApiConfigsTableFilterComposer,
+          $$ApiConfigsTableOrderingComposer,
+          $$ApiConfigsTableAnnotationComposer,
+          $$ApiConfigsTableCreateCompanionBuilder,
+          $$ApiConfigsTableUpdateCompanionBuilder,
+          (ApiConfig, $$ApiConfigsTableReferences),
+          ApiConfig,
+          PrefetchHooks Function({bool userId})
+        > {
+  $$ApiConfigsTableTableManager(_$AppDatabase db, $ApiConfigsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ApiConfigsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ApiConfigsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ApiConfigsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> userId = const Value.absent(),
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<LlmType> apiType = const Value.absent(),
+                Value<String> model = const Value.absent(),
+                Value<String?> apiKey = const Value.absent(),
+                Value<String?> baseUrl = const Value.absent(),
+                Value<bool?> useCustomTemperature = const Value.absent(),
+                Value<double?> temperature = const Value.absent(),
+                Value<bool?> useCustomTopP = const Value.absent(),
+                Value<double?> topP = const Value.absent(),
+                Value<bool?> useCustomTopK = const Value.absent(),
+                Value<int?> topK = const Value.absent(),
+                Value<int?> maxOutputTokens = const Value.absent(),
+                Value<List<String>?> stopSequences = const Value.absent(),
+                Value<bool?> enableReasoningEffort = const Value.absent(),
+                Value<OpenAIReasoningEffort?> reasoningEffort =
+                    const Value.absent(),
+                Value<String?> toolChoice = const Value.absent(),
+                Value<int?> thinkingBudget = const Value.absent(),
+                Value<String?> toolConfig = const Value.absent(),
+                Value<bool> useDefaultSafetySettings = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApiConfigsCompanion(
+                userId: userId,
+                id: id,
+                name: name,
+                apiType: apiType,
+                model: model,
+                apiKey: apiKey,
+                baseUrl: baseUrl,
+                useCustomTemperature: useCustomTemperature,
+                temperature: temperature,
+                useCustomTopP: useCustomTopP,
+                topP: topP,
+                useCustomTopK: useCustomTopK,
+                topK: topK,
+                maxOutputTokens: maxOutputTokens,
+                stopSequences: stopSequences,
+                enableReasoningEffort: enableReasoningEffort,
+                reasoningEffort: reasoningEffort,
+                toolChoice: toolChoice,
+                thinkingBudget: thinkingBudget,
+                toolConfig: toolConfig,
+                useDefaultSafetySettings: useDefaultSafetySettings,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int userId,
+                Value<String> id = const Value.absent(),
+                required String name,
+                required LlmType apiType,
+                required String model,
+                Value<String?> apiKey = const Value.absent(),
+                Value<String?> baseUrl = const Value.absent(),
+                Value<bool?> useCustomTemperature = const Value.absent(),
+                Value<double?> temperature = const Value.absent(),
+                Value<bool?> useCustomTopP = const Value.absent(),
+                Value<double?> topP = const Value.absent(),
+                Value<bool?> useCustomTopK = const Value.absent(),
+                Value<int?> topK = const Value.absent(),
+                Value<int?> maxOutputTokens = const Value.absent(),
+                Value<List<String>?> stopSequences = const Value.absent(),
+                Value<bool?> enableReasoningEffort = const Value.absent(),
+                Value<OpenAIReasoningEffort?> reasoningEffort =
+                    const Value.absent(),
+                Value<String?> toolChoice = const Value.absent(),
+                Value<int?> thinkingBudget = const Value.absent(),
+                Value<String?> toolConfig = const Value.absent(),
+                Value<bool> useDefaultSafetySettings = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ApiConfigsCompanion.insert(
+                userId: userId,
+                id: id,
+                name: name,
+                apiType: apiType,
+                model: model,
+                apiKey: apiKey,
+                baseUrl: baseUrl,
+                useCustomTemperature: useCustomTemperature,
+                temperature: temperature,
+                useCustomTopP: useCustomTopP,
+                topP: topP,
+                useCustomTopK: useCustomTopK,
+                topK: topK,
+                maxOutputTokens: maxOutputTokens,
+                stopSequences: stopSequences,
+                enableReasoningEffort: enableReasoningEffort,
+                reasoningEffort: reasoningEffort,
+                toolChoice: toolChoice,
+                thinkingBudget: thinkingBudget,
+                toolConfig: toolConfig,
+                useDefaultSafetySettings: useDefaultSafetySettings,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ApiConfigsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({userId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (userId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.userId,
+                                referencedTable: $$ApiConfigsTableReferences
+                                    ._userIdTable(db),
+                                referencedColumn: $$ApiConfigsTableReferences
+                                    ._userIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ApiConfigsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ApiConfigsTable,
+      ApiConfig,
+      $$ApiConfigsTableFilterComposer,
+      $$ApiConfigsTableOrderingComposer,
+      $$ApiConfigsTableAnnotationComposer,
+      $$ApiConfigsTableCreateCompanionBuilder,
+      $$ApiConfigsTableUpdateCompanionBuilder,
+      (ApiConfig, $$ApiConfigsTableReferences),
+      ApiConfig,
+      PrefetchHooks Function({bool userId})
     >;
 
 class $AppDatabaseManager {
@@ -6487,8 +6716,8 @@ class $AppDatabaseManager {
       $$ChatsTableTableManager(_db, _db.chats);
   $$MessagesTableTableManager get messages =>
       $$MessagesTableTableManager(_db, _db.messages);
-  $$ApiConfigsTableTableManager get apiConfigs =>
-      $$ApiConfigsTableTableManager(_db, _db.apiConfigs);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db, _db.users);
+  $$ApiConfigsTableTableManager get apiConfigs =>
+      $$ApiConfigsTableTableManager(_db, _db.apiConfigs);
 }
