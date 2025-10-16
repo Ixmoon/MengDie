@@ -522,11 +522,17 @@ class ContextXmlService {
             .where((m) => m.role == prompt.injectionRole)
             .toList();
 
-        final targetMessage =
-            targetRoleMessages.length >= prompt.injectionPosition
-                ? targetRoleMessages[
-                    targetRoleMessages.length - prompt.injectionPosition]
-                : null;
+        Message? targetMessage;
+        if (targetRoleMessages.isNotEmpty) {
+          // Fallback logic for injection position. If the specified position
+          // (from the end) doesn't exist, it falls back to the nearest
+          // available message. E.g., asking for the 3rd last message when
+          // only 2 exist will target the 2nd last (i.e., the oldest).
+          final int effectivePosition =
+              prompt.injectionPosition.clamp(1, targetRoleMessages.length);
+          targetMessage =
+              targetRoleMessages[targetRoleMessages.length - effectivePosition];
+        }
 
         if (targetMessage != null) {
           injectionsMap
