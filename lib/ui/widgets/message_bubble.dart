@@ -843,6 +843,14 @@ class MessageBubble extends StatelessWidget {
   }
 }
 
+// Helper class to hold segments of text for typewriter animation.
+class _TextSegment {
+  final String content;
+  final bool isInstant; // True if the segment should appear instantly.
+
+  _TextSegment(this.content, {this.isInstant = false});
+}
+
 class _TypewriterText extends StatefulWidget {
   final String fullText;
   final double speed;
@@ -867,10 +875,19 @@ class _TypewriterTextState extends State<_TypewriterText>
     with SingleTickerProviderStateMixin {
   String _displayedText = "";
   Timer? _timer;
+
+  List<_TextSegment> _segments = [];
+  int _segmentIndex = 0;
   int _charIndex = 0;
+  bool _wasInstant = false; // Tracks if the last state was instant display
 
   late AnimationController _animationController;
   late Animation<double> _opacityAnimation;
+
+  static final _collapsibleRegex = RegExp(
+    r'(```[\s\S]*?```|<\w+[^>]*>[\s\S]*?</\w+>|<[\w\s="/]+/>)',
+    multiLine: true,
+  );
 
   @override
   void initState() {
@@ -884,18 +901,15 @@ class _TypewriterTextState extends State<_TypewriterText>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
 
-    _startAnimation();
+    _updateText();
   }
 
   @override
   void didUpdateWidget(_TypewriterText oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    // If the text or speed changes, restart the timer to continue animating.
-    // This handles both incoming new text during streaming and the final text after streaming ends.
     if (widget.fullText != oldWidget.fullText ||
         widget.speed != oldWidget.speed) {
-      _startAnimation();
+      _updateText();
     }
   }
 
@@ -906,36 +920,143 @@ class _TypewriterTextState extends State<_TypewriterText>
     super.dispose();
   }
 
-  void _startAnimation() {
-    _timer?.cancel();
-    if (_charIndex >= widget.fullText.length) {
-      // Already displayed everything
-      if (_displayedText != widget.fullText) {
-        setState(() {
-          _displayedText = widget.fullText;
-        });
+  /// Determines if the text contains an unclosed collapsible component.
+  bool _hasUnclosedComponent(String text) {
+    if ((text.split('```').length - 1) % 2 != 0) {
+      return true;
+    }
+    final tagStack = <String>[];
+    final tagRegex = RegExp(r'<(/?)(\w+)[^>]*?>');
+    for (final match in tagRegex.allMatches(text)) {
+      if (text.substring(match.start, match.end).endsWith('/>')) {
+        continue; // Skip self-closing tags
       }
+      final isClosing = match.group(1) == '/';
+      final tagName = match.group(2)!;
+      if (isClosing) {
+        if (tagStack.isNotEmpty && tagStack.last == tagName) {
+          tagStack.removeLast();
+        }
+      } else {
+        tagStack.add(tagName);
+      }
+    }
+    return tagStack.isNotEmpty;
+  }
+
+  /// Central logic to decide whether to animate or display instantly.
+  void _updateText() {
+    bool isInstantNow = _hasUnclosedComponent(widget.fullText);
+
+    if (isInstantNow) {
+      _timer?.cancel();
+      if (_displayedText != widget.fullText) {
+        setState(() => _displayedText = widget.fullText);
+      }
+    } else {
+      if (_wasInstant || !widget.fullText.startsWith(_displayedText)) {
+        _resetAndStartAnimation();
+      } else {
+        _continueAnimation();
+      }
+    }
+    _wasInstant = isInstantNow;
+  }
+
+  void _segmentText(String text) {
+    _segments.clear();
+    int lastMatchEnd = 0;
+    _collapsibleRegex.allMatches(text).forEach((match) {
+      if (match.start > lastMatchEnd) {
+        _segments.add(_TextSegment(text.substring(lastMatchEnd, match.start)));
+      }
+      _segments.add(_TextSegment(match.group(0)!, isInstant: true));
+      lastMatchEnd = match.end;
+    });
+    if (lastMatchEnd < text.length) {
+      _segments.add(_TextSegment(text.substring(lastMatchEnd)));
+    }
+  }
+
+  String _buildDisplayedText() {
+    if (_wasInstant) return _displayedText;
+    final buffer = StringBuffer();
+    for (int i = 0; i < _segmentIndex; i++) {
+      if (i < _segments.length) buffer.write(_segments[i].content);
+    }
+    if (_segmentIndex < _segments.length && !_segments[_segmentIndex].isInstant) {
+      buffer.write(_segments[_segmentIndex].content.substring(0, _charIndex));
+    }
+    return buffer.toString();
+  }
+
+  void _restoreAnimationState() {
+    int len = _displayedText.length;
+    int cumulativeLen = 0;
+    for (int i = 0; i < _segments.length; i++) {
+      final segment = _segments[i];
+      final segmentLen = segment.content.length;
+      if (cumulativeLen + segmentLen >= len) {
+        _segmentIndex = i;
+        _charIndex = len - cumulativeLen;
+        return;
+      }
+      cumulativeLen += segmentLen;
+    }
+    _segmentIndex = _segments.length;
+    _charIndex = 0;
+  }
+
+  void _resetAndStartAnimation() {
+    _timer?.cancel();
+    _displayedText = "";
+    _segmentIndex = 0;
+    _charIndex = 0;
+    _segmentText(widget.fullText);
+    _startAnimation();
+  }
+
+  void _continueAnimation() {
+    _timer?.cancel();
+    _segmentText(widget.fullText);
+    _restoreAnimationState();
+    if (_buildDisplayedText().length >= widget.fullText.length) {
       return;
     }
+    _startAnimation();
+  }
 
-    const baseDelay = 50; // Milliseconds per character at 1x speed
+  void _startAnimation() {
+    _timer?.cancel();
+    if (_buildDisplayedText().length >= widget.fullText.length) return;
+
+    const baseDelay = 50;
     final delay = (baseDelay / (widget.speed * widget.speed)).clamp(1, 500).toInt();
 
     _timer = Timer.periodic(Duration(milliseconds: delay), (timer) {
-      if (_charIndex < widget.fullText.length) {
-        _charIndex++;
-        setState(() {
-          _displayedText = widget.fullText.substring(0, _charIndex);
-        });
-      } else {
+      if (_segmentIndex >= _segments.length) {
         timer.cancel();
-        // If it's not a streaming message, ensure the final full text is displayed
-        // in case of any timing discrepancies.
-        if (!widget.isStreaming && _displayedText != widget.fullText) {
-          setState(() {
-            _displayedText = widget.fullText;
-          });
+        return;
+      }
+
+      final currentSegment = _segments[_segmentIndex];
+      if (currentSegment.isInstant) {
+        _segmentIndex++;
+        _charIndex = 0;
+      } else {
+        if (_charIndex < currentSegment.content.length) {
+          _charIndex++;
+        } else {
+          _segmentIndex++;
+          _charIndex = 0;
         }
+      }
+
+      final currentBuiltText = _buildDisplayedText();
+      setState(() => _displayedText = currentBuiltText);
+
+      if (currentBuiltText.length >= widget.fullText.length) {
+        timer.cancel();
       }
     });
   }
@@ -944,20 +1065,18 @@ class _TypewriterTextState extends State<_TypewriterText>
     _timer?.cancel();
     if (_displayedText != widget.fullText) {
       setState(() {
-        _charIndex = widget.fullText.length;
         _displayedText = widget.fullText;
+        _wasInstant = true; // Skipping is an instant display
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool showSkipButton = _charIndex < widget.fullText.length;
+    final bool showSkipButton = _displayedText != widget.fullText;
     final builtContent = widget.builder(context, _displayedText);
 
-    // Avoid showing the button on an empty placeholder
-    if (builtContent is SizedBox &&
-        (builtContent.width == 0 || builtContent.height == 0)) {
+    if (builtContent is SizedBox && (builtContent.width == 0 || builtContent.height == 0)) {
       return builtContent;
     }
 

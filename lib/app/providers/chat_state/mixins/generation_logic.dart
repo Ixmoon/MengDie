@@ -536,14 +536,14 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
     required bool isUrlContextEnabled,
     required bool isCodeExecutionEnabled,
   }) async {
-    Message? placeholderMessage;
-
-    // Step 1: Create and save a placeholder message.
+    // REPLICATION OF _handleSingleResponse LOGIC
+    Message? messageToUpdate;
     try {
+      // Step 1: Create placeholder and set it as the UI-controlled message
       final messageRepo = ref.read(messageRepositoryProvider);
       if (messageToUpdateId != null) {
-        placeholderMessage = await messageRepo.getMessageById(messageToUpdateId);
-        if (placeholderMessage == null) throw Exception("Original message not found.");
+        messageToUpdate = await messageRepo.getMessageById(messageToUpdateId);
+        if (messageToUpdate == null) throw Exception("Original message not found.");
       } else {
         final placeholder = Message(
           chatId: chatId,
@@ -551,90 +551,57 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           parts: [MessagePart.text("...")],
         );
         final newId = await messageRepo.saveMessage(placeholder);
-        placeholderMessage = placeholder.copyWith(id: newId);
+        messageToUpdate = placeholder.copyWith(id: newId);
       }
-      // Set the placeholder for immediate UI feedback.
-      state = state.copyWith(
-        uiControlledMessage: placeholderMessage,
-        isStreaming: true, // Use isStreaming to indicate animation.
-      );
-    } catch (e) {
-      showTopMessage('无法创建伪流式占位消息: $e', backgroundColor: Colors.red);
-      _finalizeResponse(null, hasError: true);
-      return;
-    }
+      state = state.copyWith(uiControlledMessage: messageToUpdate);
 
-    // Step 2: Get the full response from the API.
-    try {
-      final response = await llmService.sendMessageOnce(
-        llmContext: llmContext,
-        apiConfig: apiConfig,
-        requestThoughts: requestThoughts,
-        isGoogleSearchEnabled: isGoogleSearchEnabled,
-        isUrlContextEnabled: isUrlContextEnabled,
-        isCodeExecutionEnabled: isCodeExecutionEnabled,
-      );
+      // Step 2: Fetch the actual response
+      final LlmResponse response;
+      if (state.isParallelRequestEnabled) {
+        response = await llmService.sendParallelMessageOnce(
+          llmContext: llmContext,
+          apiConfig: apiConfig,
+          parallelCount: state.parallelRequestCount,
+          requestThoughts: requestThoughts,
+          isGoogleSearchEnabled: isGoogleSearchEnabled,
+          isUrlContextEnabled: isUrlContextEnabled,
+          isCodeExecutionEnabled: isCodeExecutionEnabled,
+        );
+      } else {
+        response = await llmService.sendMessageOnce(
+          llmContext: llmContext,
+          apiConfig: apiConfig,
+          requestThoughts: requestThoughts,
+          isGoogleSearchEnabled: isGoogleSearchEnabled,
+          isUrlContextEnabled: isUrlContextEnabled,
+          isCodeExecutionEnabled: isCodeExecutionEnabled,
+        );
+      }
+      if (!mounted) return;
 
-      if (!mounted || state.isCancelled) {
+      if (state.isCancelled) {
         _finalizeResponse(state.uiControlledMessage, isCancelled: true);
         return;
       }
 
-      if (!response.isSuccess || response.parts.isEmpty) {
-        showTopMessage(response.error ?? "伪流式获取响应失败", backgroundColor: Colors.red);
+      if (response.isSuccess && response.parts.isNotEmpty) {
+        final String newContent = response.parts.map((p) => p.text ?? "").join("\n");
+        final finalMessage = state.uiControlledMessage?.copyWith(
+          parts: [MessagePart.text(newContent)],
+        );
+        // Update the UI state with the final content before finalizing.
+        state = state.copyWith(uiControlledMessage: finalMessage);
+        _finalizeResponse(finalMessage);
+      } else {
+        showTopMessage(response.error ?? "发送消息失败 (可能响应为空)", backgroundColor: Colors.red);
         _finalizeResponse(state.uiControlledMessage, hasError: true);
-        return;
       }
-
-      // Step 3 (Concurrent): Finalize and save the complete message to the DB.
-      final fullText = response.parts.map((p) => p.text ?? "").join("\n");
-      final finalMessage = placeholderMessage!.copyWith(
-        parts: [MessagePart.text(fullText)],
-      );
-      // This saves the final version to the DB and runs background tasks.
-      _finalizeResponse(finalMessage);
-
-      // Step 4 (Concurrent): Start the UI animation.
-      _animatePseudoStream(fullText, finalMessage);
-
     } catch (e) {
       if (mounted) {
-        showTopMessage('伪流式请求失败: $e', backgroundColor: Colors.red);
+        showTopMessage('发送消息时发生意外错误: $e', backgroundColor: Colors.red);
       }
       _finalizeResponse(state.uiControlledMessage, hasError: true);
     }
-  }
-
-  void _animatePseudoStream(String fullText, Message finalMessage) {
-    int charIndex = 0;
-    const baseDelay = 50;
-    final delay = (baseDelay / state.pseudoStreamSpeed).clamp(10, 500).toInt();
-
-    pseudoStreamTimer?.cancel();
-    pseudoStreamTimer = Timer.periodic(Duration(milliseconds: delay), (timer) {
-      if (!mounted || state.isCancelled) {
-        timer.cancel();
-        // Don't call finalize here, just ensure the final state is set if cancelled mid-animation.
-        state = state.copyWith(uiControlledMessage: finalMessage);
-        return;
-      }
-
-      if (charIndex < fullText.length) {
-        charIndex++;
-        final displayedText = fullText.substring(0, charIndex);
-        // The message ID remains the same, only the content updates for the animation.
-        final updatedMessage = state.uiControlledMessage?.copyWith(
-          parts: [MessagePart.text(displayedText)],
-        );
-        if (updatedMessage != null) {
-          state = state.copyWith(uiControlledMessage: updatedMessage);
-        }
-      } else {
-        timer.cancel();
-        // Animation finished, ensure the UI state shows the complete message.
-        state = state.copyWith(uiControlledMessage: finalMessage);
-      }
-    });
   }
 
   Future<void> cancelGeneration() async {
