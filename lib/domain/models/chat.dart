@@ -61,7 +61,18 @@ class Chat {
     this.parentFolderId,
     this.apiConfigId,
     this.contextConfig = const ContextConfig(),
-    this.xmlRules = const [],
+    this.xmlRules = const [
+      XmlRule(
+        tagName: 'think',
+        action: XmlAction.collapsible,
+        ignoreInContext: true,
+      ),
+      XmlRule(
+        tagName: 'content',
+        action: XmlAction.content,
+        ignoreInContext: false,
+      ),
+    ],
     this.enablePreprocessing = false,
     this.preprocessingPrompt,
     this.contextSummary,

@@ -7,6 +7,8 @@ import '../../../../domain/models/message.dart';
 import '../../../../domain/enums.dart';
 import '../../../../data/llmapi/llm_models.dart';
 import '../../../../data/llmapi/llm_service.dart';
+import '../../../../domain/models/prompt_item.dart';
+import '../../../services/prompt_service.dart';
 import '../../../tools/context_xml_service.dart';
 import '../../../tools/xml_processor.dart';
 import '../../settings_providers.dart';
@@ -234,9 +236,45 @@ mixin BackgroundTasks on UiStateManager {
     Message targetMessage,
   ) async {
     if (state.isCancelled) return;
-    // 只要提示词不为空，就执行生成。
-    // 合并计算的逻辑由 context_xml_service 中的 enableSecondaryXml 开关控制。
-    if (chat.secondaryXmlPrompt?.isEmpty ?? true) {
+
+    var effectivePrompt = chat.secondaryXmlPrompt;
+
+    // 如果基础提示词为空，则直接返回
+    if (effectivePrompt?.isEmpty ?? true) {
+      return;
+    }
+
+    // 检查是否启用结构化输出
+    final promptService = ref.read(promptServiceProvider.notifier);
+    final promptState = ref.read(promptServiceProvider);
+    final isStructuredOutputEnabled =
+        promptState.structuredOutputEnabledChats[chatId] ?? false;
+
+    if (isStructuredOutputEnabled) {
+      final allItems = promptService.getItemsForChat(chatId);
+      final matchedItems = allItems
+          .where((item) => item.status == PromptItemStatus.match)
+          .toList();
+
+      if (matchedItems.isNotEmpty) {
+        // 按 order 字段排序，确保注入顺序稳定
+        matchedItems.sort((a, b) => a.order.compareTo(b.order));
+
+        final tableHeader = '关键词|内容\n---|---\n';
+        final tableRows = matchedItems
+            .map((item) =>
+                '${item.keyword.replaceAll('|', ' ')}|${item.text.replaceAll('\n', ' ')}')
+            .join('\n');
+        final markdownTable =
+            '\n$tableHeader$tableRows';
+
+        // 将 Markdown 表格附加到原始提示词后
+        effectivePrompt = (effectivePrompt ?? '') + markdownTable;
+      }
+    }
+
+    // 只要最终的提示词不为空，就执行生成
+    if (effectivePrompt?.isEmpty ?? true) {
       return;
     }
 
@@ -246,7 +284,7 @@ mixin BackgroundTasks on UiStateManager {
         specificConfigId: chat.secondaryXmlApiConfigId,
       );
       final generatedText = await executeSpecialAction(
-        prompt: chat.secondaryXmlPrompt!,
+        prompt: effectivePrompt!, // 使用可能被修改过的提示词
         apiConfig: apiConfig,
         actionType: SpecialActionType.secondaryXml,
         targetMessage: targetMessage,

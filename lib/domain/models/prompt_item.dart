@@ -4,7 +4,7 @@ import '../enums.dart';
 
 part 'prompt_item.g.dart';
 
-enum PromptItemStatus { off, on, match, insert }
+enum PromptItemStatus { off, on, match }
 
 enum PromptItemType { item, folder }
 
@@ -17,7 +17,8 @@ class PromptItem {
   final PromptItemStatus status;
   final String keyword;
   final String text;
-  final MessageRole injectionRole;
+  final String comment; // New field for the display name
+  final PromptInjectionRole injectionRole;
   final int injectionPosition;
   final int matchMessageCount;
   final String injectionTag; // New field for the XML tag
@@ -33,7 +34,8 @@ class PromptItem {
     this.status = PromptItemStatus.off,
     this.keyword = '',
     this.text = '',
-    this.injectionRole = MessageRole.user,
+    this.comment = '',
+    this.injectionRole = PromptInjectionRole.user,
     this.injectionPosition = 2,
     this.matchMessageCount = 6,
     this.injectionTag = '', // Default to empty string
@@ -55,7 +57,8 @@ class PromptItem {
     PromptItemStatus? status,
     String? keyword,
     String? text,
-    MessageRole? injectionRole,
+    String? comment,
+    PromptInjectionRole? injectionRole,
     int? injectionPosition,
     int? matchMessageCount,
     String? injectionTag,
@@ -70,6 +73,7 @@ class PromptItem {
       status: status ?? this.status,
       keyword: keyword ?? this.keyword,
       text: text ?? this.text,
+      comment: comment ?? this.comment,
       injectionRole: injectionRole ?? this.injectionRole,
       injectionPosition: injectionPosition ?? this.injectionPosition,
       matchMessageCount: matchMessageCount ?? this.matchMessageCount,
@@ -79,4 +83,5 @@ class PromptItem {
       isGlobal: isGlobal ?? this.isGlobal,
     );
   }
+
 }

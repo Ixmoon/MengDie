@@ -31,14 +31,14 @@ import 'screens/prompt_item_editor_screen.dart';
 
 // --- GoRouter Provider ---
 // 提供 GoRouter 实例的 Provider。
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/', // 总是从启动页开始
     debugLogDiagnostics: kDebugMode,
     refreshListenable: GoRouterRefreshStream(authNotifier.stream),
@@ -118,22 +118,22 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: 'settings',
-                parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
+                parentNavigatorKey: rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatSettingsScreen(),
               ),
               GoRoute(
                 path: 'debug',
-                parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
+                parentNavigatorKey: rootNavigatorKey, // 在根导航器上显示
                 builder: (context, state) => const ChatDebugScreen(),
               ),
               GoRoute(
                 path: 'prompt-editor',
-                parentNavigatorKey: _rootNavigatorKey,
+                parentNavigatorKey: rootNavigatorKey,
                 builder: (context, state) => const PromptEditorScreen(),
                 routes: [
                   GoRoute(
                     path: 'item/:itemId',
-                    parentNavigatorKey: _rootNavigatorKey,
+                    parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) {
                       final itemId = state.pathParameters['itemId']!;
                       final chatId = int.parse(state.uri.queryParameters['chatId']!);
@@ -153,17 +153,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/settings',
-        parentNavigatorKey: _rootNavigatorKey, // 在根导航器上显示
+        parentNavigatorKey: rootNavigatorKey, // 在根导航器上显示
         builder: (context, state) => const GlobalSettingsScreen(),
         routes: [
           GoRoute(
             path: 'api-configs',
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => const ApiConfigsScreen(),
           ),
           GoRoute(
             path: 'gemini-api-keys',
-            parentNavigatorKey: _rootNavigatorKey,
+            parentNavigatorKey: rootNavigatorKey,
             builder: (context, state) => const GeminiApiKeysScreen(),
           ),
         ],

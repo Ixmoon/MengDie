@@ -515,6 +515,7 @@ class MessageBubble extends StatelessWidget {
         speed: pseudoStreamSpeed,
         isStreaming: isStreaming,
         textColor: textColor,
+        xmlRules: xmlRules, // Pass the XML rules down
         builder: (context, displayedText) {
           final widgets = _renderTextContent(
             context,
@@ -856,6 +857,7 @@ class _TypewriterText extends StatefulWidget {
   final double speed;
   final bool isStreaming;
   final Color textColor;
+  final List<XmlRule> xmlRules; // Add xmlRules
   final Widget Function(BuildContext, String) builder;
 
   const _TypewriterText({
@@ -864,6 +866,7 @@ class _TypewriterText extends StatefulWidget {
     required this.speed,
     required this.isStreaming,
     required this.textColor,
+    required this.xmlRules, // Add xmlRules
     required this.builder,
   });
 
@@ -884,10 +887,6 @@ class _TypewriterTextState extends State<_TypewriterText>
   late AnimationController _animationController;
   late Animation<double> _opacityAnimation;
 
-  static final _collapsibleRegex = RegExp(
-    r'(```[\s\S]*?```|<\w+[^>]*>[\s\S]*?</\w+>|<[\w\s="/]+/>)',
-    multiLine: true,
-  );
 
   @override
   void initState() {
@@ -963,19 +962,58 @@ class _TypewriterTextState extends State<_TypewriterText>
     _wasInstant = isInstantNow;
   }
 
-  void _segmentText(String text) {
-    _segments.clear();
+  List<_TextSegment> _segmentText(String text) {
+    final segments = <_TextSegment>[];
+    if (text.isEmpty) return segments;
+
+    final combinedRegex = RegExp(
+      r'(```[\s\S]*?```)|(<(\w+)[^>]*>[\s\S]*?</\3>)|(<[^>]+>)',
+      multiLine: true,
+    );
+
     int lastMatchEnd = 0;
-    _collapsibleRegex.allMatches(text).forEach((match) {
+
+    for (final match in combinedRegex.allMatches(text)) {
       if (match.start > lastMatchEnd) {
-        _segments.add(_TextSegment(text.substring(lastMatchEnd, match.start)));
+        segments.add(_TextSegment(text.substring(lastMatchEnd, match.start)));
       }
-      _segments.add(_TextSegment(match.group(0)!, isInstant: true));
+
+      final codeBlock = match.group(1);
+      final xmlBlock = match.group(2);
+      final singleXmlTag = match.group(4);
+
+      if (codeBlock != null) {
+        segments.add(_TextSegment(codeBlock, isInstant: true));
+      } else if (xmlBlock != null) {
+        final tagName = match.group(3)!.toLowerCase();
+        final rule = widget.xmlRules.firstWhereOrNull(
+          (r) => r.tagName?.toLowerCase() == tagName,
+        );
+
+        if (rule?.action == XmlAction.content) {
+          final startTagMatch = RegExp(r'^<[^>]+>').firstMatch(xmlBlock)!;
+          final endTagMatch = RegExp(r'</[^>]+>$').firstMatch(xmlBlock)!;
+          final startTag = startTagMatch.group(0)!;
+          final endTag = endTagMatch.group(0)!;
+          final content = xmlBlock.substring(startTagMatch.end, endTagMatch.start);
+
+          segments.add(_TextSegment(startTag, isInstant: true));
+          segments.addAll(_segmentText(content)); // Safe recursive call
+          segments.add(_TextSegment(endTag, isInstant: true));
+        } else {
+          segments.add(_TextSegment(xmlBlock, isInstant: true));
+        }
+      } else if (singleXmlTag != null) {
+        segments.add(_TextSegment(singleXmlTag, isInstant: true));
+      }
+
       lastMatchEnd = match.end;
-    });
-    if (lastMatchEnd < text.length) {
-      _segments.add(_TextSegment(text.substring(lastMatchEnd)));
     }
+
+    if (lastMatchEnd < text.length) {
+      segments.add(_TextSegment(text.substring(lastMatchEnd)));
+    }
+    return segments;
   }
 
   String _buildDisplayedText() {
@@ -1012,13 +1050,13 @@ class _TypewriterTextState extends State<_TypewriterText>
     _displayedText = "";
     _segmentIndex = 0;
     _charIndex = 0;
-    _segmentText(widget.fullText);
+    _segments = _segmentText(widget.fullText);
     _startAnimation();
   }
 
   void _continueAnimation() {
     _timer?.cancel();
-    _segmentText(widget.fullText);
+    _segments = _segmentText(widget.fullText);
     _restoreAnimationState();
     if (_buildDisplayedText().length >= widget.fullText.length) {
       return;

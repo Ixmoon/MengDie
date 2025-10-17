@@ -148,17 +148,25 @@ class _PromptList extends StatelessWidget {
       itemBuilder: (context, index) {
         final item = items[index];
         final firstKeyword = item.keyword.split(',').first.trim();
+        final title = item.comment.isNotEmpty ? item.comment : (firstKeyword.isNotEmpty ? firstKeyword : '(无名称)');
 
+        final isFolder = item.type == PromptItemType.folder;
         return ListTile(
-          title: Text(firstKeyword.isNotEmpty ? firstKeyword : '(无关键词)'),
-          subtitle: Text(
-            item.text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          onTap: () {
-            onInject(item.text);
-          },
+          leading: Icon(isFolder ? Icons.folder : Icons.description_outlined),
+          title: Text(title),
+          subtitle: isFolder
+              ? const Text('(文件夹)')
+              : Text(
+                  item.text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          onTap: isFolder
+              ? null
+              : () {
+                  onInject(item.text);
+                },
+          enabled: !isFolder,
         );
       },
     );

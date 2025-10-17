@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../../domain/enums.dart';
 
 import '../../domain/models/prompt_item.dart';
 import '../providers/auth_providers.dart';
@@ -14,22 +15,27 @@ class PromptState {
   final List<PromptItem> globalItems;
   final Map<int, List<PromptItem>> chatItems;
   final Map<int, Map<String, PromptItemStatus>> chatStatuses;
+  final Map<int, bool> structuredOutputEnabledChats;
 
   const PromptState({
     this.globalItems = const [],
     this.chatItems = const {},
     this.chatStatuses = const {},
+    this.structuredOutputEnabledChats = const {},
   });
 
   PromptState copyWith({
     List<PromptItem>? globalItems,
     Map<int, List<PromptItem>>? chatItems,
     Map<int, Map<String, PromptItemStatus>>? chatStatuses,
+    Map<int, bool>? structuredOutputEnabledChats,
   }) {
     return PromptState(
       globalItems: globalItems ?? this.globalItems,
       chatItems: chatItems ?? this.chatItems,
       chatStatuses: chatStatuses ?? this.chatStatuses,
+      structuredOutputEnabledChats:
+          structuredOutputEnabledChats ?? this.structuredOutputEnabledChats,
     );
   }
 }
@@ -102,6 +108,8 @@ class PromptService extends StateNotifier<PromptState> {
   String get _globalItemsKey => 'prompt_items_global_userId_$_userId';
   String get _chatItemsKey => 'prompt_items_by_chat_userId_$_userId';
   String get _chatStatusesKey => 'prompt_statuses_by_chat_userId_$_userId';
+  String get _structuredOutputEnabledChatsKey =>
+      'structured_output_enabled_chats_userId_$_userId';
 
   PromptService(this._prefs, this._uuid, this._userId)
       : super(const PromptState()) {
@@ -139,10 +147,21 @@ class PromptService extends StateNotifier<PromptState> {
       return MapEntry(chatId, statuses);
     });
 
+    // 4. Load structured output enabled statuses
+    final structuredOutputJson =
+        _prefs.getString(_structuredOutputEnabledChatsKey) ?? '{}';
+    final decodedStructuredOutput =
+        jsonDecode(structuredOutputJson) as Map<String, dynamic>;
+    final structuredOutputEnabledChats =
+        decodedStructuredOutput.map((chatIdStr, isEnabled) {
+      return MapEntry(int.parse(chatIdStr), isEnabled as bool);
+    });
+
     state = PromptState(
       globalItems: globalItems,
       chatItems: chatItems,
       chatStatuses: chatStatuses,
+      structuredOutputEnabledChats: structuredOutputEnabledChats,
     );
   }
 
@@ -168,6 +187,13 @@ class PromptService extends StateNotifier<PromptState> {
       return MapEntry(chatId.toString(), statuses);
     });
     await _prefs.setString(_chatStatusesKey, jsonEncode(encodedStatuses));
+  }
+
+  Future<void> _saveStructuredOutputEnabledChats() async {
+    final encoded = state.structuredOutputEnabledChats.map((chatId, isEnabled) {
+      return MapEntry(chatId.toString(), isEnabled);
+    });
+    await _prefs.setString(_structuredOutputEnabledChatsKey, jsonEncode(encoded));
   }
 
   /// NEW: A private helper to recursively build a flattened list for the UI.
@@ -304,6 +330,7 @@ class PromptService extends StateNotifier<PromptState> {
               i.copyWith(
                 keyword: item.keyword,
                 text: item.text,
+                comment: item.comment,
                 injectionRole: item.injectionRole,
                 injectionPosition: item.injectionPosition,
                 matchMessageCount: item.matchMessageCount,
@@ -324,6 +351,7 @@ class PromptService extends StateNotifier<PromptState> {
           status: item.status,
           keyword: item.keyword,
           text: item.text,
+          comment: item.comment,
           injectionRole: item.injectionRole,
           injectionPosition: item.injectionPosition,
           matchMessageCount: item.matchMessageCount,
@@ -335,6 +363,78 @@ class PromptService extends StateNotifier<PromptState> {
         state = state.copyWith(chatItems: newChatItemsMap);
         await _saveChatItems();
       }
+    }
+  }
+
+  Future<void> renameFolder({
+    required int chatId,
+    required bool isGlobal,
+    required String folderId,
+    required String newName,
+  }) async {
+    if (isGlobal) {
+      final newGlobalItems = state.globalItems.map((item) {
+        if (item.id == folderId && item.type == PromptItemType.folder) {
+          return item.copyWith(keyword: newName);
+        }
+        return item;
+      }).toList();
+      state = state.copyWith(globalItems: newGlobalItems);
+      await _saveGlobalItems();
+    } else {
+      final currentChatItems = state.chatItems[chatId] ?? [];
+      final newChatItems = currentChatItems.map((item) {
+        if (item.id == folderId && item.type == PromptItemType.folder) {
+          return item.copyWith(keyword: newName);
+        }
+        return item;
+      }).toList();
+      
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId] = newChatItems;
+      state = state.copyWith(chatItems: newChatItemsMap);
+      await _saveChatItems();
+    }
+  }
+
+  Future<void> applyConfigsToFolderItems({
+    required int chatId,
+    required bool isGlobal,
+    required String folderId,
+    PromptItemStatus? status,
+    PromptInjectionRole? injectionRole,
+    int? injectionPosition,
+    int? matchMessageCount,
+    String? injectionTag,
+    bool? critical,
+    String? comment,
+  }) async {
+    final List<PromptItem> sourceList =
+        isGlobal ? state.globalItems : (state.chatItems[chatId] ?? []);
+
+    final updatedList = sourceList.map((item) {
+      if (item.parentId == folderId && item.type == PromptItemType.item) {
+        return item.copyWith(
+          status: status,
+          injectionRole: injectionRole,
+          injectionPosition: injectionPosition,
+          matchMessageCount: matchMessageCount,
+          injectionTag: injectionTag,
+          critical: critical,
+          comment: comment,
+        );
+      }
+      return item;
+    }).toList();
+
+    if (isGlobal) {
+      state = state.copyWith(globalItems: updatedList);
+      await _saveGlobalItems();
+    } else {
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId] = updatedList;
+      state = state.copyWith(chatItems: newChatItemsMap);
+      await _saveChatItems();
     }
   }
 
@@ -367,6 +467,15 @@ class PromptService extends StateNotifier<PromptState> {
         await _saveChatItems();
       }
     }
+  }
+
+  Future<void> updateStructuredOutputStatus(
+      int chatId, bool isEnabled) async {
+    final newStatuses =
+        Map<int, bool>.from(state.structuredOutputEnabledChats);
+    newStatuses[chatId] = isEnabled;
+    state = state.copyWith(structuredOutputEnabledChats: newStatuses);
+    await _saveStructuredOutputEnabledChats();
   }
 
   Future<void> deletePromptItem(String id, bool isGlobal, int chatId) async {
@@ -657,17 +766,24 @@ class PromptService extends StateNotifier<PromptState> {
     return const JsonEncoder.withIndent('  ').convert(exportData);
   }
 
-  Future<bool> importGlobalPrompts(String jsonString, {String? parentId}) async {
+  Future<bool> importGlobalPrompts(String jsonString,
+      {String? parentId, String? fileName}) async {
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       final itemsToImport = jsonList
           .map((json) => PromptItem.fromJson(json as Map<String, dynamic>))
           .toList();
 
+      final newParentId = _createNewFolderForImport(
+        fileName: fileName,
+        targetParentId: parentId,
+        isTargetGlobal: true,
+      );
+
       final updatedItems = _mergePrompts(
         existingItems: state.globalItems,
         itemsToImport: itemsToImport,
-        targetParentId: parentId,
+        targetParentId: newParentId,
         isTargetGlobal: true,
       );
 
@@ -681,7 +797,7 @@ class PromptService extends StateNotifier<PromptState> {
   }
 
   Future<bool> importGlobalPromptsWithStatuses(String jsonString,
-      {bool importStatuses = true, String? parentId}) async {
+      {bool importStatuses = true, String? parentId, String? fileName}) async {
     try {
       final Map<String, dynamic> decodedJson = jsonDecode(jsonString);
       final List<dynamic> promptListJson = decodedJson['prompts'] ?? [];
@@ -696,10 +812,15 @@ class PromptService extends StateNotifier<PromptState> {
       final shouldMergeStatuses = importStatuses && parentId == null;
 
       final idMap = <String, String>{};
+      final newParentId = _createNewFolderForImport(
+        fileName: fileName,
+        targetParentId: parentId,
+        isTargetGlobal: true,
+      );
       final updatedItems = _mergePrompts(
         existingItems: state.globalItems,
         itemsToImport: itemsToImport,
-        targetParentId: parentId,
+        targetParentId: newParentId,
         isTargetGlobal: true,
         idMap: idMap,
       );
@@ -738,18 +859,26 @@ class PromptService extends StateNotifier<PromptState> {
     }
   }
 
-  Future<bool> importChatPrompts(String jsonString, int chatId, {String? parentId}) async {
+  Future<bool> importChatPrompts(String jsonString, int chatId,
+      {String? parentId, String? fileName}) async {
     try {
       final List<dynamic> jsonList = jsonDecode(jsonString);
       final itemsToImport = jsonList
           .map((json) => PromptItem.fromJson(json as Map<String, dynamic>))
           .toList();
-      
+
+      final newParentId = _createNewFolderForImport(
+        fileName: fileName,
+        targetParentId: parentId,
+        isTargetGlobal: false,
+        chatId: chatId,
+      );
+
       final currentChatItems = state.chatItems[chatId] ?? [];
       final updatedItems = _mergePrompts(
         existingItems: currentChatItems,
         itemsToImport: itemsToImport,
-        targetParentId: parentId,
+        targetParentId: newParentId,
         isTargetGlobal: false,
       );
 
@@ -762,6 +891,220 @@ class PromptService extends StateNotifier<PromptState> {
       debugPrint('Error importing chat prompts: $e');
       return false;
     }
+  }
+
+  Future<bool> importCompatiblePrompts(
+    String jsonString, {
+    required bool isGlobal,
+    int? chatId,
+    String? parentId,
+    String? fileName,
+  }) async {
+    try {
+      final Map<String, dynamic> decodedJson = jsonDecode(jsonString);
+      Map<String, dynamic> entries;
+
+      // Check for character_book format
+      if (decodedJson['data'] is Map &&
+          decodedJson['data']['character_book'] is Map &&
+          decodedJson['data']['character_book']['entries'] is List) {
+        final List<dynamic> bookEntries =
+            decodedJson['data']['character_book']['entries'];
+        entries = {
+          for (var i = 0; i < bookEntries.length; i++)
+            i.toString(): bookEntries[i]
+        };
+      } else if (decodedJson['entries'] is Map) {
+        entries = decodedJson['entries'] as Map<String, dynamic>;
+      } else {
+        return false; // Not a compatible format
+      }
+
+      final List<PromptItem> itemsToImport = [];
+      final Map<String, String> groupNameToTempFolderId = {};
+
+      // 1. Parse all entries and sort them by the 'insertion_order' or 'order' field to preserve internal order.
+      final sortedEntries = entries.values.toList()
+        ..sort((a, b) {
+          final orderA = (a['insertion_order'] as int?) ?? (a['order'] as int?) ?? 0;
+          final orderB = (b['insertion_order'] as int?) ?? (b['order'] as int?) ?? 0;
+          return orderA.compareTo(orderB);
+        });
+
+      // 2. Process sorted entries to create PromptItems
+      for (final entry in sortedEntries) {
+        final groupName = entry['group'] as String?;
+        String? tempParentId;
+
+        if (groupName != null && groupName.isNotEmpty) {
+          if (!groupNameToTempFolderId.containsKey(groupName)) {
+            final tempFolderId = 'folder_${groupName.hashCode}';
+            groupNameToTempFolderId[groupName] = tempFolderId;
+            final folderItem = PromptItem(
+              id: tempFolderId,
+              type: PromptItemType.folder,
+              keyword: groupName,
+              parentId: null,
+              status: PromptItemStatus.on,
+            );
+            itemsToImport.add(folderItem);
+          }
+          tempParentId = groupNameToTempFolderId[groupName];
+        }
+
+        final keys = (entry['keys'] as List<dynamic>? ?? entry['key'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+        final secondaryKeys = (entry['secondary_keys'] as List<dynamic>? ?? entry['keysecondary'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+        final allKeys = [...keys, ...secondaryKeys];
+        final hasKeywords = allKeys.any((k) => k.isNotEmpty);
+
+        // 3. Apply new status and role conversion rules
+        PromptItemStatus status;
+        PromptInjectionRole role;
+
+        if (hasKeywords) {
+          status = PromptItemStatus.match;
+          final roleInt = entry['role'] as int?;
+          switch (roleInt) {
+            case null:
+            case 0: // system
+              role = PromptInjectionRole.system;
+              break;
+            case 1: // user
+              role = PromptInjectionRole.user;
+              break;
+            case 2: // assistant
+              role = PromptInjectionRole.model;
+              break;
+            default:
+              role = PromptInjectionRole.user;
+          }
+        } else {
+          status = PromptItemStatus.on;
+          role = PromptInjectionRole.system; // Default to system if no keywords
+        }
+
+        // Override status based on 'enabled' flag
+        if (entry['enabled'] == false) {
+          status = PromptItemStatus.off;
+        }
+        
+        // 4. Check for and apply 'extensions' overrides
+        var injectionPosition = entry['depth'] as int? ?? 2;
+        var matchMessageCount = entry['scanDepth'] as int? ?? 6;
+        var critical = entry['matchWholeWords'] as bool? ?? false;
+
+        if (entry['extensions'] is Map<String, dynamic>) {
+          final extensions = entry['extensions'] as Map<String, dynamic>;
+          injectionPosition = extensions['depth'] as int? ?? injectionPosition;
+          matchMessageCount = extensions['scan_depth'] as int? ?? matchMessageCount;
+          critical = extensions['match_whole_words'] as bool? ?? critical;
+          // You can add more overrides here as needed, for example:
+          // role = extensions['role'] ...
+        }
+
+        final newItem = PromptItem(
+          id: 'item_${entry['uid'] ?? entry['id']}',
+          keyword: allKeys.join(', '),
+          text: entry['content'] as String? ?? '',
+          comment: entry['comment'] as String? ?? '',
+          critical: critical,
+          injectionRole: role,
+          order: entry['insertion_order'] as int? ?? entry['order'] as int? ?? 0, // Keep original for reference, _mergePrompts will re-order
+          injectionPosition: injectionPosition,
+          matchMessageCount: matchMessageCount, // New mapping
+          parentId: tempParentId,
+          status: status,
+        );
+        itemsToImport.add(newItem);
+      }
+
+      // Now, use the existing _mergePrompts logic
+      if (isGlobal) {
+        final newParentId = _createNewFolderForImport(
+            fileName: fileName, targetParentId: parentId, isTargetGlobal: true);
+        final updatedItems = _mergePrompts(
+          existingItems: state.globalItems,
+          itemsToImport: itemsToImport,
+          targetParentId: newParentId,
+          isTargetGlobal: true,
+        );
+        state = state.copyWith(globalItems: updatedItems);
+        await _saveGlobalItems();
+      } else {
+        if (chatId == null) return false;
+        final newParentId = _createNewFolderForImport(
+            fileName: fileName,
+            targetParentId: parentId,
+            isTargetGlobal: false,
+            chatId: chatId);
+        final currentChatItems = state.chatItems[chatId] ?? [];
+        final updatedItems = _mergePrompts(
+          existingItems: currentChatItems,
+          itemsToImport: itemsToImport,
+          targetParentId: newParentId,
+          isTargetGlobal: false,
+        );
+        final newChatItemsMap =
+            Map<int, List<PromptItem>>.from(state.chatItems);
+        newChatItemsMap[chatId] = updatedItems;
+        state = state.copyWith(chatItems: newChatItemsMap);
+        await _saveChatItems();
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error importing compatible prompts: $e');
+      return false;
+    }
+  }
+
+  String? _createNewFolderForImport({
+    required String? fileName,
+    required String? targetParentId,
+    required bool isTargetGlobal,
+    int? chatId,
+  }) {
+    if (fileName == null || fileName.isEmpty) return targetParentId;
+
+    final folderName = fileName.replaceAll(RegExp(r'\.json$'), '');
+    final newFolderId = _uuid.v4();
+
+    if (isTargetGlobal) {
+      final siblings =
+          state.globalItems.where((i) => i.parentId == targetParentId);
+      final newFolder = PromptItem(
+        id: newFolderId,
+        type: PromptItemType.folder,
+        keyword: folderName,
+        parentId: targetParentId,
+        order: siblings.length,
+        isGlobal: true,
+      );
+      state = state.copyWith(globalItems: [...state.globalItems, newFolder]);
+    } else {
+      assert(chatId != null, 'chatId must be provided for chat import');
+      final currentChatItems = state.chatItems[chatId] ?? [];
+      final siblings =
+          currentChatItems.where((i) => i.parentId == targetParentId);
+      final newFolder = PromptItem(
+        id: newFolderId,
+        type: PromptItemType.folder,
+        keyword: folderName,
+        parentId: targetParentId,
+        order: siblings.length,
+        isGlobal: false,
+      );
+      final newChatItemsMap = Map<int, List<PromptItem>>.from(state.chatItems);
+      newChatItemsMap[chatId!] = [...currentChatItems, newFolder];
+      state = state.copyWith(chatItems: newChatItemsMap);
+    }
+    return newFolderId;
   }
 
   List<PromptItem> _mergePrompts({
@@ -851,14 +1194,25 @@ class PromptService extends StateNotifier<PromptState> {
           Map<String, PromptItemStatus>.from(originalStatuses);
     }
 
-    // 3. Update state and persist
+    // 3. Duplicate structured output status
+    final newStructuredOutputMap =
+        Map<int, bool>.from(state.structuredOutputEnabledChats);
+    final originalStructuredOutputStatus =
+        state.structuredOutputEnabledChats[fromChatId];
+    if (originalStructuredOutputStatus != null) {
+      newStructuredOutputMap[toChatId] = originalStructuredOutputStatus;
+    }
+
+    // 4. Update state and persist
     state = state.copyWith(
       chatItems: newChatItemsMap,
       chatStatuses: newChatStatusesMap,
+      structuredOutputEnabledChats: newStructuredOutputMap,
     );
 
     await _saveChatItems();
     await _saveStatuses();
+    await _saveStructuredOutputEnabledChats();
   }
 
   // --- Data Cleanup ---
@@ -866,13 +1220,16 @@ class PromptService extends StateNotifier<PromptState> {
     debugPrint('[PromptService] Clearing all prompt data for chatId: $chatId');
     final newChatItems = Map<int, List<PromptItem>>.from(state.chatItems)..remove(chatId);
     final newChatStatuses = Map<int, Map<String, PromptItemStatus>>.from(state.chatStatuses)..remove(chatId);
+    final newStructuredOutputMap = Map<int, bool>.from(state.structuredOutputEnabledChats)..remove(chatId);
 
     state = state.copyWith(
       chatItems: newChatItems,
       chatStatuses: newChatStatuses,
+      structuredOutputEnabledChats: newStructuredOutputMap,
     );
 
     await _saveChatItems();
     await _saveStatuses();
+    await _saveStructuredOutputEnabledChats();
   }
 }

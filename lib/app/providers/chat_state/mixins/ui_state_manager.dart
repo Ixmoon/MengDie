@@ -120,7 +120,13 @@ mixin UiStateManager on StateNotifier<ChatScreenState> {
 
   void toggleHighlightQuotes() {
     final newValue = !state.highlightQuotes;
-    state = state.copyWith(highlightQuotes: newValue);
+    state = state.copyWith(
+      highlightQuotes: newValue,
+      // HACK: Force a rebuild of the message list by creating a new instance
+      // of the currently controlled message. This ensures the new highlight
+      // setting is applied immediately.
+      uiControlledMessage: state.uiControlledMessage?.copyWith(),
+    );
     _prefs.setBool('chat_${chatId}_highlight_quotes', newValue);
     showTopMessage('引号内容高亮已${newValue ? "开启" : "关闭"}');
   }

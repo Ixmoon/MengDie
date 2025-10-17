@@ -29,6 +29,7 @@ class _PromptItemEditorScreenState
     extends ConsumerState<PromptItemEditorScreen> {
   late final TextEditingController _keywordController;
   late final TextEditingController _textController;
+  late final TextEditingController _commentController;
   late final TextEditingController _positionController;
   late final TextEditingController _matchCountController;
   late final TextEditingController _injectionTagController;
@@ -39,6 +40,7 @@ class _PromptItemEditorScreenState
     final item = _getPromptItem();
     _keywordController = TextEditingController(text: item?.keyword ?? '');
     _textController = TextEditingController(text: item?.text ?? '');
+    _commentController = TextEditingController(text: item?.comment ?? '');
     _positionController =
         TextEditingController(text: item?.injectionPosition.toString() ?? '2');
     _matchCountController =
@@ -51,6 +53,7 @@ class _PromptItemEditorScreenState
   void dispose() {
     _keywordController.dispose();
     _textController.dispose();
+    _commentController.dispose();
     _positionController.dispose();
     _matchCountController.dispose();
     _injectionTagController.dispose();
@@ -71,6 +74,9 @@ class _PromptItemEditorScreenState
     }
     if (_textController.text != item.text) {
       _textController.text = item.text;
+    }
+    if (_commentController.text != item.comment) {
+      _commentController.text = item.comment;
     }
     if (_positionController.text != item.injectionPosition.toString()) {
       _positionController.text = item.injectionPosition.toString();
@@ -184,13 +190,13 @@ class _PromptItemEditorScreenState
             children: [
               Expanded(
                 flex: 1,
-                child: DropdownButtonFormField<MessageRole>(
+                child: DropdownButtonFormField<PromptInjectionRole>(
                   value: item.injectionRole,
                   decoration: const InputDecoration(
                     labelText: '注入角色',
                     border: OutlineInputBorder(),
                   ),
-                  items: MessageRole.values
+                  items: PromptInjectionRole.values
                       .map((r) => DropdownMenuItem(value: r, child: Text(r.name)))
                       .toList(),
                   onChanged: (value) {
@@ -217,6 +223,18 @@ class _PromptItemEditorScreenState
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _commentController,
+            decoration: const InputDecoration(
+              labelText: '名称 (可选)',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              promptService.updatePromptItem(
+                  item.copyWith(comment: value), widget.chatId);
+            },
           ),
           const SizedBox(height: 16),
           // Row 3: Critical Match & Keyword

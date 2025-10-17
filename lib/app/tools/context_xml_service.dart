@@ -358,19 +358,65 @@ class ContextXmlService {
       mergedXmlForInjection = partialCarriedOverResult.xmlString;
     }
 
-    // 4. (第一部分) 处理 `insert` 状态的提示词，它们将注入到系统提示词中。
-    final insertText = prompts
-        .where((p) => p.status == PromptItemStatus.insert)
+    // --- 9. 核心重构：实现“多个包裹，各自投递”并支持XML标签 ---
+
+    // Part A: 预计算关键词匹配。这必须在任何注入逻辑之前完成。
+    final onAndMatchPrompts = prompts.where(
+        (p) => p.status == PromptItemStatus.on || p.status == PromptItemStatus.match);
+    final successfullyMatchedPrompts = <PromptItem>{};
+    final Map<int, List<PromptItem>> promptsByScope = {};
+
+    for (final prompt in onAndMatchPrompts) {
+      if (prompt.status == PromptItemStatus.match) {
+        promptsByScope
+            .putIfAbsent(prompt.matchMessageCount, () => [])
+            .add(prompt);
+      } else if (prompt.status == PromptItemStatus.on) {
+        // 'On' status prompts are always considered "matched".
+        successfullyMatchedPrompts.add(prompt);
+      }
+    }
+
+    promptsByScope.forEach((scope, scopedPrompts) {
+      if (scope <= 0) return;
+      final messagesToSearch = fullHistory.length > scope
+          ? fullHistory.sublist(fullHistory.length - scope)
+          : fullHistory;
+      final searchableCorpus = messagesToSearch
+          .map((m) =>
+              '${m.rawText}${m.originalXmlContent ?? ''}${m.secondaryXmlContent ?? ''}')
+          .join('\n')
+          .toLowerCase();
+
+      for (final prompt in scopedPrompts) {
+        final keywords = prompt.keyword
+            .split(',')
+            .map((k) => k.trim().toLowerCase())
+            .where((k) => k.isNotEmpty);
+        
+        if (keywords.isNotEmpty &&
+            (prompt.critical
+                ? keywords
+                    .every((keyword) => searchableCorpus.contains(keyword))
+                : keywords
+                    .any((keyword) => searchableCorpus.contains(keyword)))) {
+          successfullyMatchedPrompts.add(prompt);
+        }
+      }
+    });
+
+    // Part B: 准备固定上下文，包括系统提示词和所有注入。
+    final systemInjectedText = successfullyMatchedPrompts
+        .where((p) => p.injectionRole == PromptInjectionRole.system)
         .map((p) => p.text)
         .join('\n');
 
-    // 5. 准备所有“固定” (非历史记录) 的上下文部分。
-    final List<LlmContent> fixedContextParts = [];
     var effectiveSystemPrompt = chatSystemPromptOverride ?? chat.systemPrompt;
-
-    if (insertText.isNotEmpty) {
-      effectiveSystemPrompt = '${effectiveSystemPrompt ?? ''}\n$insertText';
+    if (systemInjectedText.isNotEmpty) {
+      effectiveSystemPrompt = '${effectiveSystemPrompt ?? ''}\n$systemInjectedText';
     }
+
+    final List<LlmContent> fixedContextParts = [];
     final bool systemPromptExists =
         effectiveSystemPrompt != null &&
         effectiveSystemPrompt.trim().isNotEmpty;
@@ -390,7 +436,7 @@ class ContextXmlService {
       );
     }
 
-    // 6. 计算历史记录的预算。
+    // Part C: 计算历史记录预算并截断。
     int fixedTokens = 0;
     if (fixedContextParts.isNotEmpty) {
       try {
@@ -415,8 +461,6 @@ class ContextXmlService {
     int historyTurnBudget =
         chat.contextConfig.maxTurns - (fixedContextParts.where((c) => c.role != 'system').length);
 
-
-    // 7. 在内存中应用总结锚点，为上下文窗口准备历史记录。
     List<Message> historyForWindowing;
     if (chat.lastSummarizedMessageId != null &&
         chat.lastSummarizedMessageId! > 0) {
@@ -432,7 +476,6 @@ class ContextXmlService {
       historyForWindowing = fullHistory;
     }
 
-    // 8. 使用计算出的预算限制历史记录。
     final historyResult = await _limitHistoryForPrompt(
       chatId: chatId,
       fullHistory: historyForWindowing,
@@ -442,70 +485,19 @@ class ContextXmlService {
     final List<Message> limitedHistoryForPrompt = historyResult.kept;
     final List<Message> droppedMessages = historyResult.dropped;
 
-    // (预测逻辑保持不变)
     if (isPrediction) {
        // ... 预测逻辑 ...
     }
 
-    // --- 9. 核心重构：实现“多个包裹，各自投递”并支持XML标签 ---
-
-    // Part A: 构建注入映射表 `Map<messageId, List<_InjectionContent>>`
+    // Part D: 构建消息内注入的映射表。
     final Map<int, List<_InjectionContent>> injectionsMap = {};
     int? firstInjectionTargetId;
 
-    final onAndMatchPrompts = prompts.where(
-        (p) => p.status == PromptItemStatus.on || p.status == PromptItemStatus.match);
-
-    // --- Optimization Start: Pre-calculate match successes using grouping and caching ---
-    final successfullyMatchedPrompts = <PromptItem>{};
-    final Map<int, List<PromptItem>> promptsByScope = {};
-
-    // 1. Group 'match' prompts by their search scope.
-    for (final prompt in onAndMatchPrompts) {
-      if (prompt.status == PromptItemStatus.match) {
-        promptsByScope
-            .putIfAbsent(prompt.matchMessageCount, () => [])
-            .add(prompt);
-      }
-    }
-
-    // 2. For each unique scope, create a corpus and check for keyword matches.
-    promptsByScope.forEach((scope, scopedPrompts) {
-      // Skip invalid scopes to prevent errors (this also fixes a potential bug in old code).
-      if (scope <= 0) return;
-
-      final messagesToSearch = fullHistory.length > scope
-          ? fullHistory.sublist(fullHistory.length - scope)
-          : fullHistory;
-
-      // Create a single, newline-separated corpus for this scope to prevent cross-message keyword matching.
-      final searchableCorpus = messagesToSearch
-          .map((m) =>
-              '${m.rawText}${m.originalXmlContent ?? ''}${m.secondaryXmlContent ?? ''}')
-          .join('\n')
-          .toLowerCase();
-
-      for (final prompt in scopedPrompts) {
-        final keywords = prompt.keyword
-            .split(',')
-            .map((k) => k.trim().toLowerCase())
-            .where((k) => k.isNotEmpty);
-        
-        if (keywords.isNotEmpty &&
-            (prompt.critical
-                ? keywords
-                    .every((keyword) => searchableCorpus.contains(keyword))
-                : keywords
-                    .any((keyword) => searchableCorpus.contains(keyword)))) {
-          // If a match is found, add the prompt to a success set for O(1)
-          // lookup later.
-          successfullyMatchedPrompts.add(prompt);
-        }
-      }
-    });
-
     // 3. Main loop: Iterate through prompts in their original order to preserve injection logic.
     for (final prompt in onAndMatchPrompts) {
+      // Skip system injections here, as they are handled before history truncation.
+      if (prompt.injectionRole == PromptInjectionRole.system) continue;
+
       bool isMatchSuccessful = false;
       if (prompt.status == PromptItemStatus.on) {
         isMatchSuccessful = true;
@@ -518,8 +510,11 @@ class ContextXmlService {
 
       if (isMatchSuccessful) {
         // The injection logic remains identical to the old code, ensuring behavior consistency.
+        final targetRole = (prompt.injectionRole == PromptInjectionRole.user)
+            ? MessageRole.user
+            : MessageRole.model; // This now correctly maps .model to MessageRole.model
         final targetRoleMessages = limitedHistoryForPrompt
-            .where((m) => m.role == prompt.injectionRole)
+            .where((m) => m.role == targetRole)
             .toList();
 
         Message? targetMessage;

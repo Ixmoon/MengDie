@@ -13,6 +13,8 @@ import '../../../app/providers/chat_settings_provider.dart';
 import '../../../app/providers/chat_state/chat_screen_state.dart';
 import '../../../app/providers/chat_state/chat_state_notifier.dart';
 import '../../../app/providers/chat_state_providers.dart';
+import '../../../app/services/prompt_service.dart';
+import '../../../domain/models/prompt_item.dart';
 import '../cached_image.dart';
 
 class ChatInputBar extends ConsumerStatefulWidget {
@@ -589,14 +591,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 isSelected: chatState.highlightQuotes,
                 onPressed: notifier.toggleHighlightQuotes,
               ),
-              _buildIconButton(
-                icon: Icons.biotech_outlined,
-                tooltip: '提示词注入',
-                isSelected: false,
-                onPressed: () {
-                  context.go('/chat/prompt-editor');
-                },
-              ),
+              _buildPromptInjectionButton(),
               PopupMenuButton<String>(
                 onSelected: (result) {
                   switch (result) {
@@ -701,6 +696,45 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ],
       ),
     );
+  }
+
+  void _showQuickSwitchPromptDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        // Use a custom dialog widget that manages its own state
+        return _QuickSwitchPromptDialog(chatId: widget.chatId);
+      },
+    );
+  }
+
+  Widget _buildPromptInjectionButton() {
+    final theme = Theme.of(context);
+    return Builder(builder: (buttonContext) {
+      return Tooltip(
+        message: '提示词注入 (长按编辑)',
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: _showQuickSwitchPromptDialog,
+            onLongPress: () {
+              context.go('/chat/prompt-editor');
+            },
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Icon(
+                Icons.book_outlined,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -817,7 +851,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                     builder: (dialogContext) => AlertDialog(
                                       title: const Text('确认停止'),
                                       content: const Text(
-                                        '确定要停止当前的 AI 响应或后台任务吗？',
+                                        '确定要停止当前的 AI 响应或后台任务  ？',
                                       ),
                                       actions: [
                                         TextButton(
@@ -925,6 +959,266 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 }
 
+class _QuickSwitchPromptDialog extends ConsumerStatefulWidget {
+  final int chatId;
+  const _QuickSwitchPromptDialog({required this.chatId});
+
+  @override
+  ConsumerState<_QuickSwitchPromptDialog> createState() =>
+      _QuickSwitchPromptDialogState();
+}
+
+class _QuickSwitchPromptDialogState
+    extends ConsumerState<_QuickSwitchPromptDialog>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  final List<String?> _chatFolderPath = [null];
+  final List<String?> _globalFolderPath = [null];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  List<String?> get _currentFolderPath =>
+      _tabController.index == 0 ? _chatFolderPath : _globalFolderPath;
+  String? get _currentParentId => _currentFolderPath.last;
+
+  void _navigateToFolder(String folderId) {
+    setState(() {
+      _currentFolderPath.add(folderId);
+    });
+  }
+
+  void _navigateBack() {
+    if (_currentFolderPath.length > 1) {
+      setState(() {
+        _currentFolderPath.removeLast();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final promptState = ref.watch(promptServiceProvider);
+    final allItems = _tabController.index == 0
+        ? promptState.chatItems[widget.chatId] ?? []
+        : promptState.globalItems;
+
+    final currentFolderName = (_currentParentId != null)
+        ? allItems
+                .firstWhere((i) => i.id == _currentParentId,
+                    orElse: () => const PromptItem(id: '', keyword: '...'))
+                .keyword
+        : '根目录';
+
+    return AlertDialog(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (_currentFolderPath.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, size: 20),
+                  onPressed: _navigateBack,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              Expanded(
+                child: Text(
+                  currentFolderName,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: MediaQuery.of(context).size.height * 0.6,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: SwitchListTile(
+                title: const Text('启用结构化输出'),
+                subtitle: const Text('将所有匹配项格式化为Markdown表格'),
+                value: promptState
+                        .structuredOutputEnabledChats[widget.chatId] ??
+                    false,
+                onChanged: (bool value) {
+                  ref
+                      .read(promptServiceProvider.notifier)
+                      .updateStructuredOutputStatus(widget.chatId, value);
+                },
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+            TabBar(
+              controller: _tabController,
+              tabs: const [Tab(text: '聊天专属'), Tab(text: '全局')],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildListView(
+                    key: const ValueKey('chat_list'),
+                    isGlobal: false,
+                    onFolderTap: _navigateToFolder,
+                  ),
+                  _buildListView(
+                    key: const ValueKey('global_list'),
+                    isGlobal: true,
+                    onFolderTap: _navigateToFolder,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListView({
+    required Key key,
+    required bool isGlobal,
+    required ValueChanged<String> onFolderTap,
+  }) {
+    final promptState = ref.watch(promptServiceProvider);
+    final allItems =
+        isGlobal ? promptState.globalItems : (promptState.chatItems[widget.chatId] ?? []);
+    final chatStatusMap = promptState.chatStatuses[widget.chatId] ?? {};
+
+    final itemsToShow = allItems
+        .where((item) => item.parentId == _currentParentId)
+        .map((item) {
+      if (isGlobal && chatStatusMap.containsKey(item.id)) {
+        return item.copyWith(status: chatStatusMap[item.id]);
+      }
+      return item;
+    }).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+
+    if (itemsToShow.isEmpty) {
+      return const Center(child: Text('此文件夹为空'));
+    }
+
+    return ListView.builder(
+      key: key,
+      itemCount: itemsToShow.length,
+      itemBuilder: (context, index) {
+        final item = itemsToShow[index];
+        return ListTile(
+          leading: Icon(
+            item.type == PromptItemType.folder
+                ? Icons.folder_open
+                : Icons.description_outlined,
+            size: 20,
+          ),
+          title: Text(
+            item.comment.isNotEmpty ? item.comment : (item.keyword.isNotEmpty ? item.keyword : '(无名称)'),
+            overflow: TextOverflow.ellipsis,
+          ),
+          onTap: item.type == PromptItemType.folder
+              ? () => onFolderTap(item.id)
+              : null,
+          trailing: _StatusToggleButton(
+            item: item,
+            chatId: widget.chatId,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StatusToggleButton extends ConsumerWidget {
+  final PromptItem item;
+  final int chatId;
+
+  const _StatusToggleButton({required this.item, required this.chatId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onPrimary,
+      fontWeight: FontWeight.bold,
+    );
+
+    Color color;
+    String text;
+
+    switch (item.status) {
+      case PromptItemStatus.on:
+        color = Colors.green;
+        text = '开启';
+        break;
+      case PromptItemStatus.match:
+        color = Colors.blue;
+        text = '匹配';
+        break;
+      case PromptItemStatus.off:
+        color = Colors.grey;
+        text = '关闭';
+        break;
+    }
+
+    return TextButton(
+      style: TextButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        minimumSize: const Size(60, 30),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+      ),
+      onPressed: () {
+        // IMPORTANT: Use ref.read here to get the latest notifier instance
+        // and avoid the StateError after the dialog is rebuilt.
+        final promptService = ref.read(promptServiceProvider.notifier);
+        PromptItemStatus nextStatus;
+        if (item.type == PromptItemType.folder) {
+          nextStatus = item.status == PromptItemStatus.off
+              ? PromptItemStatus.on
+              : PromptItemStatus.off;
+        } else {
+          final statuses = [
+            PromptItemStatus.on,
+            PromptItemStatus.match,
+            PromptItemStatus.off
+          ];
+          final currentIndex = statuses.indexOf(item.status);
+          nextStatus = statuses[(currentIndex + 1) % statuses.length];
+        }
+        promptService.updateStatusForChat(chatId, item.id, nextStatus);
+      },
+      child: Text(text, style: textStyle),
+    );
+  }
+}
 
 class _ParallelCountEditor extends ConsumerStatefulWidget {
   final int chatId;

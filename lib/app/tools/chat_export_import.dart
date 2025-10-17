@@ -1,19 +1,25 @@
 import 'dart:convert'; // 用于 JSON 编码/解码
 import 'dart:io'; // 用于文件操作
+import 'dart:convert'; // 用于 JSON 编码/解码
+import 'dart:io'; // 用于文件操作
 import 'dart:typed_data'; // For Uint8List
 import 'package:archive/archive_io.dart'; // For ZIP encoding
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // For date formatting
 import 'package:permission_handler/permission_handler.dart'; // 请求权限
-import 'package:flutter/foundation.dart' show kIsWeb; // Added kIsWeb
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img; // 使用 'img' 前缀避免冲突
 import 'package:file_picker/file_picker.dart'; // 选择文件
 
+import '../../ui/router.dart';
 // 导入模型、DTO 和仓库
+import '../../domain/enums.dart';
 import '../../domain/models/models.dart';
+import '../providers/repository_providers.dart';
 import '../repositories/chat_repository.dart';
 import '../repositories/message_repository.dart';
-import '../providers/repository_providers.dart';
+import '../services/prompt_service.dart';
 
 // --- Service Provider ---
 final chatExportImportServiceProvider = Provider<ChatExportImportService>((
@@ -22,17 +28,76 @@ final chatExportImportServiceProvider = Provider<ChatExportImportService>((
   // 依赖 ChatRepository 和 MessageRepository
   final chatRepo = ref.watch(chatRepositoryProvider);
   final messageRepo = ref.watch(messageRepositoryProvider);
-  return ChatExportImportService(chatRepo, messageRepo);
+  return ChatExportImportService(ref, chatRepo, messageRepo);
 });
 
 // --- Chat Export/Import Service Implementation ---
 class ChatExportImportService {
+  final Ref _ref;
   final ChatRepository _chatRepository;
   final MessageRepository _messageRepository;
   // --- 新版 PNG 格式常量 ---
   static const String _pngCharaKeyword = 'chara';
+  static const String _pngV3Keyword = 'ccv3';
 
-  ChatExportImportService(this._chatRepository, this._messageRepository);
+  ChatExportImportService(
+    this._ref,
+    this._chatRepository,
+    this._messageRepository,
+  );
+
+  // --- 新增：处理占位符 ---
+  Future<String?> _handlePlaceholders(
+      String jsonString, String charName) async {
+    String processedJson = jsonString
+        .replaceAll('{{char}}', charName)
+        .replaceAll('<char>', charName);
+
+    if (processedJson.contains('{{user}}') ||
+        processedJson.contains('<user>')) {
+      final context = rootNavigatorKey.currentContext;
+      if (context == null) {
+        // 无法显示对话框，按原样继续
+        return processedJson;
+      }
+
+      final userName = await showDialog<String>(
+        context: context,
+        builder: (context) {
+          final controller = TextEditingController();
+          return AlertDialog(
+            title: const Text('输入您的名字'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: '您的名字'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('确认'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (userName == null || userName.isEmpty) {
+        // 用户取消或未输入
+        return null;
+      }
+
+      processedJson = processedJson
+          .replaceAll('{{user}}', userName)
+          .replaceAll('<user>', userName);
+    }
+
+    return processedJson;
+  }
 
   Future<void> _ensurePermissions() async {
     if (kIsWeb) return; // Web 不需要这些权限
@@ -411,29 +476,32 @@ class ChatExportImportService {
     // 优先尝试基于文件扩展名的解析
     if (lowerCaseFileName.endsWith('.png')) {
       try {
-        await _importFromPngTavern(
-          imageBytes,
-          parentFolderId,
-          isBatch: isBatch,
-        );
-        return; // PNG 成功，直接返回
+        // 首先，尝试作为我们的原生格式导入。
+        await _importFromPngNative(imageBytes, parentFolderId, isBatch: isBatch);
+        return;
       } catch (_) {
-        // 如果失败，可能是个伪装成 PNG 的 JPG，尝试 EXIF
+        // 如果失败，尝试作为酒馆角色卡导入。
+        try {
+          await _importFromTavernCard(imageBytes, parentFolderId,
+              isBatch: isBatch);
+          return;
+        } catch (tavernError) {
+          throw Exception("无法将 '$fileName' 作为梦蝶或酒馆角色卡导入。");
+        }
       }
     }
 
     // 对于 .jpg, .jpeg, 或 .png 解析失败的情况，尝试 EXIF
     if (lowerCaseFileName.endsWith('.jpg') ||
-        lowerCaseFileName.endsWith('.jpeg') ||
-        lowerCaseFileName.endsWith('.png')) {
+        lowerCaseFileName.endsWith('.jpeg')) {
       throw Exception(
-        "导入失败：文件 '$fileName' 不是有效的 PNG 格式，且 JPG EXIF 导入已被弃用。请使用 PNG 格式的导出文件进行导入。",
+        "导入失败：JPG EXIF 导入已被弃用。请使用 PNG 格式的角色卡进行导入。",
       );
     }
   }
 
   // --- 新增：从 PNG tEXt 数据块导入 ---
-  Future<void> _importFromPngTavern(
+  Future<void> _importFromPngNative(
     Uint8List imageBytes,
     int? parentFolderId, {
     bool isBatch = false,
@@ -471,6 +539,135 @@ class ChatExportImportService {
       parentFolderId,
       isBatch: isBatch,
     );
+  }
+
+  // --- 新增：从酒馆角色卡导入 ---
+  Future<void> _importFromTavernCard(
+    Uint8List imageBytes,
+    int? parentFolderId, {
+    bool isBatch = false,
+  }) async {
+    final image = img.decodeImage(imageBytes); // 使用 decodeImage 兼容 jpg/png
+    if (image == null) {
+      throw Exception("无法解码图片。");
+    }
+
+    // 酒馆卡片使用 'chara' (v2) 或 'ccv3' (v3)
+    final String? base64String =
+        image.textData?[_pngV3Keyword] ?? image.textData?[_pngCharaKeyword];
+
+    if (base64String == null || base64String.isEmpty) {
+      throw Exception("PNG 文件中未找到酒馆角色数据。");
+    }
+
+    String jsonString;
+    try {
+      final decodedBytes = base64Decode(base64String);
+      jsonString = utf8.decode(decodedBytes);
+    } catch (e) {
+      throw Exception("无法解码存储在 PNG 中的酒馆数据 (Base64/UTF8 解码失败)。");
+    }
+
+    Map<String, dynamic> cardData;
+    try {
+      cardData = jsonDecode(jsonString);
+    } on FormatException {
+      throw Exception("导入失败：酒馆卡数据格式无效或已损坏。");
+    }
+
+    // 处理 V2 vs V3 规范数据结构
+    final data = cardData.containsKey('data') && cardData['data'] is Map
+        ? cardData['data'] as Map<String, dynamic>
+        : cardData;
+
+    final String name = data['name'] as String? ?? '导入的角色';
+
+    // --- 新增：处理占位符 ---
+    final processedJsonString = await _handlePlaceholders(jsonString, name);
+    if (processedJsonString == null) {
+      return; // 用户取消，中止导入
+    }
+    
+    // 从处理过的 JSON 重新解码数据
+    final processedCardData = jsonDecode(processedJsonString);
+    final processedData = processedCardData.containsKey('data') && processedCardData['data'] is Map
+        ? processedCardData['data'] as Map<String, dynamic>
+        : processedCardData;
+
+    final String description = processedData['description'] as String? ?? '';
+    final String personality = processedData['personality'] as String? ?? '';
+    final String scenario = processedData['scenario'] as String? ?? '';
+    final String systemPrompt = processedData['system_prompt'] as String? ?? '';
+
+    final combinedSystemPrompt = [
+      description,
+      personality,
+      scenario,
+      systemPrompt,
+    ].where((s) => s.isNotEmpty).join('\n\n');
+
+    final String coverImageBase64 = base64Encode(imageBytes);
+
+    final List<String> greetings =
+        (processedData['alternate_greetings'] as List<dynamic>?)
+                ?.map((g) => g.toString())
+                .where((g) => g.isNotEmpty)
+                .toList() ??
+            [];
+
+    // 如果没有问候语，我们仍然需要创建一个聊天，但不带初始消息。
+    // 为此，我们向列表中添加一个空字符串，以确保循环至少执行一次。
+    if (greetings.isEmpty) {
+      greetings.add('');
+    }
+
+    int chatCount = 0;
+    for (final greeting in greetings) {
+      final now = DateTime.now();
+      final chatToCreate = Chat(
+        title: greetings.length > 1 ? '$name ${++chatCount}' : name,
+        systemPrompt: combinedSystemPrompt,
+        coverImageBase64: coverImageBase64,
+        createdAt: now,
+        updatedAt: now,
+        orderIndex: isBatch ? 999999 : null,
+      );
+
+      final newChatId = await _chatRepository.importChat(
+        chatToCreate,
+        parentFolderId: parentFolderId,
+      );
+
+      if (greeting.isNotEmpty) {
+        final firstMessage = Message(
+          chatId: newChatId,
+          role: MessageRole.model,
+          parts: [MessagePart.text(greeting)],
+          timestamp: DateTime.now(),
+        );
+        await _messageRepository.saveMessage(firstMessage);
+      }
+
+      // 导入角色设定集
+      // 检查原始卡片数据中是否存在有效的 character_book
+      final characterBook = processedData['character_book'];
+      if (characterBook is Map &&
+          characterBook.containsKey('entries') &&
+          characterBook['entries'] is List) {
+        try {
+          final promptService = _ref.read(promptServiceProvider.notifier);
+          // 直接将从卡片中解析出的完整、原始的 jsonString 传递给 prompt service
+          // 这模拟了从文件导入时的行为，确保解析逻辑一致
+          await promptService.importCompatiblePrompts(
+            processedJsonString, // 使用处理占位符后的 JSON 字符串
+            isGlobal: false,
+            chatId: newChatId,
+          );
+        } catch (e) {
+          debugPrint('为聊天 $newChatId 导入 character_book 失败: $e');
+        }
+      }
+    }
   }
 
   // --- 新增：处理已解析 JSON 的共享逻辑 ---

@@ -17,9 +17,13 @@ PromptItem _$PromptItemFromJson(Map<String, dynamic> json) => PromptItem(
       PromptItemStatus.off,
   keyword: json['keyword'] as String? ?? '',
   text: json['text'] as String? ?? '',
+  comment: json['comment'] as String? ?? '',
   injectionRole:
-      $enumDecodeNullable(_$MessageRoleEnumMap, json['injectionRole']) ??
-      MessageRole.user,
+      $enumDecodeNullable(
+        _$PromptInjectionRoleEnumMap,
+        json['injectionRole'],
+      ) ??
+      PromptInjectionRole.user,
   injectionPosition: (json['injectionPosition'] as num?)?.toInt() ?? 2,
   matchMessageCount: (json['matchMessageCount'] as num?)?.toInt() ?? 6,
   injectionTag: json['injectionTag'] as String? ?? '',
@@ -35,7 +39,8 @@ Map<String, dynamic> _$PromptItemToJson(PromptItem instance) =>
       'status': _$PromptItemStatusEnumMap[instance.status]!,
       'keyword': instance.keyword,
       'text': instance.text,
-      'injectionRole': _$MessageRoleEnumMap[instance.injectionRole]!,
+      'comment': instance.comment,
+      'injectionRole': _$PromptInjectionRoleEnumMap[instance.injectionRole]!,
       'injectionPosition': instance.injectionPosition,
       'matchMessageCount': instance.matchMessageCount,
       'injectionTag': instance.injectionTag,
@@ -52,10 +57,10 @@ const _$PromptItemStatusEnumMap = {
   PromptItemStatus.off: 'off',
   PromptItemStatus.on: 'on',
   PromptItemStatus.match: 'match',
-  PromptItemStatus.insert: 'insert',
 };
 
-const _$MessageRoleEnumMap = {
-  MessageRole.user: 'user',
-  MessageRole.model: 'model',
+const _$PromptInjectionRoleEnumMap = {
+  PromptInjectionRole.system: 'system',
+  PromptInjectionRole.user: 'user',
+  PromptInjectionRole.model: 'model',
 };

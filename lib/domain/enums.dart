@@ -14,7 +14,8 @@ export '../core/common_enums.dart'
         XmlAction,
         LocalHarmCategory,
         LocalHarmBlockThreshold,
-        ContextManagementMode;
+        ContextManagementMode,
+        PromptInjectionRole;
 
 // --- “帮我回复”触发模式 ---
 @JsonEnum()

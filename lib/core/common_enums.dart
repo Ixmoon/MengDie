@@ -33,5 +33,8 @@ enum LocalHarmBlockThreshold {
 @JsonEnum()
 enum ContextManagementMode { turns, tokens }
 
+@JsonEnum()
+enum PromptInjectionRole { system, user, model }
+
 // ThemeModeSetting is not directly stored in the database tables being refactored
 // so it's not included here for now.

@@ -186,11 +186,30 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
         return;
       }
 
-      final String jsonString = utf8.decode(result.files.single.bytes!);
+      final file = result.files.single;
+      final String jsonString = utf8.decode(file.bytes!);
+      final String fileName = file.name;
       bool success = false;
       final decodedJson = jsonDecode(jsonString);
 
-      if (decodedJson is Map<String, dynamic> &&
+      // NEW: Check for compatible format first
+      if ((decodedJson is Map<String, dynamic> &&
+              decodedJson.containsKey('entries')) ||
+          (decodedJson is Map<String, dynamic> &&
+              decodedJson['data'] is Map &&
+              decodedJson['data']['character_book'] is Map &&
+              decodedJson['data']['character_book']['entries'] is List)) {
+        if (isGlobal) {
+          success = await promptService.importCompatiblePrompts(jsonString,
+              isGlobal: true, parentId: _currentParentId, fileName: fileName);
+        } else {
+          success = await promptService.importCompatiblePrompts(jsonString,
+              isGlobal: false,
+              chatId: chatId,
+              parentId: _currentParentId,
+              fileName: fileName);
+        }
+      } else if (decodedJson is Map<String, dynamic> &&
           decodedJson.containsKey('prompts')) {
         if (!isGlobal) {
           final importPromptsOnly = await showDialog<bool>(
@@ -211,7 +230,8 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
           );
           if (importPromptsOnly == true) {
             final promptsJson = jsonEncode(decodedJson['prompts']);
-            success = await promptService.importChatPrompts(promptsJson, chatId, parentId: _currentParentId);
+            success = await promptService.importChatPrompts(promptsJson, chatId,
+                parentId: _currentParentId, fileName: fileName);
           } else {
             scaffoldMessenger
                 .showSnackBar(const SnackBar(content: Text('导入已取消')));
@@ -244,17 +264,22 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
             }
             success = await promptService.importGlobalPromptsWithStatuses(
                 jsonString,
-                importStatuses: importStatuses, parentId: _currentParentId);
+                importStatuses: importStatuses,
+                parentId: _currentParentId,
+                fileName: fileName);
           } else {
             final promptsJson = jsonEncode(decodedJson['prompts']);
-            success = await promptService.importGlobalPrompts(promptsJson, parentId: _currentParentId);
+            success = await promptService.importGlobalPrompts(promptsJson,
+                parentId: _currentParentId, fileName: fileName);
           }
         }
       } else if (decodedJson is List) {
         if (isGlobal) {
-          success = await promptService.importGlobalPrompts(jsonString, parentId: _currentParentId);
+          success = await promptService.importGlobalPrompts(jsonString,
+              parentId: _currentParentId, fileName: fileName);
         } else {
-          success = await promptService.importChatPrompts(jsonString, chatId, parentId: _currentParentId);
+          success = await promptService.importChatPrompts(jsonString, chatId,
+              parentId: _currentParentId, fileName: fileName);
         }
       } else {
         success = false;
@@ -672,6 +697,68 @@ class _PromptFolderCard extends ConsumerWidget {
                   },
                 ),
                 IconButton(
+                  icon: const Icon(Icons.edit), // New edit icon
+                  onPressed: () {
+                    final TextEditingController controller = TextEditingController(text: item.keyword);
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('重命名文件夹'),
+                        content: TextField(
+                          controller: controller,
+                          decoration: const InputDecoration(hintText: '输入新名称'),
+                          autofocus: true,
+                          onSubmitted: (newName) {
+                            if (newName.isNotEmpty) {
+                              promptService.renameFolder(
+                                chatId: chatId,
+                                isGlobal: item.isGlobal,
+                                folderId: item.id,
+                                newName: newName,
+                              );
+                              Navigator.of(context).pop();
+                            }
+                          },
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('取消'),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              if (controller.text.isNotEmpty) {
+                                promptService.renameFolder(
+                                  chatId: chatId,
+                                  isGlobal: item.isGlobal,
+                                  folderId: item.id,
+                                  newName: controller.text,
+                                );
+                                Navigator.of(context).pop();
+                              }
+                            },
+                            child: const Text('重命名'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.tune), // New batch edit icon
+                  tooltip: '批量设置文件夹内条目',
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => _BatchEditDialog(
+                        folderId: item.id,
+                        isGlobal: item.isGlobal,
+                        chatId: chatId,
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
                   onPressed: () {
                      showDialog(
@@ -746,7 +833,7 @@ class _PromptItemCard extends ConsumerWidget {
       child: ListTile(
         leading: const Icon(Icons.description_outlined),
         title: Text(
-          item.keyword.isNotEmpty ? item.keyword : '(无关键词)',
+          item.comment.isNotEmpty ? item.comment : (item.keyword.isNotEmpty ? item.keyword : '(无名称)'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -760,29 +847,307 @@ class _PromptItemCard extends ConsumerWidget {
             '/chat/prompt-editor/item/${item.id}?chatId=$chatId&isGlobal=${item.isGlobal}',
           );
         },
-        trailing: IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('确认删除'),
-                content: const Text('您确定要删除此提示词吗？'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
-                  TextButton(
-                    onPressed: () {
-                      promptService.deletePromptItem(item.id, item.isGlobal, chatId);
-                      Navigator.of(context).pop();
-                    },
-                    child: const Text('删除'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _StatusToggleButton(item: item, chatId: chatId),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('确认删除'),
+                    content: const Text('您确定要删除此提示词吗？'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('取消')),
+                      TextButton(
+                        onPressed: () {
+                          promptService.deletePromptItem(
+                              item.id, item.isGlobal, chatId);
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('删除'),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          },
+                );
+              },
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+// =======================================================================
+// Batch Edit Dialog
+// =======================================================================
+
+class _BatchEditDialog extends ConsumerStatefulWidget {
+  final String folderId;
+  final bool isGlobal;
+  final int chatId;
+
+  const _BatchEditDialog({
+    required this.folderId,
+    required this.isGlobal,
+    required this.chatId,
+  });
+
+  @override
+  ConsumerState<_BatchEditDialog> createState() => _BatchEditDialogState();
+}
+
+class _BatchEditDialogState extends ConsumerState<_BatchEditDialog> {
+  PromptItemStatus? _status;
+  int? _injectionPosition;
+  int? _matchMessageCount;
+  PromptInjectionRole? _injectionRole;
+  String? _injectionTag;
+  bool? _critical;
+
+  late final TextEditingController _positionController;
+  late final TextEditingController _matchCountController;
+  late final TextEditingController _injectionTagController;
+
+  @override
+  void initState() {
+    super.initState();
+    _positionController = TextEditingController();
+    _matchCountController = TextEditingController();
+    _injectionTagController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _positionController.dispose();
+    _matchCountController.dispose();
+    _injectionTagController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('批量设置文件夹内条目'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<PromptItemStatus?>(
+              value: _status,
+              decoration: const InputDecoration(
+                labelText: '状态',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (newValue) {
+                setState(() => _status = newValue);
+              },
+              items: [
+                const DropdownMenuItem<PromptItemStatus?>(
+                  value: null,
+                  child: Text('(保持不变)'),
+                ),
+                ...PromptItemStatus.values
+                    .map((v) => DropdownMenuItem(value: v, child: Text(v.name)))
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _positionController,
+                    decoration: const InputDecoration(
+                      labelText: '注入位置',
+                      hintText: '(保持不变)',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (value) {
+                      _injectionPosition = int.tryParse(value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _matchCountController,
+                    decoration: const InputDecoration(
+                      labelText: '匹配数',
+                      hintText: '(保持不变)',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (value) {
+                      _matchMessageCount = int.tryParse(value);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<PromptInjectionRole?>(
+                    value: _injectionRole,
+                    decoration: const InputDecoration(
+                      labelText: '注入角色',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<PromptInjectionRole?>(
+                        value: null,
+                        child: Text('(保持不变)'),
+                      ),
+                      ...PromptInjectionRole.values.map((r) =>
+                          DropdownMenuItem(value: r, child: Text(r.name)))
+                    ],
+                    onChanged: (value) {
+                      setState(() => _injectionRole = value);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _injectionTagController,
+                    decoration: const InputDecoration(
+                      labelText: 'XML标签',
+                       hintText: '(保持不变)',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      _injectionTag = value.isNotEmpty ? value : null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+             DropdownButtonFormField<bool?>(
+              value: _critical,
+              decoration: const InputDecoration(
+                labelText: '是否全部匹配',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (newValue) {
+                setState(() => _critical = newValue);
+              },
+              items: const [
+                 DropdownMenuItem<bool?>(
+                  value: null,
+                  child: Text('(保持不变)'),
+                ),
+                DropdownMenuItem<bool?>(
+                  value: true,
+                  child: Text('是'),
+                ),
+                 DropdownMenuItem<bool?>(
+                  value: false,
+                  child: Text('否'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          onPressed: () {
+            ref.read(promptServiceProvider.notifier).applyConfigsToFolderItems(
+                  chatId: widget.chatId,
+                  isGlobal: widget.isGlobal,
+                  folderId: widget.folderId,
+                  status: _status,
+                  injectionRole: _injectionRole,
+                  injectionPosition: _injectionPosition,
+                  matchMessageCount: _matchMessageCount,
+                  injectionTag: _injectionTag,
+                  critical: _critical,
+                );
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('已成功应用设置！')),
+            );
+          },
+          child: const Text('应用'),
+        ),
+      ],
+    );
+  }
+}
+class _StatusToggleButton extends ConsumerWidget {
+  final PromptItem item;
+  final int chatId;
+
+  const _StatusToggleButton({required this.item, required this.chatId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final textStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onPrimary,
+      fontWeight: FontWeight.bold,
+    );
+
+    Color color;
+    String text;
+
+    switch (item.status) {
+      case PromptItemStatus.on:
+        color = Colors.green;
+        text = '开启';
+        break;
+      case PromptItemStatus.match:
+        color = Colors.blue;
+        text = '匹配';
+        break;
+      case PromptItemStatus.off:
+        color = Colors.grey;
+        text = '关闭';
+        break;
+    }
+
+    return TextButton(
+      style: TextButton.styleFrom(
+        backgroundColor: color,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        minimumSize: const Size(60, 30),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+      ),
+      onPressed: () {
+        final promptService = ref.read(promptServiceProvider.notifier);
+        PromptItemStatus nextStatus;
+        if (item.type == PromptItemType.folder) {
+          nextStatus = item.status == PromptItemStatus.off
+                        ? PromptItemStatus.on
+                        : PromptItemStatus.off;
+        } else {
+          final statuses = [
+            PromptItemStatus.on,
+            PromptItemStatus.match,
+            PromptItemStatus.off
+          ];
+          final currentIndex = statuses.indexOf(item.status);
+          nextStatus = statuses[(currentIndex + 1) % statuses.length];
+        }
+        promptService.updateStatusForChat(chatId, item.id, nextStatus);
+      },
+      child: Text(text, style: textStyle),
     );
   }
 }
