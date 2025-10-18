@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +9,6 @@ import 'package:mime/mime.dart';
 import '../../../domain/models/models.dart';
 import '../../../app/providers/api_key_provider.dart';
 import '../../../app/providers/chat_settings_provider.dart';
-import '../../../app/providers/chat_state/chat_screen_state.dart';
 import '../../../app/providers/chat_state/chat_state_notifier.dart';
 import '../../../app/providers/chat_state_providers.dart';
 import '../../../app/services/prompt_service.dart';

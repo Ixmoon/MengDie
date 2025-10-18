@@ -127,7 +127,7 @@ class _PromptItemEditorScreenState
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<PromptItemStatus>(
-                  value: item.status,
+                  initialValue: item.status,
                   decoration: const InputDecoration(
                     labelText: '状态',
                     border: OutlineInputBorder(),
@@ -191,7 +191,7 @@ class _PromptItemEditorScreenState
               Expanded(
                 flex: 1,
                 child: DropdownButtonFormField<PromptInjectionRole>(
-                  value: item.injectionRole,
+                  initialValue: item.injectionRole,
                   decoration: const InputDecoration(
                     labelText: '注入角色',
                     border: OutlineInputBorder(),

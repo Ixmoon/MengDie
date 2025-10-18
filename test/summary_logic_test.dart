@@ -10,16 +10,13 @@ import 'package:mengdie/app/providers/chat_state/special_action_type.dart';
 import 'package:mengdie/domain/enums.dart';
 import 'package:mengdie/data/llmapi/llm_service.dart';
 import 'package:mengdie/data/llmapi/llm_models.dart';
-import 'package:mengdie/app/providers/chat_state/chat_data_providers.dart';
 import 'package:mengdie/app/providers/repository_providers.dart';
 import 'package:mengdie/app/providers/chat_state/mixins/ui_state_manager.dart';
 import 'package:mengdie/app/tools/context_xml_service.dart';
 import 'package:mengdie/app/repositories/chat_repository.dart';
 import 'package:mengdie/domain/models/api_config.dart';
 import 'package:flutter/material.dart';
-import 'package:mengdie/app/providers/chat_state/chat_screen_state.dart';
 import 'package:mengdie/app/providers/chat_state_providers.dart';
-import 'package:collection/collection.dart';
 import 'package:mengdie/app/providers/settings_providers.dart';
 
 import 'summary_logic_test.mocks.dart';
@@ -206,10 +203,6 @@ void main() {
 }
 
 class TestBackgroundTasksMixin extends StateNotifier<ChatScreenState> with UiStateManager, BackgroundTasks {
-  @override
-  Future<Chat?> executePreprocessing(Chat chat) {
-    return super.executePreprocessing(chat);
-  }
 
   @override
   final Ref ref;

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:file_picker/file_picker.dart';
@@ -49,12 +48,6 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
 
   String? get _currentParentId => _currentFolderPath.last;
 
-  void _navigateToFolder(String folderId) {
-    setState(() {
-      _currentFolderPath.add(folderId);
-    });
-  }
-
   void _navigateBack() {
     if (_currentFolderPath.length > 1) {
       setState(() {
@@ -101,6 +94,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
     if (isGlobal) {
       if (exportScope == 'all') {
         // Only show status option when exporting the whole global list
+        if (!mounted) return;
         final exportOption = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
@@ -212,6 +206,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
       } else if (decodedJson is Map<String, dynamic> &&
           decodedJson.containsKey('prompts')) {
         if (!isGlobal) {
+          if (!mounted) return;
           final importPromptsOnly = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
@@ -239,6 +234,7 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
           }
         } else {
           if (decodedJson.containsKey('statuses')) {
+            if (!mounted) return;
             final importStatuses = await showDialog<bool>(
               context: context,
               builder: (context) => AlertDialog(
@@ -457,19 +453,18 @@ class _PromptEditorScreenState extends ConsumerState<PromptEditorScreen>
           child: Container(
             height: kTextTabBarHeight,
             color: isDragOver
-                ? Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.5)
+                ? Theme.of(context).colorScheme.secondaryContainer.withAlpha(128)
                 : Colors.transparent,
           ),
         );
       },
-      onWillAccept: (data) {
-        if (data == null) return false;
-        final bool isDragSourceGlobal = data['isGlobal'] as bool;
+      onWillAcceptWithDetails: (data) {
+        final bool isDragSourceGlobal = data.data['isGlobal'] as bool;
         return isDragSourceGlobal != isTargetGlobal;
       },
-      onAccept: (data) {
-        final String itemId = data['id'] as String;
-        final bool isSourceGlobal = data['isGlobal'] as bool;
+      onAcceptWithDetails: (data) {
+        final String itemId = data.data['id'] as String;
+        final bool isSourceGlobal = data.data['isGlobal'] as bool;
         promptService.convertPromptType(
           chatId: chatId,
           itemId: itemId,
@@ -522,14 +517,14 @@ class _PromptListView extends ConsumerWidget {
       return DragTarget<Map<String, dynamic>>(
         builder: (context, candidateData, rejectedData) =>
             const Center(child: Text('此文件夹为空')),
-        onAccept: (data) {
-          final isGlobal = data['isGlobal'] as bool;
+        onAcceptWithDetails: (data) {
+          final isGlobal = data.data['isGlobal'] as bool;
           if (isGlobal != isGlobalList) return; // Don't accept drops from other list type
           
           promptService.movePromptItem(
             chatId: chatId,
             isGlobal: isGlobalList,
-            itemId: data['id'] as String,
+            itemId: data.data['id'] as String,
             newParentId: currentParentId,
             newIndex: 0,
           );
@@ -557,16 +552,16 @@ class _PromptListView extends ConsumerWidget {
                     : null,
               );
             },
-            onWillAccept: (data) {
-              if (data == null || (data['isGlobal'] as bool) != isGlobalList) return false;
+            onWillAcceptWithDetails: (data) {
+              if ((data.data['isGlobal'] as bool) != isGlobalList) return false;
               if (itemsToShow.isEmpty) return true;
-              return itemsToShow.first.id != (data['id'] as String);
+              return itemsToShow.first.id != (data.data['id'] as String);
             },
-            onAccept: (data) {
+            onAcceptWithDetails: (data) {
               promptService.movePromptItem(
                 chatId: chatId,
                 isGlobal: isGlobalList,
-                itemId: data['id'] as String,
+                itemId: data.data['id'] as String,
                 newParentId: currentParentId,
                 newIndex: 0,
               );
@@ -591,12 +586,12 @@ class _PromptListView extends ConsumerWidget {
                     : null,
               );
             },
-             onWillAccept: (data) => data != null && (data['isGlobal'] as bool) == isGlobalList,
-            onAccept: (data) {
+             onWillAcceptWithDetails: (data) => (data.data['isGlobal'] as bool) == isGlobalList,
+            onAcceptWithDetails: (data) {
               promptService.movePromptItem(
                 chatId: chatId,
                 isGlobal: isGlobalList,
-                itemId: data['id'] as String,
+                itemId: data.data['id'] as String,
                 newParentId: currentParentId,
                 newIndex: itemsToShow.length,
               );
@@ -639,17 +634,16 @@ class _PromptListView extends ConsumerWidget {
                 child: child,
               );
             },
-            onWillAccept: (data) {
-              if (data == null) return false;
-              final isGlobal = data['isGlobal'] as bool;
-              final draggedId = data['id'] as String;
+            onWillAcceptWithDetails: (data) {
+              final isGlobal = data.data['isGlobal'] as bool;
+              final draggedId = data.data['id'] as String;
               return isGlobal == isGlobalList && draggedId != item.id;
             },
-            onAccept: (data) {
+            onAcceptWithDetails: (data) {
               promptService.movePromptItem(
                 chatId: chatId,
                 isGlobal: isGlobalList,
-                itemId: data['id'] as String,
+                itemId: data.data['id'] as String,
                 newParentId: currentParentId,
                 newIndex: index - 1, // Adjusted index
               );
@@ -785,10 +779,9 @@ class _PromptFolderCard extends ConsumerWidget {
           ),
         );
       },
-      onWillAccept: (data) {
-        if (data == null) return false;
-        final isGlobal = data['isGlobal'] as bool;
-        final draggedId = data['id'] as String;
+      onWillAcceptWithDetails: (data) {
+        final isGlobal = data.data['isGlobal'] as bool;
+        final draggedId = data.data['id'] as String;
 
         if (isGlobal != item.isGlobal) return false; // Must be from the same list type
         if (draggedId == item.id) return false;
@@ -801,11 +794,11 @@ class _PromptFolderCard extends ConsumerWidget {
         }
         return true;
       },
-      onAccept: (data) {
+      onAcceptWithDetails: (data) {
         promptService.movePromptItem(
           chatId: chatId,
           isGlobal: item.isGlobal,
-          itemId: data['id'] as String,
+          itemId: data.data['id'] as String,
           newParentId: item.id,
           newIndex: 9999,
         );
@@ -939,7 +932,7 @@ class _BatchEditDialogState extends ConsumerState<_BatchEditDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<PromptItemStatus?>(
-              value: _status,
+              initialValue: _status,
               decoration: const InputDecoration(
                 labelText: '状态',
                 border: OutlineInputBorder(),
@@ -997,7 +990,7 @@ class _BatchEditDialogState extends ConsumerState<_BatchEditDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<PromptInjectionRole?>(
-                    value: _injectionRole,
+                    initialValue: _injectionRole,
                     decoration: const InputDecoration(
                       labelText: '注入角色',
                       border: OutlineInputBorder(),
@@ -1033,7 +1026,7 @@ class _BatchEditDialogState extends ConsumerState<_BatchEditDialog> {
             ),
             const SizedBox(height: 16),
              DropdownButtonFormField<bool?>(
-              value: _critical,
+              initialValue: _critical,
               decoration: const InputDecoration(
                 labelText: '是否全部匹配',
                 border: OutlineInputBorder(),

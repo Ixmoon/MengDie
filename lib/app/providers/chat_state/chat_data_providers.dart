@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:collection/collection.dart';
 
 import '../../../domain/models/chat.dart';
 import '../../../domain/models/message.dart';

@@ -391,7 +391,7 @@ class LlmRequestHandler {
               }
               if (citationApplier != null && lastGroundingMetadata != null) {
                 accumulatedResponse =
-                    citationApplier(accumulatedResponse, lastGroundingMetadata!);
+                    citationApplier(accumulatedResponse, lastGroundingMetadata);
               }
               yield LlmStreamChunk(
                 textChunk: '',
@@ -456,7 +456,7 @@ class LlmRequestHandler {
 
     if (citationApplier != null && lastGroundingMetadata != null) {
       accumulatedResponse =
-          citationApplier(accumulatedResponse, lastGroundingMetadata!);
+          citationApplier(accumulatedResponse, lastGroundingMetadata);
     }
 
     yield LlmStreamChunk(

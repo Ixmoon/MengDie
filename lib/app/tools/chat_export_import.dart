@@ -1,7 +1,7 @@
 import 'dart:convert'; // 用于 JSON 编码/解码
 import 'dart:io'; // 用于文件操作
-import 'dart:convert'; // 用于 JSON 编码/解码
-import 'dart:io'; // 用于文件操作
+// 用于 JSON 编码/解码
+// 用于文件操作
 import 'dart:typed_data'; // For Uint8List
 import 'package:archive/archive_io.dart'; // For ZIP encoding
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -14,7 +14,6 @@ import 'package:file_picker/file_picker.dart'; // 选择文件
 
 import '../../ui/router.dart';
 // 导入模型、DTO 和仓库
-import '../../domain/enums.dart';
 import '../../domain/models/models.dart';
 import '../providers/repository_providers.dart';
 import '../repositories/chat_repository.dart';
