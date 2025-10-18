@@ -1205,6 +1205,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i12.ChatStateNotifier {
     required _i6.ApiConfig? apiConfig,
     required _i16.SpecialActionType? actionType,
     required _i6.Message? targetMessage,
+    String? lastMessagePromptOverride,
   }) =>
       (super.noSuchMethod(
             Invocation.method(#executeSpecialAction, [], {
@@ -1212,6 +1213,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i12.ChatStateNotifier {
               #apiConfig: apiConfig,
               #actionType: actionType,
               #targetMessage: targetMessage,
+              #lastMessagePromptOverride: lastMessagePromptOverride,
             }),
             returnValue: _i10.Future<String>.value(
               _i8.dummyValue<String>(
@@ -1221,6 +1223,7 @@ class MockChatStateNotifier extends _i1.Mock implements _i12.ChatStateNotifier {
                   #apiConfig: apiConfig,
                   #actionType: actionType,
                   #targetMessage: targetMessage,
+                  #lastMessagePromptOverride: lastMessagePromptOverride,
                 }),
               ),
             ),

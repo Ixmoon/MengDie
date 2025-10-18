@@ -25,7 +25,18 @@ Chat _$ChatFromJson(Map<String, dynamic> json) => Chat(
       (json['xmlRules'] as List<dynamic>?)
           ?.map((e) => XmlRule.fromJson(e as Map<String, dynamic>))
           .toList() ??
-      const [],
+      const [
+        XmlRule(
+          tagName: 'think',
+          action: XmlAction.collapsible,
+          ignoreInContext: true,
+        ),
+        XmlRule(
+          tagName: 'content',
+          action: XmlAction.content,
+          ignoreInContext: false,
+        ),
+      ],
   enablePreprocessing: json['enablePreprocessing'] as bool? ?? false,
   preprocessingPrompt: json['preprocessingPrompt'] as String?,
   contextSummary: json['contextSummary'] as String?,

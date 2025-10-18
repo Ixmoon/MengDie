@@ -239,6 +239,7 @@ class TestBackgroundTasksMixin extends StateNotifier<ChatScreenState> with UiSta
     required ApiConfig apiConfig,
     required SpecialActionType actionType,
     required Message targetMessage,
+    String? lastMessagePromptOverride,
   }) async {
     return "Special action result";
   }
