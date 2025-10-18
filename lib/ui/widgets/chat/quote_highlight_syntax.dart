@@ -4,9 +4,10 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 /// 自定义的 Markdown 语法，用于识别被引号包裹的内容
 class QuoteHighlightSyntax extends md.InlineSyntax {
-  // 支持中文直角引号（「 和 」），并支持未闭合的情况（最后一个分组可选）。
+  // 支持中文直角引号（「」）、中英文双引号（“ ” 和 " "），并支持未闭合的情况。
   // 限制为不跨段落（不包含换行），使用非贪婪匹配并添加长度上限（200）。
-  QuoteHighlightSyntax() : super(r'(「)([^\n「」]{0,200})(」)?');
+  QuoteHighlightSyntax()
+      : super(r'([“"「])([^\n“”"「」]{0,200})([”"」])?');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

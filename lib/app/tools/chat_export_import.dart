@@ -46,6 +46,19 @@ class ChatExportImportService {
     this._messageRepository,
   );
 
+  String _formatJsonToMarkdown(String input) {
+    try {
+      // 尝试解码，如果成功，说明是有效的JSON
+      final decoded = jsonDecode(input);
+      // 使用缩进格式化为字符串
+      const encoder = JsonEncoder.withIndent('    ');
+      final formattedJson = encoder.convert(decoded);
+      return formattedJson;
+    } catch (e) {
+      // 如果解码失败，说明不是JSON，返回原字符串
+      return input;
+    }
+  }
   // --- 新增：处理占位符 ---
   Future<String?> _handlePlaceholders(
       String jsonString, String charName) async {
@@ -594,10 +607,10 @@ class ChatExportImportService {
         ? processedCardData['data'] as Map<String, dynamic>
         : processedCardData;
 
-    final String description = processedData['description'] as String? ?? '';
-    final String personality = processedData['personality'] as String? ?? '';
-    final String scenario = processedData['scenario'] as String? ?? '';
-    final String systemPrompt = processedData['system_prompt'] as String? ?? '';
+    final String description = _formatJsonToMarkdown(processedData['description'] as String? ?? '');
+    final String personality = _formatJsonToMarkdown(processedData['personality'] as String? ?? '');
+    final String scenario = _formatJsonToMarkdown(processedData['scenario'] as String? ?? '');
+    final String systemPrompt = _formatJsonToMarkdown(processedData['system_prompt'] as String? ?? '');
 
     final combinedSystemPrompt = [
       description,
@@ -608,14 +621,22 @@ class ChatExportImportService {
 
     final String coverImageBase64 = base64Encode(imageBytes);
 
-    final List<String> greetings =
+    List<String> greetings =
         (processedData['alternate_greetings'] as List<dynamic>?)
                 ?.map((g) => g.toString())
                 .where((g) => g.isNotEmpty)
                 .toList() ??
             [];
 
-    // 如果没有问候语，我们仍然需要创建一个聊天，但不带初始消息。
+    // 1. 当alternate_greetings不存在时才需要回退使用first_mes
+    if (greetings.isEmpty) {
+      final firstMes = processedData['first_mes'] as String?;
+      if (firstMes != null && firstMes.isNotEmpty) {
+        greetings.add(firstMes);
+      }
+    }
+
+    // 如果两种问候语都没有，我们仍然需要创建一个聊天，但不带初始消息。
     // 为此，我们向列表中添加一个空字符串，以确保循环至少执行一次。
     if (greetings.isEmpty) {
       greetings.add('');

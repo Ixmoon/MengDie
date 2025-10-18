@@ -142,8 +142,9 @@ class MessageBubble extends StatelessWidget {
     return buffer.toString();
   }
 
-  /// 根据XML规则解析并渲染文本内容为一系列Widget。
-  /// 此方法通过清理、高亮错误和自动闭合未完成的标签来健壮地支持流式传输。
+  /// 根据XML规则递归地解析和渲染文本内容。
+  /// 此方法通过查找成对的顶层XML标签来分块处理文本。
+  /// 无效或未闭合的XML内容将被当作纯文本处理。
   List<Widget> _renderTextContent(
     BuildContext context,
     String textContent,
@@ -151,13 +152,15 @@ class MessageBubble extends StatelessWidget {
     Color textColor,
     bool isStreaming,
   ) {
-    var inputText = textContent.trim();
-    if (!inputText.contains('<') && !inputText.contains('```')) {
-      if (inputText.isEmpty) return [];
-      final mdData = inputText.replaceAll('\n', '  \n');
+    final List<Widget> widgets = [];
+    var remainingText = textContent.trim();
+
+    // 优化：如果文本不包含任何可能的XML标记，则直接作为Markdown渲染。
+    if (!remainingText.contains('<')) {
+      if (remainingText.isEmpty) return [];
       return [
         MarkdownBody(
-          data: mdData,
+          data: remainingText.replaceAll('\n', '  \n'),
           selectable: false,
           styleSheet: _getMarkdownStyleSheet(context, textColor),
           inlineSyntaxes: _getMarkdownInlineSyntaxes(),
@@ -167,332 +170,189 @@ class MessageBubble extends StatelessWidget {
       ];
     }
 
-    const errorStartMarker = '__{{XML_ERROR_START}}__';
-    const errorEndMarker = '__{{XML_ERROR_END}}__';
-
-    // --- 步骤 1: 隔离流式传输中末尾的不完整标签 ---
-    String stableText = inputText;
-    String? partialTag;
-    final lastLt = inputText.lastIndexOf('<');
-    if (lastLt != -1 && inputText.lastIndexOf('>') < lastLt) {
-      stableText = inputText.substring(0, lastLt);
-      partialTag = inputText.substring(lastLt);
-    }
-
-    // --- 步骤 2: 对稳定部分进行清理、标记错误和自动闭合 ---
-    final tagStack = <String>[];
-    final generalTagRegex = RegExp(r'<[^>]*>');
-    final validTagStructureRegex = RegExp(r"^<(/)?(\w+)([^>]*?)(\/)?>$");
-    final cleanedBuffer = StringBuffer();
-    int lastIndex = 0;
-
-    for (final match in generalTagRegex.allMatches(stableText)) {
-      cleanedBuffer.write(stableText.substring(lastIndex, match.start));
-      lastIndex = match.end;
-
-      final tagString = match.group(0)!;
-      final validationMatch = validTagStructureRegex.firstMatch(tagString);
-
-      if (validationMatch != null) {
-        final isClosingTag = validationMatch.group(1) == '/';
-        final tagName = validationMatch.group(2)!;
-        final isSelfClosing = validationMatch.group(4) == '/';
-
-        if (isClosingTag) {
-          if (tagStack.isNotEmpty && tagStack.last == tagName) {
-            tagStack.removeLast();
-            cleanedBuffer.write(tagString);
-          } else {
-            final escapedTag = tagString
-                .replaceAll('<', '<')
-                .replaceAll('>', '>');
-            cleanedBuffer.write('$errorStartMarker$escapedTag$errorEndMarker');
-          }
-        } else if (isSelfClosing) {
-          cleanedBuffer.write(tagString);
-        } else {
-          tagStack.add(tagName);
-          cleanedBuffer.write(tagString);
-        }
-      } else {
-        final escapedTag = tagString.replaceAll('<', '<').replaceAll('>', '>');
-        cleanedBuffer.write('$errorStartMarker$escapedTag$errorEndMarker');
-      }
-    }
-    cleanedBuffer.write(stableText.substring(lastIndex));
-
-    var processedText = cleanedBuffer.toString();
-
-    if (tagStack.isNotEmpty) {
-      processedText += tagStack.reversed.map((tag) => '</$tag>').join('');
-    }
-
-    // --- 步骤 3: 解析和渲染 ---
-    try {
-      final document = XmlDocument.parse('<root>$processedText</root>');
-      final List<Widget> widgets = [];
-
-      for (final node in document.rootElement.children) {
-        if (node is XmlText) {
-          widgets.addAll(
-            _buildTextWidgetsWithErrors(
-              context,
-              node.value,
-              textColor,
-              errorStartMarker,
-              errorEndMarker,
-              isStreaming,
-            ),
-          );
-        } else if (node is XmlElement) {
-          final tagNameLower = node.name.local.toLowerCase();
-          final rule = rules.firstWhereOrNull(
-            (r) => r.tagName?.toLowerCase() == tagNameLower,
-          );
-
-          if (rule?.action == XmlAction.content) {
-            widgets.addAll(
-              _renderTextContent(
-                context,
-                node.innerXml,
-                rules,
-                textColor,
-                isStreaming,
-              ),
-            );
-          } else {
-            final markdownContent = node.children
-                .map((child) => _buildMarkdownFromXmlNode(child, 0))
-                .join();
-            if (markdownContent.trim().isNotEmpty) {
-              widgets.add(
-                Theme(
-                  data: Theme.of(
-                    context,
-                  ).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    initiallyExpanded: isStreaming,
-                    tilePadding: EdgeInsets.zero,
-                    title: Text(
-                      node.name.local,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: () {
-                          final mdData = markdownContent;
-                          return MarkdownBody(
-                            data: mdData,
-                            selectable: false,
-                            styleSheet: _getMarkdownStyleSheet(
-                              context,
-                              textColor.withAlpha((255 * 0.85).round()),
-                            ),
-                            inlineSyntaxes: _getMarkdownInlineSyntaxes(),
-                            builders: _getMarkdownBuilders(
-                              textColor.withAlpha((255 * 0.85).round()),
-                            ),
-                            onTapLink: _onTapLink,
-                          );
-                        }(),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-          }
-        }
-      }
-
-      // --- 步骤 4: 追加之前隔离的不完整标签作为普通文本 ---
-      if (partialTag != null) {
-        widgets.add(
-          Text(
-            partialTag,
-            style: TextStyle(
-              color: textColor.withAlpha((255 * 0.7).round()),
-            ), // 以稍浅的颜色显示
-          ),
-        );
-      }
-
-      return widgets;
-    } catch (e) {
-      final fallbackWidgets = _buildTextWidgetsWithErrors(
-        context,
-        processedText,
-        textColor,
-        errorStartMarker,
-        errorEndMarker,
-        isStreaming,
-      );
-      if (partialTag != null) {
-        fallbackWidgets.add(
-          Text(
-            partialTag,
-            style: TextStyle(color: textColor.withAlpha((255 * 0.7).round())),
-          ),
-        );
-      }
-      return fallbackWidgets;
-    }
-  }
-
-  /// 将可能包含错误标记和代码块的文本构建成一个Widget列表。
-  List<Widget> _buildTextWidgetsWithErrors(
-    BuildContext context,
-    String text,
-    Color textColor,
-    String errorStartMarker,
-    String errorEndMarker,
-    bool isStreaming,
-  ) {
-    final List<Widget> widgets = [];
-    final codeBlockRegex = RegExp(r'```(\w*)((?:\s*\n)?[\s\S]*?)```');
-    int lastIndex = 0;
-
-    for (final match in codeBlockRegex.allMatches(text)) {
-      // 1. 处理代码块之前的部分
-      if (match.start > lastIndex) {
-        final precedingText = text.substring(lastIndex, match.start);
-        widgets.addAll(
-          _splitTextByErrors(
-            context,
-            precedingText,
-            textColor,
-            errorStartMarker,
-            errorEndMarker,
-          ),
-        );
-      }
-
-      // 2. 添加代码块本身
-      final codeBlockContent = match.group(0)!;
-      final language = (match.group(1) ?? '').trim();
-      widgets.add(
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            initiallyExpanded: isStreaming,
-            tilePadding: EdgeInsets.zero,
-            title: Text(
-              language.isNotEmpty ? language : '代码块',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: textColor,
-                fontSize: 14,
-              ),
-            ),
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: MarkdownBody(
-                  data: codeBlockContent,
-                  selectable: false,
-                  styleSheet: _getMarkdownStyleSheet(
-                    context,
-                    textColor.withAlpha((255 * 0.85).round()),
-                  ),
-                  onTapLink: _onTapLink,
-                ),
-              ),
-            ],
-          ),
+    final knownTagNames =
+        rules.map((r) => r.tagName).whereNotNull().join('|');
+    if (knownTagNames.isEmpty) {
+      // 如果没有规则，则全部视为Markdown
+      return [
+        MarkdownBody(
+          data: remainingText.replaceAll('\n', '  \n'),
+          selectable: false,
+          styleSheet: _getMarkdownStyleSheet(context, textColor),
+          inlineSyntaxes: _getMarkdownInlineSyntaxes(),
+          builders: _getMarkdownBuilders(textColor),
+          onTapLink: _onTapLink,
         ),
-      );
-      lastIndex = match.end;
+      ];
     }
 
-    // 3. 处理最后一个代码块之后的部分
-    if (lastIndex < text.length) {
-      final remainingText = text.substring(lastIndex);
-      widgets.addAll(
-        _splitTextByErrors(
-          context,
-          remainingText,
-          textColor,
-          errorStartMarker,
-          errorEndMarker,
-        ),
-      );
-    }
-
-    return widgets;
-  }
-
-  /// 将纯文本（无代码块）按错误标记分割成Markdown和高亮Text Widget。
-  List<Widget> _splitTextByErrors(
-    BuildContext context,
-    String text,
-    Color textColor,
-    String errorStartMarker,
-    String errorEndMarker,
-  ) {
-    final List<Widget> widgets = [];
-    final errorRegex = RegExp(
-      RegExp.escape(errorStartMarker) +
-          r'(.*?)' +
-          RegExp.escape(errorEndMarker),
+    // 正则表达式，用于查找任何已知标签（开始、结束或自闭合）。
+    final tagRegex = RegExp(
+      r'<\s*(\/?)\s*(' + knownTagNames + r')\b[^>]*?(\/?)>',
+      caseSensitive: false,
       dotAll: true,
     );
-    int lastIndex = 0;
 
-    for (final match in errorRegex.allMatches(text)) {
-      // 添加错误之前的部分
-      if (match.start > lastIndex) {
-        final normalPart = text.substring(lastIndex, match.start).trim();
-        if (normalPart.isNotEmpty) {
-          final mdData = normalPart.replaceAll('\n', '  \n');
-          widgets.add(
-            MarkdownBody(
-              data: mdData,
-              selectable: false,
-              styleSheet: _getMarkdownStyleSheet(context, textColor),
-              inlineSyntaxes: _getMarkdownInlineSyntaxes(),
-              builders: _getMarkdownBuilders(textColor),
-              onTapLink: _onTapLink,
-            ),
-          );
-        }
-      }
-      // 添加高亮显示的错误部分
-      final errorPart = match.group(1) ?? '';
-      if (errorPart.isNotEmpty) {
-        widgets.add(
-          Text(
-            errorPart,
-            style: TextStyle(
-              color: Colors.orange, // 错误高亮颜色
-              backgroundColor: Colors.orange.withAlpha((255 * 0.15).round()),
-              fontFamily: 'monospace',
-            ),
-          ),
-        );
-      }
-      lastIndex = match.end;
-    }
+    while (remainingText.isNotEmpty) {
+      final firstMatch = tagRegex.firstMatch(remainingText);
 
-    // 添加最后一个错误之后的部分
-    if (lastIndex < text.length) {
-      final remainingPart = text.substring(lastIndex).trim();
-      if (remainingPart.isNotEmpty) {
-        final mdData = remainingPart.replaceAll('\n', '  \n');
-        widgets.add(
-          MarkdownBody(
-            data: mdData,
+      if (firstMatch == null) {
+        // 剩余文本中没有更多已知标签，全部作为Markdown处理。
+        if (remainingText.isNotEmpty) {
+          widgets.add(MarkdownBody(
+            data: remainingText.replaceAll('\n', '  \n'),
             selectable: false,
             styleSheet: _getMarkdownStyleSheet(context, textColor),
             inlineSyntaxes: _getMarkdownInlineSyntaxes(),
             builders: _getMarkdownBuilders(textColor),
             onTapLink: _onTapLink,
-          ),
+          ));
+        }
+        break;
+      }
+
+      final isClosingTag = firstMatch.group(1) == '/';
+      final tagName = firstMatch.group(2)!;
+      final isSelfClosing = firstMatch.group(3) == '/';
+
+      // 处理第一个匹配项之前的文本
+      final precedingText = remainingText.substring(0, firstMatch.start);
+      if (precedingText.isNotEmpty) {
+        widgets.addAll(_renderTextContent(
+            context, precedingText, rules, textColor, isStreaming));
+      }
+
+      if (isClosingTag || isSelfClosing) {
+        // 发现一个独立的闭合标签或自闭合标签，将其视为纯文本。
+        widgets.add(MarkdownBody(
+          data: firstMatch.group(0)!.replaceAll('\n', '  \n'),
+          selectable: false,
+          styleSheet: _getMarkdownStyleSheet(context, textColor),
+          inlineSyntaxes: _getMarkdownInlineSyntaxes(),
+          builders: _getMarkdownBuilders(textColor),
+          onTapLink: _onTapLink,
+        ));
+        remainingText = remainingText.substring(firstMatch.end);
+        continue;
+      }
+
+      // 这是一个开始标签。现在查找与之匹配的结束标签。
+      final tagStack = [tagName];
+      int searchIndex = firstMatch.end;
+      Match? endMatch;
+
+      while (tagStack.isNotEmpty && searchIndex < remainingText.length) {
+        final nextMatch = tagRegex.firstMatch(remainingText.substring(searchIndex));
+        if (nextMatch == null) {
+          // 没有更多标签了，无法闭合
+          break;
+        }
+
+        final nextIsClosing = nextMatch.group(1) == '/';
+        final nextTagName = nextMatch.group(2)!;
+        final nextIsSelfClosing = nextMatch.group(3) == '/';
+        
+        if (nextTagName == tagName && !nextIsSelfClosing) {
+          if (nextIsClosing) {
+            tagStack.removeLast();
+            if (tagStack.isEmpty) {
+              endMatch = nextMatch;
+            }
+          } else {
+            tagStack.add(nextTagName);
+          }
+        }
+        searchIndex += nextMatch.end;
+      }
+
+      if (endMatch != null) {
+        // 找到了成对的标签
+        final contentStart = firstMatch.end;
+        final contentEnd = searchIndex - endMatch.group(0)!.length;
+        final innerContent = remainingText.substring(contentStart, contentEnd);
+
+        final rule = rules.firstWhereOrNull(
+          (r) => r.tagName?.toLowerCase() == tagName.toLowerCase(),
         );
+
+        if (rule?.action == XmlAction.content) {
+          widgets.addAll(_renderTextContent(
+              context, innerContent, rules, textColor, isStreaming));
+        } else {
+          widgets.add(
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: isStreaming,
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  tagName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    fontSize: 14,
+                  ),
+                ),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _renderTextContent(
+                          context, innerContent, rules, textColor, isStreaming),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        remainingText = remainingText.substring(searchIndex);
+      } else {
+        // 未找到匹配的结束标签
+        if (isStreaming) {
+          // 在流式传输中，将未闭合的标签渲染为展开的Tile
+          final innerContent = remainingText.substring(firstMatch.end);
+          widgets.add(
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: true,
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  tagName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    fontSize: 14,
+                  ),
+                ),
+                children: [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _renderTextContent(
+                          context, innerContent, rules, textColor, isStreaming),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          break; // 渲染完这个流式标签后，终止循环
+        } else {
+          // 非流式传输，将开始标签和之后的所有内容视为纯文本
+          widgets.add(MarkdownBody(
+            data: remainingText.replaceAll('\n', '  \n'),
+            selectable: false,
+            styleSheet: _getMarkdownStyleSheet(context, textColor),
+            inlineSyntaxes: _getMarkdownInlineSyntaxes(),
+            builders: _getMarkdownBuilders(textColor),
+            onTapLink: _onTapLink,
+          ));
+          break;
+        }
       }
     }
     return widgets;
@@ -659,8 +519,8 @@ class MessageBubble extends StatelessWidget {
                 child: Text(
                   "Tokens: $totalTokens",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: textColor.withAlpha(179),
-                  ),
+                        color: textColor.withAlpha(179),
+                      ),
                 ),
               ),
           ],
