@@ -502,6 +502,42 @@ class XmlProcessor {
   /// Processes a raw text stream, separating content for display (modelsText)
   /// from content to be saved/updated (extractedXml) based on robust XML parsing.
   /// This method implements a "Strict First, Fallback Gracefully" strategy.
+  static String extractMainContent(String rawText) {
+    final buffer = StringBuffer();
+    int tagDepth = 0;
+    // A regex to find all tags: start, end, and self-closing.
+    final tagRegex = RegExp(r'<\s*\/?\s*([a-zA-Z0-9_:]+)[^>]*>');
+    int lastIndex = 0;
+
+    for (final match in tagRegex.allMatches(rawText)) {
+      // Append text found before this tag, but only if we are not inside another tag.
+      if (tagDepth == 0) {
+        buffer.write(rawText.substring(lastIndex, match.start));
+      }
+
+      final fullTag = match.group(0)!;
+      final isClosingTag = fullTag.startsWith('</');
+      final isSelfClosing = fullTag.endsWith('/>');
+
+      if (isSelfClosing) {
+        // Self-closing tags do not affect the depth.
+      } else if (isClosingTag) {
+        tagDepth = tagDepth > 0 ? tagDepth - 1 : 0;
+      } else { // It's an opening tag.
+        tagDepth++;
+      }
+      lastIndex = match.end;
+    }
+
+    // After the last tag found, if we are back at the root level (depth 0),
+    // append any remaining text.
+    if (tagDepth == 0 && lastIndex < rawText.length) {
+      buffer.write(rawText.substring(lastIndex));
+    }
+
+    return buffer.toString().trim();
+  }
+
   static PostProcessResult processPostStream(
     String rawText,
     List<XmlRule> rules,

@@ -39,6 +39,7 @@ mixin BackgroundTasks on UiStateManager {
     required ApiConfig apiConfig,
     required SpecialActionType actionType,
     required Message targetMessage,
+    String? lastMessagePromptOverride,
   });
   ApiConfig getEffectiveApiConfig({String? specificConfigId});
   @override
@@ -237,12 +238,13 @@ mixin BackgroundTasks on UiStateManager {
   ) async {
     if (state.isCancelled) return;
 
-    var effectivePrompt = chat.secondaryXmlPrompt;
+    final basePrompt = chat.secondaryXmlPrompt;
 
     // 如果基础提示词为空，则直接返回
-    if (effectivePrompt?.isEmpty ?? true) {
+    if (basePrompt?.isEmpty ?? true) {
       return;
     }
+    var effectivePrompt = basePrompt;
 
     // 检查是否启用结构化输出
     final promptService = ref.read(promptServiceProvider.notifier);
@@ -284,10 +286,12 @@ mixin BackgroundTasks on UiStateManager {
         specificConfigId: chat.secondaryXmlApiConfigId,
       );
       final generatedText = await executeSpecialAction(
-        prompt: effectivePrompt!, // 使用可能被修改过的提示词
+        prompt: effectivePrompt!, // This is the prompt with the table
         apiConfig: apiConfig,
         actionType: SpecialActionType.secondaryXml,
         targetMessage: targetMessage,
+        lastMessagePromptOverride:
+            basePrompt, // This is the original prompt without the table
       );
 
       if (generatedText.isNotEmpty && mounted && !state.isCancelled) {

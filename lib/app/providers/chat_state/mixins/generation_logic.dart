@@ -14,9 +14,11 @@ import '../chat_screen_state.dart';
 import '../chat_data_providers.dart';
 import '../../settings_providers.dart';
 import '../../../tools/context_xml_service.dart';
-
-mixin GenerationLogic on StateNotifier<ChatScreenState> {
-  // Abstract properties to be implemented by the main class
+import '../../../services/notification_service.dart';
+import '../../../tools/xml_processor.dart';
+ 
+ mixin GenerationLogic on StateNotifier<ChatScreenState> {
+   // Abstract properties to be implemented by the main class
   Ref get ref;
   int get chatId;
   StreamSubscription<LlmStreamChunk>? get llmStreamSubscription;
@@ -362,6 +364,7 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
   }) async {
     final messageRepo = ref.read(messageRepositoryProvider);
     Message? messageToUpdate;
+    bool notificationSent = false; // Flag to ensure notification is sent only once
 
     // --- Step 1: Create placeholder and set it as the UI-controlled message ---
     try {
@@ -423,6 +426,25 @@ mixin GenerationLogic on StateNotifier<ChatScreenState> {
           );
           if (updatedMessage != null) {
             state = state.copyWith(uiControlledMessage: updatedMessage);
+          }
+
+          // --- New Notification Logic ---
+          if (!notificationSent) {
+            final mainContent =
+                XmlProcessor.extractMainContent(chunk.accumulatedText);
+            if (mainContent.trim().isNotEmpty) {
+              final notificationService = ref.read(notificationServiceProvider);
+              final chat = ref.read(currentChatProvider(chatId)).value;
+              final truncatedBody = mainContent.length > 200
+                  ? '${mainContent.substring(0, 200)}...'
+                  : mainContent;
+              notificationService.showNotification(
+                chat?.title ?? '收到新消息',
+                truncatedBody,
+                largeIconBase64: chat?.coverImageBase64,
+              );
+              notificationSent = true; // Set flag to prevent further notifications
+            }
           }
         } else if (chunk.type == LlmStreamChunkType.error) {
           streamHasError = true;

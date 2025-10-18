@@ -21,10 +21,11 @@ import 'data/sync/sync_service.dart';
 import 'data/database/connections/remote.dart';
 import 'app/providers/core_providers.dart';
 import 'app/providers/repository_providers.dart';
-
-// --- 应用主函数 ---
-// 将 main 函数修改为 async 以便在启动前执行异步操作
-void main() async {
+import 'app/services/notification_service.dart';
+ 
+ // --- 应用主函数 ---
+ // 将 main 函数修改为 async 以便在启动前执行异步操作
+ void main() async {
   // 确保 Flutter 绑定已初始化。
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -52,6 +53,11 @@ void main() async {
       return Future.value(null);
     }),
   );
+ 
+  // 初始化通知服务
+  final notificationService = container.read(notificationServiceProvider);
+  await notificationService.init();
+  await notificationService.requestAndroidPermission();
 
   // 初始化 SyncService
   final db = container.read(appDatabaseProvider);

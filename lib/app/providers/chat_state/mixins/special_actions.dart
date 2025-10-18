@@ -334,6 +334,7 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
     required ApiConfig apiConfig,
     required SpecialActionType actionType,
     required Message targetMessage,
+    String? lastMessagePromptOverride, // New optional parameter
   }) async {
     const maxRetries = 3;
     final chat = ref.read(currentChatProvider(chatId)).value;
@@ -348,7 +349,8 @@ mixin SpecialActions on StateNotifier<ChatScreenState> {
       chatId: chatId,
       currentUserMessage: targetMessage,
       chatSystemPromptOverride: prompt,
-      lastMessageOverride: prompt, // This will now be appended at the end
+      lastMessageOverride:
+          lastMessagePromptOverride ?? prompt, // Use the new override if provided
       keepAsSystemPrompt: false,
     );
 
